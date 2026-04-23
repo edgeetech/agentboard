@@ -107,6 +107,25 @@ Rebuild UI after changes:
 cd plugins/claude-code/agent-board-core/ui && npm install && npm run build
 ```
 
+Once per clone, wire the git hooks (auto-bumps the plugin patch version on
+every code commit so marketplace users get a new version):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+After that, every `git commit` with code changes bumps `0.1.x` → `0.1.(x+1)`
+in both `plugin.json` and `marketplace.json`. Docs-only commits (README,
+CLAUDE.md, LICENSE, .gitignore, .githooks/, scripts/) are skipped.
+
+To upgrade an installed plugin after a new version is pushed:
+
+```
+/plugin marketplace update agent-board-local
+/plugin install agentboard@agent-board-local   # picks up new version
+/reload-plugins
+```
+
 `agent-board-core/ui/dist/` is committed — ships with the plugin so `/plugin install` is zero-build.
 
 See [CLAUDE.md](./CLAUDE.md) for architecture internals, state machine rules, and sharp edges.

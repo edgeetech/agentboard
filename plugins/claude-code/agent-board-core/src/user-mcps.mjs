@@ -29,7 +29,24 @@ export function inheritedUserMcpServers() {
   for (const [k, v] of Object.entries(all)) {
     if (k === 'abrun') continue;
     if (allow && !allow.has(k)) continue;
-    out[k] = v;
+    out[k] = normalizeServer(v);
+  }
+  return out;
+}
+
+/**
+ * Some ~/.claude.json entries have `args` as an object with numeric keys
+ * ({ "0": "foo", "1": "bar" }) instead of a real array. Claude CLI needs a
+ * proper array. Normalize defensively so inheritance works regardless of
+ * how the user's config got written.
+ */
+function normalizeServer(s) {
+  if (!s || typeof s !== 'object') return s;
+  const out = { ...s };
+  if (out.args && !Array.isArray(out.args) && typeof out.args === 'object') {
+    const keys = Object.keys(out.args).filter(k => /^\d+$/.test(k))
+      .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+    if (keys.length > 0) out.args = keys.map(k => out.args[k]);
   }
   return out;
 }

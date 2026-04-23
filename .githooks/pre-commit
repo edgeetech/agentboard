@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# pre-commit: auto-bump plugin patch version so `/plugin marketplace update`
+# delivers a new version on every code change. Skips docs/meta-only commits.
+set -e
+node "$(git rev-parse --show-toplevel)/scripts/bump-version.mjs"
