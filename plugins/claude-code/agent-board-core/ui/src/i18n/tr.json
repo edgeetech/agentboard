@@ -1,0 +1,55 @@
+{
+  "app": { "title": "agentboard", "offline": "Agentboard sunucusuna ulaşılamıyor. Claude Code'da `/agentboard:open` çalıştırın." },
+  "role": {
+    "pm": "Proje Yöneticisi",
+    "worker": "Geliştirici",
+    "reviewer": "İnceleyici",
+    "human": "Ürün Sahibi",
+    "system": "Sistem"
+  },
+  "common": {
+    "delete": "Sil",
+    "confirm_delete": "{{code}} görevini sil? Çalışan tüm ajanlar iptal edilecek.",
+    "cancel": "Vazgeç"
+  },
+  "wizard": {
+    "header": "İlk projeni oluştur",
+    "name": "Proje adı",
+    "description": "Açıklama",
+    "code": "Proje kodu",
+    "code_hint": "2–7 büyük harf/rakam. Her görev bu kodla başlar (örn. {{code}}-1).",
+    "workflow": "İş akışı",
+    "wf1": "Yapılacak → Ajan Çalışıyor → Ajan Review → İnsan Onayı → Bitti",
+    "wf2": "Yapılacak → Ajan Çalışıyor → İnsan Onayı → Bitti",
+    "repo_path": "Kod dizini",
+    "repo_hint": "Worker ajanın düzenleyeceği kod dizininin tam yolu.",
+    "create": "Proje oluştur"
+  },
+  "board": {
+    "todo": "Yapılacak",
+    "agent_working": "Ajan Çalışıyor",
+    "agent_review": "Ajan Review",
+    "human_approval": "İnsan Onayı",
+    "done": "Bitti",
+    "new_task": "Yeni görev",
+    "cost_total": "Toplam maliyet",
+    "stalled": "Takıldı"
+  },
+  "task": {
+    "title": "Başlık",
+    "description": "Açıklama",
+    "ac": "Kabul kriterleri",
+    "comments": "Yorumlar",
+    "runs": "Ajan çalışmaları (son 5)",
+    "run_pm": "PM Çalıştır",
+    "run_worker": "Ajan Çalıştır",
+    "run_reviewer": "Reviewer Çalıştır",
+    "cancel_run": "İptal et",
+    "approve": "Onayla",
+    "reject": "Reddet",
+    "reject_title": "Görevi reddet",
+    "reject_prompt": "Worker'a neyi değiştireceğini söyle (en az 10 karakter)",
+    "retry_from_worker": "Worker'dan yeniden başla",
+    "cost": "Maliyet"
+  }
+}

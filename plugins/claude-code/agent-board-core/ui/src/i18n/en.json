@@ -1,0 +1,58 @@
+{
+  "app": {
+    "title": "agentboard",
+    "offline": "Agentboard server unreachable. Run `/agentboard:open` in Claude Code."
+  },
+  "role": {
+    "pm": "Project Manager",
+    "worker": "Worker",
+    "reviewer": "Reviewer",
+    "human": "Product Owner",
+    "system": "System"
+  },
+  "common": {
+    "delete": "Delete",
+    "confirm_delete": "Delete task {{code}}? Any running agents will be cancelled.",
+    "cancel": "Cancel"
+  },
+  "wizard": {
+    "header": "Create your first project",
+    "name": "Project name",
+    "description": "Description",
+    "code": "Project code",
+    "code_hint": "2–7 uppercase letters/digits. Each task will be prefixed with this code (e.g. {{code}}-1).",
+    "workflow": "Workflow",
+    "wf1": "Todo → Agent Working → Agent Review → Human Approval → Done",
+    "wf2": "Todo → Agent Working → Human Approval → Done",
+    "repo_path": "Repository path",
+    "repo_hint": "Absolute path to the code repo the Worker agent will edit.",
+    "create": "Create project"
+  },
+  "board": {
+    "todo": "To Do",
+    "agent_working": "Agent Working",
+    "agent_review": "Agent Review",
+    "human_approval": "Human Approval",
+    "done": "Done",
+    "new_task": "New task",
+    "cost_total": "Total cost",
+    "stalled": "Stalled"
+  },
+  "task": {
+    "title": "Title",
+    "description": "Description",
+    "ac": "Acceptance criteria",
+    "comments": "Comments",
+    "runs": "Agent runs (last 5)",
+    "run_pm": "Run PM",
+    "run_worker": "Run Agent",
+    "run_reviewer": "Run Reviewer",
+    "cancel_run": "Cancel run",
+    "approve": "Approve",
+    "reject": "Reject",
+    "reject_title": "Reject task",
+    "reject_prompt": "Tell Worker what to change (min 10 chars)",
+    "retry_from_worker": "Retry from Worker",
+    "cost": "Cost"
+  }
+}

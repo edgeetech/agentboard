@@ -1,0 +1,55 @@
+{
+  "app": { "title": "agentboard", "offline": "Servidor agentboard no disponible. Ejecuta `/agentboard:open` en Claude Code." },
+  "role": {
+    "pm": "Gerente de Proyecto",
+    "worker": "Desarrollador",
+    "reviewer": "Revisor",
+    "human": "Product Owner",
+    "system": "Sistema"
+  },
+  "common": {
+    "delete": "Eliminar",
+    "confirm_delete": "¿Eliminar tarea {{code}}? Cualquier agente en ejecución será cancelado.",
+    "cancel": "Cancelar"
+  },
+  "wizard": {
+    "header": "Crea tu primer proyecto",
+    "name": "Nombre del proyecto",
+    "description": "Descripción",
+    "code": "Código del proyecto",
+    "code_hint": "2–7 letras/dígitos en mayúscula. Cada tarea usará este prefijo (ej. {{code}}-1).",
+    "workflow": "Flujo de trabajo",
+    "wf1": "Por hacer → Agente Trabajando → Revisión de Agente → Aprobación Humana → Listo",
+    "wf2": "Por hacer → Agente Trabajando → Aprobación Humana → Listo",
+    "repo_path": "Ruta del repositorio",
+    "repo_hint": "Ruta absoluta al repo que el agente Worker editará.",
+    "create": "Crear proyecto"
+  },
+  "board": {
+    "todo": "Por hacer",
+    "agent_working": "Agente Trabajando",
+    "agent_review": "Revisión de Agente",
+    "human_approval": "Aprobación Humana",
+    "done": "Listo",
+    "new_task": "Nueva tarea",
+    "cost_total": "Coste total",
+    "stalled": "Bloqueado"
+  },
+  "task": {
+    "title": "Título",
+    "description": "Descripción",
+    "ac": "Criterios de aceptación",
+    "comments": "Comentarios",
+    "runs": "Ejecuciones (últimas 5)",
+    "run_pm": "Ejecutar PM",
+    "run_worker": "Ejecutar Agente",
+    "run_reviewer": "Ejecutar Reviewer",
+    "cancel_run": "Cancelar ejecución",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "reject_title": "Rechazar tarea",
+    "reject_prompt": "Di al Worker qué cambiar (mín. 10 caracteres)",
+    "retry_from_worker": "Reintentar desde Worker",
+    "cost": "Coste"
+  }
+}

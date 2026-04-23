@@ -1,0 +1,17 @@
+{
+  "name": "agent-board-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "agent-board local server + executor + UI (vendored inside plugin)",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "build:ui": "cd ui && vite build",
+    "typecheck": "tsc --noEmit -p src/tsconfig.json"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {}
+}

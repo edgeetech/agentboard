@@ -1,0 +1,11 @@
+# Treat prebuilt UI bundle as generated — GitHub collapses these in PR diffs.
+agent-board-core/ui/dist/** linguist-generated=true
+agent-board-core/ui/dist/** -diff
+
+# Normalize line endings
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# SVG treated as text for better diffs when hand-edited (non-dist)
+*.svg text
