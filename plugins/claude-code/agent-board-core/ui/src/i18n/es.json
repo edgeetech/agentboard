@@ -1,5 +1,8 @@
 {
-  "app": { "title": "agentboard", "offline": "Servidor agentboard no disponible. Ejecuta `/agentboard:open` en Claude Code." },
+  "app": {
+    "title": "agentboard",
+    "offline": "Servidor agentboard no disponible. Ejecuta `/agentboard:open` en Claude Code."
+  },
   "role": {
     "pm": "Gerente de Proyecto",
     "worker": "Desarrollador",
@@ -13,7 +16,27 @@
     "cancel": "Cancelar",
     "save": "Guardar",
     "close": "Cerrar",
-    "saved": "Guardado."
+    "saved": "Guardado.",
+    "coming_soon": "Próximamente",
+    "not_found": "No encontrado",
+    "back": "← Volver",
+    "untitled": "Sin título"
+  },
+  "nav": {
+    "board": "Tablero",
+    "skills": "Habilidades",
+    "roles": "Roles",
+    "sessions": "Sesiones",
+    "project": "Proyecto",
+    "theme": "Tema",
+    "workspace": "Área de trabajo",
+    "manage": "Gestionar",
+    "active": "Proyecto activo"
+  },
+  "foot": {
+    "connected": "Conectado",
+    "crafted": "Hecho en",
+    "docs": "Documentación"
   },
   "settings": {
     "open": "Ajustes del proyecto",
@@ -28,7 +51,7 @@
     "repo_hint": "Ruta absoluta. Worker edita archivos bajo este directorio.",
     "auto_dispatch_pm": "Despachar PM automáticamente al crear tarea",
     "max_parallel": "Ejecuciones paralelas máx.",
-    "max_parallel_hint": "1–3.",
+    "max_parallel_hint": "1–3. Ejecuciones concurrentes de agentes para este proyecto.",
     "version_mismatch": "El proyecto se modificó en otro lugar — recarga y reintenta."
   },
   "wizard": {
@@ -52,7 +75,12 @@
     "done": "Listo",
     "new_task": "Nueva tarea",
     "cost_total": "Coste total",
-    "stalled": "Bloqueado"
+    "stalled": "Bloqueado",
+    "view": "Vista",
+    "modern": "Moderno",
+    "classic": "Clásico",
+    "needs_attention": "Necesita atención",
+    "search": "Buscar tareas…"
   },
   "task": {
     "title": "Título",
@@ -69,6 +97,85 @@
     "reject_title": "Rechazar tarea",
     "reject_prompt": "Di al Worker qué cambiar (mín. 10 caracteres)",
     "retry_from_worker": "Reintentar desde Worker",
-    "cost": "Coste"
+    "cost": "Coste",
+    "open_page": "Abrir como página",
+    "open_panel": "Abrir como panel",
+    "view_page": "Vista completa",
+    "view_panel": "Vista panel"
+  },
+  "skills": {
+    "title": "Habilidades",
+    "subtitle": "Capacidades reutilizables que puedes asociar a un rol o ejecución.",
+    "search": "Buscar habilidades…",
+    "new": "Nueva habilidad",
+    "empty_title": "Sin coincidencias",
+    "empty_body": "Prueba con otro término.",
+    "detail_subtitle": "Edita cómo aparece esta habilidad al asociarla a un rol o ejecución.",
+    "name": "Nombre",
+    "emblem": "Emblema",
+    "emblem_hint": "Monograma de 1–3 caracteres mostrado en la tarjeta.",
+    "description": "Descripción",
+    "tags": "Etiquetas",
+    "tags_hint": "Separadas por coma — ej. reviewer, pytest, default."
+  },
+  "roles": {
+    "title": "Roles",
+    "subtitle": "Personas de agente que actúan sobre tus tareas.",
+    "search": "Buscar roles…",
+    "new": "Nuevo rol",
+    "empty_title": "Sin coincidencias",
+    "empty_body": "Prueba con otro término.",
+    "detail_subtitle": "Edita este agente y las habilidades que puede usar.",
+    "name": "Nombre",
+    "emblem": "Emblema",
+    "description": "Descripción",
+    "skills": "Habilidades",
+    "skills_hint": "Toca para activar/desactivar. Aparecen en la tarjeta del rol e influyen en el despacho."
+  },
+  "sessions": {
+    "title": "Sesiones",
+    "subtitle": "Todas las sesiones de codificación con IA registradas.",
+    "search": "Buscar proyecto o id de sesión…",
+    "empty_title": "No hay sesiones registradas",
+    "empty_body": "context-mode aún no ha escrito ninguna base de datos de sesiones. Dir esperado:",
+    "unavail_title": "Adaptador SQLite no disponible",
+    "error_title": "No se pueden leer las sesiones",
+    "total_sessions": "Sesiones",
+    "total_events": "Eventos",
+    "avg_duration": "Duración media",
+    "dbs": "Bases de datos",
+    "started": "Inicio",
+    "duration": "Duración",
+    "events": "Eventos",
+    "last": "Última",
+    "detail_title": "Detalle de sesión",
+    "detail_error": "No se pudo cargar la sesión",
+    "project": "Proyecto",
+    "session_id": "ID de sesión",
+    "db_hash": "Hash DB",
+    "types": "Tipos",
+    "compacts": "Compactaciones",
+    "breakdown": "Desglose de eventos",
+    "timeline": "Línea temporal",
+    "resume": "Resume snapshot"
+  },
+  "theme": {
+    "title": "Tema",
+    "subtitle": "Escoge una paleta y modo de color. Se aplica al instante y se guarda por navegador.",
+    "scheme": "Modo de color",
+    "scheme_light": "Claro",
+    "scheme_dark": "Oscuro",
+    "palette": "Paleta",
+    "active": "Activo",
+    "click_apply": "Haz clic para aplicar"
+  },
+  "project": {
+    "title": "Proyecto",
+    "subtitle": "Ajustes, ruta del repo y límites de despacho.",
+    "none_title": "Sin proyecto activo",
+    "none_body": "Crea un proyecto desde el Tablero primero."
+  },
+  "catalog": {
+    "local_note": "Almacenado localmente en este navegador hasta que el servidor añada una API de catálogo."
   }
 }

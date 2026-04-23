@@ -1,5 +1,8 @@
 {
-  "app": { "title": "agentboard", "offline": "Agentboard sunucusuna ulaşılamıyor. Claude Code'da `/agentboard:open` çalıştırın." },
+  "app": {
+    "title": "agentboard",
+    "offline": "Agentboard sunucusuna ulaşılamıyor. Claude Code'da `/agentboard:open` çalıştırın."
+  },
   "role": {
     "pm": "Proje Yöneticisi",
     "worker": "Geliştirici",
@@ -13,7 +16,27 @@
     "cancel": "Vazgeç",
     "save": "Kaydet",
     "close": "Kapat",
-    "saved": "Kaydedildi."
+    "saved": "Kaydedildi.",
+    "coming_soon": "Yakında",
+    "not_found": "Bulunamadı",
+    "back": "← Geri",
+    "untitled": "Adsız"
+  },
+  "nav": {
+    "board": "Pano",
+    "skills": "Yetenekler",
+    "roles": "Roller",
+    "sessions": "Oturumlar",
+    "project": "Proje",
+    "theme": "Tema",
+    "workspace": "Çalışma Alanı",
+    "manage": "Yönet",
+    "active": "Aktif proje"
+  },
+  "foot": {
+    "connected": "Bağlı",
+    "crafted": "Yapıldı",
+    "docs": "Dökümanlar"
   },
   "settings": {
     "open": "Proje ayarları",
@@ -28,7 +51,7 @@
     "repo_hint": "Tam yol. Worker bu dizindeki dosyaları düzenler.",
     "auto_dispatch_pm": "Yeni görevde PM otomatik çalıştırılsın",
     "max_parallel": "Eş zamanlı çalışan ajan limiti",
-    "max_parallel_hint": "1–3.",
+    "max_parallel_hint": "1–3. Bu proje için eş zamanlı ajan çalışması.",
     "version_mismatch": "Proje başka yerde değiştirildi — yenileyip tekrar deneyin."
   },
   "wizard": {
@@ -38,7 +61,7 @@
     "code": "Proje kodu",
     "code_hint": "2–7 büyük harf/rakam. Her görev bu kodla başlar (örn. {{code}}-1).",
     "workflow": "İş akışı",
-    "wf1": "Yapılacak → Ajan Çalışıyor → Ajan Review → İnsan Onayı → Bitti",
+    "wf1": "Yapılacak → Ajan Çalışıyor → Ajan İncelemesi → İnsan Onayı → Bitti",
     "wf2": "Yapılacak → Ajan Çalışıyor → İnsan Onayı → Bitti",
     "repo_path": "Kod dizini",
     "repo_hint": "Worker ajanın düzenleyeceği kod dizininin tam yolu.",
@@ -47,12 +70,17 @@
   "board": {
     "todo": "Yapılacak",
     "agent_working": "Ajan Çalışıyor",
-    "agent_review": "Ajan Review",
+    "agent_review": "Ajan İncelemesi",
     "human_approval": "İnsan Onayı",
     "done": "Bitti",
     "new_task": "Yeni görev",
     "cost_total": "Toplam maliyet",
-    "stalled": "Takıldı"
+    "stalled": "Takıldı",
+    "view": "Görünüm",
+    "modern": "Modern",
+    "classic": "Klasik",
+    "needs_attention": "Dikkat gerekiyor",
+    "search": "Görev ara…"
   },
   "task": {
     "title": "Başlık",
@@ -69,6 +97,85 @@
     "reject_title": "Görevi reddet",
     "reject_prompt": "Worker'a neyi değiştireceğini söyle (en az 10 karakter)",
     "retry_from_worker": "Worker'dan yeniden başla",
-    "cost": "Maliyet"
+    "cost": "Maliyet",
+    "open_page": "Sayfa olarak aç",
+    "open_panel": "Panel olarak aç",
+    "view_page": "Tam görünüm",
+    "view_panel": "Panel görünüm"
+  },
+  "skills": {
+    "title": "Yetenekler",
+    "subtitle": "Bir role veya çalıştırmaya ekleyebileceğin yeniden kullanılabilir yetenekler.",
+    "search": "Yetenek ara…",
+    "new": "Yeni yetenek",
+    "empty_title": "Eşleşme yok",
+    "empty_body": "Farklı bir arama terimi dene.",
+    "detail_subtitle": "Bu yeteneğin role veya çalıştırmaya eklendiğinde nasıl görüneceğini düzenle.",
+    "name": "Ad",
+    "emblem": "Amblem",
+    "emblem_hint": "Kartta gösterilen 1–3 karakterlik monogram.",
+    "description": "Açıklama",
+    "tags": "Etiketler",
+    "tags_hint": "Virgülle ayrılmış — örn. reviewer, pytest, default."
+  },
+  "roles": {
+    "title": "Roller",
+    "subtitle": "Görevlerin üzerinde çalışan ajan karakterleri.",
+    "search": "Rol ara…",
+    "new": "Yeni rol",
+    "empty_title": "Eşleşme yok",
+    "empty_body": "Farklı bir arama terimi dene.",
+    "detail_subtitle": "Bu ajan karakterini ve kullanabileceği yetenekleri düzenle.",
+    "name": "Ad",
+    "emblem": "Amblem",
+    "description": "Açıklama",
+    "skills": "Yetenekler",
+    "skills_hint": "Eklemek/çıkarmak için tıkla. Rol kartında görünür ve gönderimi etkiler."
+  },
+  "sessions": {
+    "title": "Oturumlar",
+    "subtitle": "Kayıt altına alınmış tüm AI kodlama oturumları.",
+    "search": "Proje veya oturum ID ara…",
+    "empty_title": "Kayıtlı oturum yok",
+    "empty_body": "context-mode henüz oturum veritabanı yazmadı. Beklenen dizin:",
+    "unavail_title": "SQLite bağdaştırıcısı yok",
+    "error_title": "Oturumlar okunamadı",
+    "total_sessions": "Oturum",
+    "total_events": "Olay",
+    "avg_duration": "Ort. süre",
+    "dbs": "Veritabanı",
+    "started": "Başladı",
+    "duration": "Süre",
+    "events": "Olay",
+    "last": "Son",
+    "detail_title": "Oturum detayı",
+    "detail_error": "Oturum yüklenemedi",
+    "project": "Proje",
+    "session_id": "Oturum ID",
+    "db_hash": "DB hash",
+    "types": "Tür",
+    "compacts": "Sıkıştırma",
+    "breakdown": "Olay dağılımı",
+    "timeline": "Olay zaman çizelgesi",
+    "resume": "Resume anlık görüntüsü"
+  },
+  "theme": {
+    "title": "Tema",
+    "subtitle": "Palet ve renk modu seç. Anında uygulanır, tarayıcı başına kaydedilir.",
+    "scheme": "Renk modu",
+    "scheme_light": "Aydınlık",
+    "scheme_dark": "Karanlık",
+    "palette": "Palet",
+    "active": "Aktif",
+    "click_apply": "Uygulamak için tıkla"
+  },
+  "project": {
+    "title": "Proje",
+    "subtitle": "Ayarlar, kod dizini ve gönderim limitleri.",
+    "none_title": "Aktif proje yok",
+    "none_body": "Önce Pano sayfasından bir proje oluştur."
+  },
+  "catalog": {
+    "local_note": "Sunucu bir katalog API'si ekleyene kadar yalnızca bu tarayıcıda saklanır."
   }
 }
