@@ -1,0 +1,14 @@
+{
+  "name": "agentboard",
+  "version": "0.1.0",
+  "description": "Local agent management kanban: PM / Worker / Reviewer / Human workflow driven by headless Claude runs. Per-project SQLite + local UI.",
+  "author": {
+    "name": "agentboard contributors"
+  },
+  "mcpServers": {
+    "agentboard": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/agentboard.mjs"]
+    }
+  }
+}

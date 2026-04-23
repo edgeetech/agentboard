@@ -1,0 +1,50 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.pnp.*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build output — UI dist IS committed (shipped with plugin; see note below).
+# agent-board-core/ui/dist/  # keep committed; zero-install distribution
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# OS
+Desktop.ini
+$RECYCLE.BIN/
+
+# Logs / tmp
+*.log
+*.pid
+*.seed
+.cache/
+tmp/
+.tmp/
+
+# TypeScript / bundler caches
+*.tsbuildinfo
+.vite/
+
+# Coverage / test
+coverage/
+.nyc_output/
+
+# Env / secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Local Node modules cache from failed installs
+.node_modules_cache/

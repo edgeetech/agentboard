@@ -1,0 +1,14 @@
+{
+  "name": "agent-board-local",
+  "owner": {
+    "name": "agent-board contributors"
+  },
+  "plugins": [
+    {
+      "name": "agentboard",
+      "description": "Local agent management kanban (PM/Worker/Reviewer/Human) driven by headless Claude runs.",
+      "source": "./plugins/claude-code",
+      "version": "0.1.0"
+    }
+  ]
+}
