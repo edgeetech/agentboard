@@ -61,13 +61,22 @@ function safeAll(db, sql) {
   return [];
 }
 
-export async function handleSessions(req, res, url) {
-  if (url.pathname !== '/api/sessions' || req.method !== 'GET') return null;
+function safeAllParam(db, sql, params) {
+  try {
+    if (typeof db.prepare === 'function') return db.prepare(sql).all(...params);
+  } catch {}
+  return [];
+}
+function safeGetParam(db, sql, params) {
+  try {
+    if (typeof db.prepare === 'function') return db.prepare(sql).get(...params);
+  } catch {}
+  return null;
+}
 
+async function listSessionsAll(res) {
   const open = await getOpener();
-  if (!open) {
-    return json(res, 200, { dbs: [], error: 'sqlite adapter unavailable' });
-  }
+  if (!open) return json(res, 200, { dbs: [], error: 'sqlite adapter unavailable' });
 
   const dir = sessionsDir();
   const files = listDbFiles(dir);
@@ -96,11 +105,63 @@ export async function handleSessions(req, res, url) {
         })),
       });
     } catch {
-      // Ignore DBs without expected schema
+      // schema mismatch — skip
     } finally {
       try { db.close(); } catch {}
     }
   }
-
   return json(res, 200, { dir, dbs });
+}
+
+function isSafeHash(s) { return typeof s === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(s); }
+
+async function listSessionEvents(res, hash, sessionId) {
+  const open = await getOpener();
+  if (!open) return json(res, 200, { events: [], resume: null, error: 'sqlite adapter unavailable' });
+  if (!isSafeHash(hash)) return json(res, 400, { error: 'invalid hash' });
+
+  const dbPath = join(sessionsDir(), hash + '.db');
+  if (!existsSync(dbPath)) return json(res, 404, { error: 'db not found' });
+
+  let db;
+  try { db = open(dbPath); }
+  catch (e) { return json(res, 500, { error: String(e?.message || e) }); }
+
+  try {
+    const meta = safeGetParam(
+      db,
+      `SELECT session_id, project_dir, started_at, last_event_at, event_count, compact_count
+       FROM session_meta WHERE session_id = ?`,
+      [sessionId]
+    );
+    const events = safeAllParam(
+      db,
+      `SELECT id, type, category, priority, data, source_hook, created_at
+       FROM session_events WHERE session_id = ? ORDER BY id ASC LIMIT 500`,
+      [sessionId]
+    );
+    const resume = safeGetParam(
+      db,
+      `SELECT snapshot, event_count, consumed FROM session_resume WHERE session_id = ?`,
+      [sessionId]
+    );
+    return json(res, 200, { hash, sessionId, meta, events, resume });
+  } finally {
+    try { db.close(); } catch {}
+  }
+}
+
+export async function handleSessions(req, res, url) {
+  if (req.method !== 'GET') return null;
+
+  if (url.pathname === '/api/sessions') return listSessionsAll(res);
+
+  const m = url.pathname.match(/^\/api\/sessions\/([^/]+)\/events\/(.+)$/);
+  if (m) {
+    const hash = decodeURIComponent(m[1]);
+    const sessionId = decodeURIComponent(m[2]);
+    return listSessionEvents(res, hash, sessionId);
+  }
+
+  return null;
 }

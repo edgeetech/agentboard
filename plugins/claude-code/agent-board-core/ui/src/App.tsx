@@ -9,6 +9,7 @@ import { ProjectPage } from './pages/ProjectPage';
 import { TaskDetailPage } from './pages/TaskDetailPage';
 import { ThemePage } from './pages/ThemePage';
 import { SessionsPage } from './pages/SessionsPage';
+import { SessionDetailPage } from './pages/SessionDetailPage';
 
 export function App() {
   return (
@@ -20,6 +21,7 @@ export function App() {
         <Route path="roles" element={<RolesPage />} />
         <Route path="roles/:id" element={<RoleDetailPage />} />
         <Route path="sessions" element={<SessionsPage />} />
+        <Route path="sessions/:hash/:sessionId" element={<SessionDetailPage />} />
         <Route path="tasks/:code" element={<TaskDetailPage />} />
         <Route path="theme" element={<ThemePage />} />
         <Route path="project" element={<ProjectPage />} />

@@ -45,7 +45,17 @@
     "started": "Started",
     "duration": "Duration",
     "events": "Events",
-    "last": "Last"
+    "last": "Last",
+    "detail_title": "Session detail",
+    "detail_error": "Could not load session",
+    "project": "Project",
+    "session_id": "Session ID",
+    "db_hash": "DB hash",
+    "types": "Types",
+    "compacts": "Compacts",
+    "breakdown": "Event breakdown",
+    "timeline": "Event timeline",
+    "resume": "Resume snapshot"
   },
   "theme": {
     "title": "Theme",
@@ -103,7 +113,8 @@
     "view": "View",
     "modern": "Modern",
     "classic": "Classic",
-    "needs_attention": "Needs attention"
+    "needs_attention": "Needs attention",
+    "search": "Search tasks…"
   },
   "skills": {
     "title": "Skills",

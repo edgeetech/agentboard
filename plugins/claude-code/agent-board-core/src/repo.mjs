@@ -41,9 +41,22 @@ export function updateProject(db, patch, expectedVersion) {
 
 /* ─── TASKS ────────────────────────────────────────────────────────────── */
 
-export function listTasks(db, { includeDeleted = false } = {}) {
-  const where = includeDeleted ? '' : 'WHERE deleted_at IS NULL';
-  return db.prepare(`SELECT * FROM task ${where} ORDER BY seq DESC`).all();
+export function listTasks(db, { includeDeleted = false, search = '' } = {}) {
+  const clauses = [];
+  if (!includeDeleted) clauses.push('t.deleted_at IS NULL');
+  const params = [];
+  const q = typeof search === 'string' ? search.trim() : '';
+  if (q) {
+    const like = '%' + q.toLowerCase() + '%';
+    clauses.push(`(
+      LOWER(t.title) LIKE ? OR
+      LOWER(COALESCE(t.description, '')) LIKE ? OR
+      t.id IN (SELECT task_id FROM comment WHERE LOWER(body) LIKE ?)
+    )`);
+    params.push(like, like, like);
+  }
+  const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
+  return db.prepare(`SELECT t.* FROM task t ${where} ORDER BY t.seq DESC`).all(...params);
 }
 
 export function getTask(db, id) {

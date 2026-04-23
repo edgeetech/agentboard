@@ -27,7 +27,7 @@ export const api = {
     code: string; name: string; description?: string;
     workflow_type: 'WF1' | 'WF2'; repo_path: string;
   }) => call<{ project: any }>('POST', '/api/projects', body),
-  listTasks: () => call<{ tasks: any[] }>('GET', '/api/tasks'),
+  listTasks: (search?: string) => call<{ tasks: any[] }>('GET', search ? `/api/tasks?search=${encodeURIComponent(search)}` : '/api/tasks'),
   createTask: (body: { title: string; description?: string }) =>
     call<{ task: any; runId?: string }>('POST', '/api/tasks', body),
   getTask: (code: string) =>
@@ -53,6 +53,13 @@ export const api = {
     hash: string; size: string; sizeBytes: number;
     sessions: Array<{ id: string; projectDir: string | null; startedAt: string; lastEventAt: string; eventCount: number; compactCount: number }>;
   }>; error?: string }>('GET', '/api/sessions'),
+  sessionEvents: (hash: string, sessionId: string) => call<{
+    hash: string; sessionId: string;
+    meta: { session_id: string; project_dir: string | null; started_at: string; last_event_at: string; event_count: number; compact_count: number } | null;
+    events: Array<{ id: number; type: string; category: string | null; priority: number | null; data: string | null; source_hook: string | null; created_at: string }>;
+    resume: { snapshot: string | null; event_count: number | null; consumed: number | null } | null;
+    error?: string;
+  }>('GET', `/api/sessions/${encodeURIComponent(hash)}/events/${encodeURIComponent(sessionId)}`),
   deleteTask: (code: string) =>
     call<{ ok: boolean; cancelled_runs: number }>('DELETE', `/api/tasks/${encodeURIComponent(code)}`),
   projectCostsTotal: (code: string) =>

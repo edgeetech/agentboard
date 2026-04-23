@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 
@@ -10,7 +11,8 @@ type Session = {
   lastEventAt: string;
   eventCount: number;
   compactCount: number;
-  dbHash: string;
+  dbHash: string;      // full hash (filename without .db)
+  dbHashShort: string; // first 8 chars for display
 };
 
 function timeAgo(iso: string) {
@@ -49,7 +51,9 @@ export function SessionsPage() {
   const flat: Session[] = useMemo(() => {
     const out: Session[] = [];
     for (const db of data.data?.dbs ?? []) {
-      for (const s of db.sessions) out.push({ ...s, dbHash: db.hash.slice(0, 8) });
+      for (const s of db.sessions) {
+        out.push({ ...s, dbHash: db.hash, dbHashShort: db.hash.slice(0, 8) });
+      }
     }
     out.sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''));
     return out;
@@ -128,10 +132,14 @@ export function SessionsPage() {
             {filtered.map(s => {
               const dur = durationMin(s.startedAt, s.lastEventAt);
               return (
-                <article key={s.id} className="session-row">
+                <Link
+                  key={s.id}
+                  to={`/sessions/${encodeURIComponent(s.dbHash)}/${encodeURIComponent(s.id)}`}
+                  className="session-row"
+                >
                   <div className="session-main">
                     <div className="session-project">{projectName(s.projectDir)}</div>
-                    <div className="session-meta mono">{s.id.slice(0, 12)} · db:{s.dbHash}</div>
+                    <div className="session-meta mono">{s.id.slice(0, 12)} · db:{s.dbHashShort}</div>
                   </div>
                   <div className="session-stat">
                     <span className="label">{t('sessions.started', 'Started')}</span>
@@ -149,7 +157,7 @@ export function SessionsPage() {
                     <span className="label">{t('sessions.last', 'Last')}</span>
                     <span className="value">{timeAgo(s.lastEventAt)}</span>
                   </div>
-                </article>
+                </Link>
               );
             })}
           </div>

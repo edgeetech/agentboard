@@ -186,17 +186,21 @@ function serveIndex(res, tok, port) {
   // Per-request nonce authorizes exactly the token-injection script. CSP below
   // refuses any other inline or external script — so UI XSS can't read token.
   const nonce = randomBytes(16).toString('base64');
-  const injected = html.replace(
+  // Stamp our own inline <script> tags (pre-paint theme resolver, token injection)
+  // with the per-request nonce. Vite-emitted scripts carry attrs (type, src) so the
+  // bare <script> match only hits our inline bootstrappers.
+  let injected = html.replace(/<script>/g, `<script nonce="${nonce}">`);
+  injected = injected.replace(
     /<\/head>/i,
     `<script nonce="${nonce}">window.__AGENTBOARD_TOKEN=${JSON.stringify(tok)};</script></head>`
   );
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
-    "style-src 'self' 'unsafe-inline'", // Vite emits inline styles; nonce tighter in v1.1
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "connect-src 'self'",
     "img-src 'self' data:",
-    "font-src 'self' data:",
+    "font-src 'self' data: https://fonts.gstatic.com",
     "object-src 'none'",
     "base-uri 'self'",
     "frame-ancestors 'none'",

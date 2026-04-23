@@ -15,7 +15,8 @@ export async function handleTasks(req, res, url) {
   const m = req.method;
 
   if (p === '/api/tasks' && m === 'GET') {
-    return json(res, 200, { tasks: listTasks(db) });
+    const search = url.searchParams.get('search') || '';
+    return json(res, 200, { tasks: listTasks(db, { search }) });
   }
 
   if (p === '/api/tasks' && m === 'POST') {

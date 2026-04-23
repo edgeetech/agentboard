@@ -56,11 +56,18 @@ export function Board({ project }: { project: Project }) {
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useCardView();
-  const [detailView, setDetailView] = useDetailView();
+  const [, setDetailView] = useDetailView();
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchDebounced, setSearchDebounced] = useState('');
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const qc = useQueryClient();
+
+  useEffect(() => {
+    const id = setTimeout(() => setSearchDebounced(searchInput.trim()), 250);
+    return () => clearTimeout(id);
+  }, [searchInput]);
 
   // Support ?open=<code> query param (used when swapping from page → panel).
   useEffect(() => {
@@ -74,11 +81,13 @@ export function Board({ project }: { project: Project }) {
   }, [search, setSearch]);
 
   function openTask(code: string) {
-    if (detailView === 'page') navigate(`/tasks/${encodeURIComponent(code)}`);
-    else setSelected(code);
+    setSelected(code);
   }
 
-  const tasks = useQuery({ queryKey: ['tasks'], queryFn: api.listTasks });
+  const tasks = useQuery({
+    queryKey: ['tasks', searchDebounced],
+    queryFn: () => api.listTasks(searchDebounced || undefined),
+  });
   const total = useQuery({
     queryKey: ['costs-total', project.code],
     queryFn: () => api.projectCostsTotal(project.code),
@@ -128,9 +137,17 @@ export function Board({ project }: { project: Project }) {
           <h1>
             {project.name} <span className="code">{project.code}</span>
           </h1>
-          <span className="subtitle">{t(`wizard.${project.workflow_type.toLowerCase()}`, project.workflow_type)}</span>
         </div>
         <div className="actions">
+          <label className="search-bar">
+            <input
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              placeholder={t('board.search', 'Search tasks…')}
+              aria-label="Search tasks"
+            />
+            <span className="kbd">/</span>
+          </label>
           {total.data && (
             <span className="cost-header" title={`7d $${total.data.last_7d?.toFixed(4)} · 30d $${total.data.last_30d?.toFixed(4)}`}>
               {t('board.cost_total')} <span className="amount">${total.data.all_time?.toFixed(4) ?? '0.0000'}</span>
