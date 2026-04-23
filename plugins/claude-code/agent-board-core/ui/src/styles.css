@@ -33,6 +33,24 @@ body {
 .err { color: var(--danger); margin-top: .5rem; font-size: 13px; }
 .warn { color: var(--warn); }
 
+/* Icon-only button (gear, etc.) */
+.icon-btn {
+  background: var(--surface); color: var(--text); border: 1px solid var(--line);
+  padding: .35rem .55rem; border-radius: var(--radius);
+  font-size: 16px; line-height: 1; cursor: pointer;
+}
+.icon-btn:hover { background: var(--surface); border-color: var(--primary); color: var(--primary); }
+
+/* Settings drawer — reuses .detail-panel position/size */
+.settings-drawer form label { display: grid; gap: .3rem; font-weight: 600; font-size: 13px; }
+.settings-drawer input,
+.settings-drawer textarea,
+.settings-drawer select {
+  padding: .4rem .6rem; border: 1px solid var(--line); border-radius: var(--radius); font: inherit;
+}
+.settings-drawer input:disabled { background: #f3f4f6; color: var(--muted); }
+.settings-drawer small { font-weight: normal; }
+
 /* Language selector — aligned inside board header actions */
 .lang-selector { position: relative; }
 .lang-trigger {

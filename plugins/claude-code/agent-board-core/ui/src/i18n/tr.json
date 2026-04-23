@@ -10,7 +10,26 @@
   "common": {
     "delete": "Sil",
     "confirm_delete": "{{code}} görevini sil? Çalışan tüm ajanlar iptal edilecek.",
-    "cancel": "Vazgeç"
+    "cancel": "Vazgeç",
+    "save": "Kaydet",
+    "close": "Kapat",
+    "saved": "Kaydedildi."
+  },
+  "settings": {
+    "open": "Proje ayarları",
+    "title": "Proje ayarları",
+    "name": "Ad",
+    "description": "Açıklama",
+    "code": "Kod",
+    "code_locked": "Değiştirilemez — görev kodları ve DB dosya adı bu değere bağlı",
+    "workflow": "İş akışı",
+    "workflow_locked": "Değiştirilemez",
+    "repo_path": "Kod dizini",
+    "repo_hint": "Tam yol. Worker bu dizindeki dosyaları düzenler.",
+    "auto_dispatch_pm": "Yeni görevde PM otomatik çalıştırılsın",
+    "max_parallel": "Eş zamanlı çalışan ajan limiti",
+    "max_parallel_hint": "1–3.",
+    "version_mismatch": "Proje başka yerde değiştirildi — yenileyip tekrar deneyin."
   },
   "wizard": {
     "header": "İlk projeni oluştur",

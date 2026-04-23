@@ -24,6 +24,16 @@ export async function openOrCreate(code) {
   return db;
 }
 
+/** Close and evict a cached DB handle. Safe to call even if not cached. */
+export function closeDb(code) {
+  const lower = code.toLowerCase();
+  const db = openDbs.get(lower);
+  if (db) {
+    try { db.close(); } catch { /* best effort */ }
+    openDbs.delete(lower);
+  }
+}
+
 export function listProjectDbs() {
   try {
     return readdirSync(projectsDir())

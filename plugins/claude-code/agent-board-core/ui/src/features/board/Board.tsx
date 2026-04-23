@@ -6,8 +6,17 @@ import { CreateTaskModal } from './CreateTaskModal';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { CostBadge } from './CostBadge';
 import { LanguageSelector } from './LanguageSelector';
+import { ProjectSettingsDrawer } from './ProjectSettingsDrawer';
 
-type Project = { id: string; code: string; name: string; workflow_type: 'WF1' | 'WF2' };
+type Project = {
+  id: string; code: string; name: string;
+  description: string | null;
+  workflow_type: 'WF1' | 'WF2';
+  repo_path: string;
+  auto_dispatch_pm: number;
+  max_parallel: number;
+  version: number;
+};
 
 const COLUMNS_WF1 = ['todo', 'agent_working', 'agent_review', 'human_approval', 'done'] as const;
 const COLUMNS_WF2 = ['todo', 'agent_working', 'human_approval', 'done'] as const;
@@ -15,6 +24,7 @@ const COLUMNS_WF2 = ['todo', 'agent_working', 'human_approval', 'done'] as const
 export function Board({ project }: { project: Project }) {
   const { t } = useTranslation();
   const [creating, setCreating] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
 
   const tasks = useQuery({ queryKey: ['tasks'], queryFn: api.listTasks });
@@ -47,6 +57,12 @@ export function Board({ project }: { project: Project }) {
             </div>
           )}
           <button onClick={() => setCreating(true)}>{t('board.new_task')}</button>
+          <button
+            className="icon-btn"
+            onClick={() => setSettingsOpen(true)}
+            title={t('settings.open')}
+            aria-label={t('settings.open')}
+          >⚙</button>
           <LanguageSelector />
         </div>
       </header>
@@ -65,6 +81,9 @@ export function Board({ project }: { project: Project }) {
       </div>
 
       {creating && <CreateTaskModal onClose={() => setCreating(false)} />}
+      {settingsOpen && (
+        <ProjectSettingsDrawer project={project} onClose={() => setSettingsOpen(false)} />
+      )}
       {selected && (
         <TaskDetailPanel
           taskCode={selected}

@@ -51,4 +51,8 @@ export const api = {
     call<{ ok: boolean; cancelled_runs: number }>('DELETE', `/api/tasks/${encodeURIComponent(code)}`),
   projectCostsTotal: (code: string) =>
     call<any>('GET', `/api/projects/${encodeURIComponent(code)}/costs/total`),
+  updateProject: (code: string, patch: Record<string, unknown> & { version: number }) =>
+    call<{ ok: boolean; project: any }>('PATCH', `/api/projects/${encodeURIComponent(code)}`, patch),
+  deleteProject: (code: string) =>
+    call<{ ok: boolean; cancelled_runs: number; trashed_path: string }>('DELETE', `/api/projects/${encodeURIComponent(code)}`),
 };

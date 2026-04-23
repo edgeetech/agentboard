@@ -10,7 +10,26 @@
   "common": {
     "delete": "Eliminar",
     "confirm_delete": "¿Eliminar tarea {{code}}? Cualquier agente en ejecución será cancelado.",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "close": "Cerrar",
+    "saved": "Guardado."
+  },
+  "settings": {
+    "open": "Ajustes del proyecto",
+    "title": "Ajustes del proyecto",
+    "name": "Nombre",
+    "description": "Descripción",
+    "code": "Código",
+    "code_locked": "Inmutable — códigos de tarea y archivo DB dependen de este valor",
+    "workflow": "Flujo de trabajo",
+    "workflow_locked": "Inmutable",
+    "repo_path": "Ruta del repositorio",
+    "repo_hint": "Ruta absoluta. Worker edita archivos bajo este directorio.",
+    "auto_dispatch_pm": "Despachar PM automáticamente al crear tarea",
+    "max_parallel": "Ejecuciones paralelas máx.",
+    "max_parallel_hint": "1–3.",
+    "version_mismatch": "El proyecto se modificó en otro lugar — recarga y reintenta."
   },
   "wizard": {
     "header": "Crea tu primer proyecto",
