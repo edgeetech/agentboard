@@ -202,18 +202,30 @@ input:focus, textarea:focus, select:focus {
 .app-nav .nav-item.active { color: var(--text); background: var(--bg-alt); }
 
 .theme-toggle {
-  width: 40px; height: 28px;
+  width: 54px; height: 28px;
   background: var(--bg-alt); border: 1px solid var(--line);
   border-radius: 999px; cursor: pointer; position: relative;
-  padding: 0; transition: background 0.2s;
+  padding: 0; display: inline-flex; align-items: center;
+  justify-content: space-between; transition: background 0.2s, border-color 0.2s;
 }
-.theme-toggle::after {
-  content: ''; position: absolute; top: 2px; left: 2px;
+.theme-toggle:hover { border-color: var(--line-strong); }
+.theme-toggle .ic {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  transition: color 0.2s, opacity 0.2s;
+  pointer-events: none;
+}
+.theme-toggle .ic.sun  { left: 7px;  color: var(--accent); }
+.theme-toggle .ic.moon { right: 7px; color: var(--muted); }
+.theme-toggle .thumb {
+  position: absolute; top: 2px; left: 2px;
   width: 22px; height: 22px; border-radius: 999px;
   background: var(--surface); box-shadow: var(--shadow-sm);
-  transition: transform 0.25s cubic-bezier(.2,.7,.3,1);
+  transition: transform 0.25s cubic-bezier(.2,.7,.3,1), background 0.2s;
 }
-:root[data-theme='dark'] .theme-toggle::after { transform: translateX(12px); background: var(--primary); }
+.theme-toggle.is-dark .thumb  { transform: translateX(26px); background: var(--primary); }
+.theme-toggle.is-dark .ic.sun  { color: var(--muted); opacity: 0.55; }
+.theme-toggle.is-dark .ic.moon { color: var(--on-primary); opacity: 1; }
+.theme-toggle.is-light .ic.moon { opacity: 0.55; }
 
 /* ------- Sidebar ------- */
 
@@ -310,18 +322,27 @@ input:focus, textarea:focus, select:focus {
 
 .columns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(var(--col-count, 5), minmax(0, 1fr));
+  gap: 0.75rem;
   align-items: start;
+  min-width: 0;
+}
+@media (max-width: 960px) {
+  .columns {
+    grid-template-columns: repeat(var(--col-count, 5), minmax(220px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
 }
 .column {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.85rem 0.75rem 1rem;
+  padding: 0.7rem 0.55rem 0.9rem;
   min-height: 62vh;
-  display: flex; flex-direction: column; gap: 0.6rem;
+  display: flex; flex-direction: column; gap: 0.55rem;
   transition: border-color 0.15s, background 0.15s;
+  min-width: 0;
 }
 .column.drop-hint {
   border-color: var(--accent);
@@ -341,19 +362,18 @@ input:focus, textarea:focus, select:focus {
 }
 .cards { display: flex; flex-direction: column; gap: 0.55rem; min-height: 40px; }
 
-/* ------- Modern card ------- */
+/* ------- Card: base (shared) ------- */
 
 .card {
   position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.8rem 0.9rem 0.75rem;
+  padding: 0.6rem 0.75rem 0.6rem 0.85rem;
   cursor: grab;
-  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+  transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
   overflow: hidden;
 }
-.card:hover { box-shadow: var(--shadow-md); border-color: var(--line-strong); }
 .card:active { cursor: grabbing; }
 .card.dragging { opacity: 0.35; box-shadow: var(--shadow-lg); }
 .card.is-drag-overlay {
@@ -374,14 +394,150 @@ input:focus, textarea:focus, select:focus {
 .card .card-head { font-size: 11.5px; color: var(--muted); font-weight: 700; }
 .card .card-head .code { font-family: var(--mono); }
 .card .card-title {
-  font-size: 14px; font-weight: 700; color: var(--text);
-  line-height: 1.35; margin-top: 0.25rem;
+  font-size: 13.5px; font-weight: 600; color: var(--text);
+  line-height: 1.35; margin-top: 0.2rem;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   overflow: hidden;
 }
 .card .card-foot {
   display: flex; justify-content: space-between; align-items: center;
-  margin-top: 0.6rem; font-size: 11px; color: var(--muted);
+  margin-top: 0.5rem; font-size: 11px; color: var(--muted);
+}
+
+/* ------- Classic card (simple, compact) ------- */
+.card.classic { padding: 0.5rem 0.7rem; }
+.card.classic:hover { box-shadow: var(--shadow-sm); border-color: var(--line-strong); }
+.card.classic .card-head { font-size: 11px; }
+.card.classic .card-title {
+  font-size: 13px; font-weight: 500; margin-top: 0.15rem;
+  -webkit-line-clamp: 2;
+}
+
+/* ------- Modern card (HUD / futuristic) ------- */
+.card.modern {
+  background:
+    linear-gradient(145deg, var(--surface) 0%, var(--surface-alt) 100%);
+  border-color: var(--line);
+  padding: 0.7rem 0.75rem 0.7rem 0.9rem;
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.card.modern .card-title { font-size: 14px; }
+.card.modern::before {
+  width: 3px;
+  top: 10px; bottom: 10px;
+  border-radius: 4px;
+  box-shadow: 0 0 12px currentColor;
+}
+.card.modern.role-pm::before       { color: #5e7ce2; }
+.card.modern.role-worker::before   { color: var(--success); }
+.card.modern.role-reviewer::before { color: #9b7cd9; }
+.card.modern.role-human::before    { color: var(--accent); }
+
+/* HUD corner brackets — 4 × 10px L-shapes */
+.card.modern::after {
+  content: '';
+  position: absolute; inset: 6px;
+  pointer-events: none; opacity: 0.55;
+  background:
+    linear-gradient(var(--line-strong), var(--line-strong)) left   top    / 10px 1px  no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) left   top    / 1px  10px no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) right  top    / 10px 1px  no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) right  top    / 1px  10px no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) left   bottom / 10px 1px  no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) left   bottom / 1px  10px no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) right  bottom / 10px 1px  no-repeat,
+    linear-gradient(var(--line-strong), var(--line-strong)) right  bottom / 1px  10px no-repeat;
+  transition: opacity 0.18s;
+}
+.card.modern:hover::after { opacity: 1; }
+.card.modern:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--line-strong);
+}
+
+.card.modern .card-head {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 800;
+  display: flex; align-items: center; gap: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px dashed var(--line);
+  margin-bottom: 0.5rem;
+}
+.card.modern .card-head .code { color: var(--text); letter-spacing: 0.08em; }
+.card.modern .card-head .card-head-spacer { flex: 1; }
+.card.modern .card-head .rec {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 9.5px; letter-spacing: 0.2em;
+  color: var(--muted);
+}
+.card.modern .card-head .rec::before {
+  content: ''; width: 6px; height: 6px; border-radius: 999px;
+  background: var(--line-strong);
+}
+.card.modern.live .card-head .rec {
+  color: var(--accent);
+}
+.card.modern.live .card-head .rec::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent);
+  animation: recPulse 1.4s ease-out infinite;
+}
+@keyframes recPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(217,120,66,0.55); }
+  100% { box-shadow: 0 0 0 8px rgba(217,120,66,0); }
+}
+
+.card.modern .card-title {
+  font-family: 'Mulish', sans-serif;
+  font-size: 15.5px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin-top: 0;
+  color: var(--text);
+  -webkit-line-clamp: 3;
+}
+
+.card.modern .card-foot {
+  margin-top: 0.7rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+  gap: 0.4rem;
+}
+
+.card.modern .role-chip {
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  padding: 3px 14px;
+  border-radius: 0;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.card.modern .cost-chip {
+  font-family: var(--mono);
+  background: transparent;
+  color: var(--text-soft);
+  padding: 2px 0;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+}
+
+/* Dark-mode neon glow */
+:root[data-theme='dark'] .card.modern {
+  background:
+    linear-gradient(145deg, var(--surface) 0%, rgba(14, 18, 23, 0.6) 100%);
+}
+:root[data-theme='dark'] .card.modern:hover {
+  box-shadow:
+    var(--shadow-md),
+    0 0 0 1px var(--line-strong),
+    0 0 22px rgba(224, 169, 59, 0.08);
 }
 .card .role-chip {
   display: inline-flex; align-items: center; gap: 0.35rem;
@@ -528,6 +684,37 @@ input:focus, textarea:focus, select:focus {
 .settings-drawer form label { display: grid; gap: 0.3rem; font-weight: 700; font-size: 13px; }
 .settings-drawer input:disabled { background: var(--bg-alt); color: var(--muted); }
 .settings-drawer small { font-weight: 400; }
+
+/* ------- Generic form card (stacked labels) ------- */
+
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.75rem;
+  max-width: 640px;
+  box-shadow: var(--shadow-sm);
+}
+.form-grid { display: grid; gap: 1rem; }
+.form-card label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 700;
+  font-size: 13px;
+}
+.form-card label small { font-weight: 400; color: var(--muted); font-size: 12px; }
+.form-card input, .form-card textarea, .form-card select { width: 100%; }
+.form-card input:disabled { background: var(--bg-alt); color: var(--muted); cursor: not-allowed; }
+.form-card textarea { resize: vertical; min-height: 84px; font-family: inherit; }
+.form-card .inline-check {
+  display: flex; flex-direction: row; align-items: center;
+  gap: 0.55rem; font-weight: 700;
+}
+.form-card .inline-check input { width: auto; }
+.form-card .form-actions {
+  display: flex; gap: 0.6rem; align-items: center;
+  padding-top: 0.5rem; border-top: 1px solid var(--line);
+}
 
 /* ------- Skills / Roles pages (grid cards) ------- */
 

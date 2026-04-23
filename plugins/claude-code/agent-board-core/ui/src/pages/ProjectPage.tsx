@@ -76,11 +76,10 @@ export function ProjectPage() {
       </div>
 
       <form
-        className="entity-card"
-        style={{ maxWidth: 640, padding: '1.5rem 1.75rem' }}
+        className="form-card"
         onSubmit={(e) => { e.preventDefault(); if (dirty) mut.mutate(); }}
       >
-        <div style={{ display: 'grid', gap: '0.9rem' }}>
+        <div className="form-grid">
           <label>
             {t('settings.code')}
             <input value={project.code} disabled />
@@ -113,7 +112,7 @@ export function ProjectPage() {
             />
             <small className="muted">{t('settings.max_parallel_hint')}</small>
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', fontWeight: 700 }}>
+          <label className="inline-check">
             <input
               type="checkbox"
               checked={autoPm}
@@ -122,7 +121,7 @@ export function ProjectPage() {
             <span>{t('settings.auto_dispatch_pm')}</span>
           </label>
 
-          <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center' }}>
+          <div className="form-actions">
             <button
               type="submit"
               className="primary"

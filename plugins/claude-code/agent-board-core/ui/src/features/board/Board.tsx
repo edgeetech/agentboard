@@ -123,7 +123,7 @@ export function Board({ project }: { project: Project }) {
       </div>
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-        <div className="columns">
+        <div className="columns" style={{ ['--col-count' as any]: cols.length }}>
           {cols.map(c => (
             <DroppableColumn key={c} id={c} label={t(`board.${c}`)} count={grouped[c]?.length ?? 0}>
               {(grouped[c] ?? []).map(task => (
@@ -214,27 +214,34 @@ function CardView({
   const { t } = useTranslation();
   const attention = needsAttention(task);
   const role = (task.assignee_role || '').toLowerCase();
+  const live = task.status === 'agent_working' || task.status === 'agent_review';
   const cls = [
     'card',
-    view === 'classic' ? 'classic' : '',
+    view === 'classic' ? 'classic' : 'modern',
     role ? `role-${role}` : '',
     attention ? 'needs-attention' : '',
+    live ? 'live' : '',
     dragging ? 'dragging' : '',
     overlay ? 'is-drag-overlay' : '',
   ].filter(Boolean).join(' ');
+  const isModern = view !== 'classic';
   return (
     <div className={cls}>
       {attention && <span className="attention-dot" aria-label={t('board.needs_attention', 'Needs attention')} />}
       <div className="row card-head">
         <span className="code">{task.code}</span>
         {(task.rework_count ?? 0) > 3 && <span className="stall-badge">{t('board.stalled')}</span>}
-        <CostBadge taskCode={task.code} />
+        {isModern && <span className="card-head-spacer" />}
+        {isModern
+          ? <span className="rec">{live ? 'LIVE' : 'IDLE'}</span>
+          : <CostBadge taskCode={task.code} />}
       </div>
       <div className="card-title">{task.title}</div>
       <div className="card-foot">
         {task.assignee_role ? (
           <span className={`role-chip ${role}`}>{t(`role.${task.assignee_role}`, task.assignee_role)}</span>
         ) : <span className="muted">—</span>}
+        <CostBadge taskCode={task.code} />
       </div>
     </div>
   );
