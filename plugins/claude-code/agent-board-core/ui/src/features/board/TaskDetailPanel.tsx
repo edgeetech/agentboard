@@ -59,11 +59,13 @@ export function TaskDetailPanel({
     <Wrapper className={wrapperClass}>
       <div className="detail-head">
         {variant === 'drawer' ? (
-          <button className="close" onClick={onClose} title={t('common.close')}>×</button>
+          <button className="close" onClick={onClose} title={t('common.close')} aria-label={t('common.close')}>×</button>
         ) : null}
         <span className="code">{task.code}</span>
-        <span className={`status status-${task.status}`}>{t(`board.${task.status}`)}</span>
-        {task.assignee_role && <span className="assignee muted">@ {t(`role.${task.assignee_role}`)}</span>}
+        <span className={`tag status-${task.status}`}>{t(`board.${task.status}`)}</span>
+        {task.assignee_role && (
+          <RoleAvatar role={task.assignee_role} label={t(`role.${task.assignee_role}`, { defaultValue: task.assignee_role })} />
+        )}
         <span style={{ flex: 1 }} />
         {onSwapVariant && (
           <button
@@ -183,4 +185,19 @@ export function TaskDetailPanel({
 
 function safeParseAc(s: string): any[] {
   try { return JSON.parse(s || '[]'); } catch { return []; }
+}
+
+function initialsFromLabel(label: string): string {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return (parts[0] || '?').slice(0, 2).toUpperCase();
+}
+
+function RoleAvatar({ role, label }: { role: string; label: string }) {
+  const initials = initialsFromLabel(label);
+  return (
+    <span className={`avatar role-${role}`} title={label} aria-label={label}>
+      <span className="avatar-initials">{initials}</span>
+    </span>
+  );
 }

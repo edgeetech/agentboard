@@ -12,7 +12,6 @@ import { TaskDetailPanel } from './TaskDetailPanel';
 import { useCardView } from '../../hooks/useCardView';
 import type { CardView as CardViewMode } from '../../hooks/useCardView';
 import { useDetailView } from '../../hooks/useDetailView';
-import type { DetailView } from '../../hooks/useDetailView';
 
 type Project = {
   id: string; code: string; name: string;
@@ -139,7 +138,6 @@ export function Board({ project }: { project: Project }) {
             </span>
           )}
           <ViewToggle value={view} onChange={setView} />
-          <DetailViewToggle value={detailView} onChange={setDetailView} />
           <button className="primary" onClick={() => setCreating(true)}>+ {t('board.new_task')}</button>
         </div>
       </div>
@@ -147,7 +145,7 @@ export function Board({ project }: { project: Project }) {
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <div className="columns" style={{ ['--col-count' as any]: cols.length }}>
           {cols.map(c => (
-            <DroppableColumn key={c} id={c} label={t(`board.${c}`)} count={grouped[c]?.length ?? 0}>
+            <DroppableColumn key={c} id={c} status={c} label={t(`board.${c}`)} count={grouped[c]?.length ?? 0}>
               {(grouped[c] ?? []).map(task => (
                 <DraggableCard
                   key={task.id}
@@ -182,26 +180,6 @@ export function Board({ project }: { project: Project }) {
   );
 }
 
-function DetailViewToggle({ value, onChange }: { value: DetailView; onChange: (v: DetailView) => void }) {
-  const { t } = useTranslation();
-  return (
-    <div className="view-toggle" role="tablist" aria-label={t('board.detail_view', 'Detail view')}>
-      <button
-        className={value === 'panel' ? 'active' : ''}
-        onClick={() => onChange('panel')}
-        role="tab" aria-selected={value === 'panel'}
-        title={t('board.detail_panel_hint', 'Open task detail as side panel')}
-      >{t('board.detail_panel', 'Panel')}</button>
-      <button
-        className={value === 'page' ? 'active' : ''}
-        onClick={() => onChange('page')}
-        role="tab" aria-selected={value === 'page'}
-        title={t('board.detail_page_hint', 'Open task detail as full page')}
-      >{t('board.detail_page', 'Page')}</button>
-    </div>
-  );
-}
-
 function ViewToggle({ value, onChange }: { value: CardViewMode; onChange: (v: CardViewMode) => void }) {
   const { t } = useTranslation();
   return (
@@ -221,11 +199,11 @@ function ViewToggle({ value, onChange }: { value: CardViewMode; onChange: (v: Ca
 }
 
 function DroppableColumn({
-  id, label, count, children,
-}: { id: string; label: string; count: number; children: React.ReactNode }) {
+  id, status, label, count, children,
+}: { id: string; status: string; label: string; count: number; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div ref={setNodeRef} className={'column' + (isOver ? ' drop-hint' : '')}>
+    <div ref={setNodeRef} className={`column col-${status}` + (isOver ? ' drop-hint' : '')}>
       <h2>{label}<span className="count">{count}</span></h2>
       <div className="cards">{children}</div>
     </div>

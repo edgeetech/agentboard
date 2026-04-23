@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { Logo } from './Logo';
-import { EdgeeTechLogo } from './EdgeeTechLogo';
 import { useTheme } from '../theme/ThemeProvider';
 import { LanguageSelector } from '../features/board/LanguageSelector';
 
@@ -81,10 +80,9 @@ export function AppShell() {
           <span className="mono">{project?.code ?? '—'}</span>
         </span>
         <span className="foot-center">
-          <span className="foot-crafted-label">{t('foot.crafted', 'Crafted at')}</span>
-          <a href="https://edgeetech.com" target="_blank" rel="noopener noreferrer" className="foot-brand" aria-label="EdgeeTech Limited">
-            <EdgeeTechLogo size={22} />
-            <span className="foot-brand-text">EdgeeTech Limited</span>
+          {t('foot.crafted', 'Crafted at')}{' '}
+          <a href="https://edgeetech.com" target="_blank" rel="noopener noreferrer" className="foot-brand">
+            EdgeeTech Limited
           </a>
         </span>
         <span className="foot-right">

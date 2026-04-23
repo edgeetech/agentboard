@@ -633,6 +633,57 @@ input:focus, textarea:focus, select:focus {
   text-transform: uppercase; letter-spacing: 0.08em; font-weight: 800;
   background: var(--bg-alt); color: var(--text-soft);
 }
+
+/* Status tag (used in task detail header) */
+.tag {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  background: var(--bg-alt); color: var(--text-soft);
+  border: 1px solid var(--line);
+}
+.tag.status-todo          { background: #eceff3; color: #4a5363; border-color: #dfe3ea; }
+.tag.status-agent_working { background: #e3eefc; color: #23528f; border-color: #c9daf3; }
+.tag.status-agent_review  { background: #ece1f9; color: #5a2fa0; border-color: #d9c5f0; }
+.tag.status-human_approval{ background: #fbe9d3; color: #8a4b1a; border-color: #f3d4ae; }
+.tag.status-done          { background: #dff1e6; color: #226a44; border-color: #c2e4d0; }
+:root[data-theme='dark'] .tag.status-todo          { background: #1f2735; color: #c5ccd6; border-color: #324054; }
+:root[data-theme='dark'] .tag.status-agent_working { background: #162942; color: #8ec2ff; border-color: #244066; }
+:root[data-theme='dark'] .tag.status-agent_review  { background: #2a1b42; color: #c6a3f2; border-color: #3d2962; }
+:root[data-theme='dark'] .tag.status-human_approval{ background: #3a2a16; color: #f2c489; border-color: #553d20; }
+:root[data-theme='dark'] .tag.status-done          { background: #112e1f; color: #7ed4a2; border-color: #1e4a32; }
+
+/* Role avatar */
+.avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 999px;
+  font-family: var(--mono); font-weight: 800; font-size: 10.5px;
+  letter-spacing: 0.03em;
+  background: var(--bg-alt); color: var(--text-soft);
+  border: 1px solid var(--line-strong);
+}
+.avatar.role-pm       { background: #e9edfb; color: #3d53a6; border-color: #c8d2ef; }
+.avatar.role-worker   { background: #e1f2e9; color: #205c43; border-color: #bddfcd; }
+.avatar.role-reviewer { background: #eee4f7; color: #5d4489; border-color: #d7c1ec; }
+.avatar.role-human    { background: #fbe7d7; color: #94471f; border-color: #f1cdab; }
+.avatar.role-system   { background: #fef6d7; color: #8a6d1a; border-color: #f3e29b; }
+:root[data-theme='dark'] .avatar.role-pm       { background: #1b2a4e; color: #a6baf5; border-color: #2c3f6d; }
+:root[data-theme='dark'] .avatar.role-worker   { background: #133327; color: #79d1a2; border-color: #1f4c3a; }
+:root[data-theme='dark'] .avatar.role-reviewer { background: #2a1f42; color: #c3a6f0; border-color: #3c2f5e; }
+:root[data-theme='dark'] .avatar.role-human    { background: #3a2418; color: #ebb58a; border-color: #553820; }
+
+/* Column: soft status tints */
+.column.col-todo           { background: #f3f4f8; }
+.column.col-agent_working  { background: #eef4fc; }
+.column.col-agent_review   { background: #f3edfa; }
+.column.col-human_approval { background: #fcf1e2; }
+.column.col-done           { background: #edf7f1; }
+:root[data-theme='dark'] .column.col-todo           { background: #141a26; }
+:root[data-theme='dark'] .column.col-agent_working  { background: #111f33; }
+:root[data-theme='dark'] .column.col-agent_review   { background: #1d1630; }
+:root[data-theme='dark'] .column.col-human_approval { background: #271d11; }
+:root[data-theme='dark'] .column.col-done           { background: #112215; }
 .description {
   white-space: pre-wrap;
   background: var(--surface-alt); padding: 0.6rem 0.8rem;
@@ -980,18 +1031,6 @@ input:focus, textarea:focus, select:focus {
 }
 .detail-inline .detail-head { margin-bottom: 0.75rem; }
 
-/* ------- Footer: EdgeeTech logo wrapper ------- */
-
-.app-foot .foot-brand {
-  display: inline-flex; align-items: center; gap: 0.5rem;
-  color: var(--text);
-  background: none;
-  -webkit-text-fill-color: initial; -webkit-background-clip: initial; background-clip: initial;
-  font-weight: 800;
-}
-.app-foot .foot-brand svg { display: block; flex: none; }
-.app-foot .foot-brand-text { font-size: 12px; letter-spacing: 0.02em; }
-.app-foot .foot-crafted-label { margin-right: 0.4rem; }
 
 /* ------- Neon + animation ------- */
 
