@@ -111,13 +111,16 @@ button.warn { background: var(--warn); color: #fff; }
 button.danger { background: var(--danger); color: #fff; }
 button.danger:hover { background: #841f25; }
 button.icon-btn {
-  padding: 0.4rem 0.55rem;
+  padding: 0;
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
   background: transparent;
   color: var(--text-soft);
   border: 1px solid var(--line);
-  font-size: 15px;
+  font-size: 18px;
   line-height: 1;
 }
+button.icon-btn:disabled { opacity: 0.4; }
 button.icon-btn:hover { color: var(--text); border-color: var(--line-strong); background: var(--surface); }
 
 input, textarea, select {
@@ -840,12 +843,11 @@ input:focus, textarea:focus, select:focus {
 .page-head .view-toggle button { padding: 0.3rem 0.55rem; }
 .page-head button { white-space: nowrap; }
 .search-bar input {
-  flex: 1; border: 0; background: transparent; padding: 0.45rem 0.4rem;
+  flex: 1; min-width: 0; border: 0; background: transparent; padding: 0.45rem 0.4rem;
 }
 .search-bar input:focus { box-shadow: none; }
-.search-bar .kbd {
-  font-family: var(--mono); font-size: 10.5px; color: var(--muted);
-  background: var(--bg-alt); padding: 1px 6px; border-radius: 4px;
+.search-bar .search-icon {
+  color: var(--muted); flex-shrink: 0; margin-left: 0.1rem;
 }
 
 .empty-state {

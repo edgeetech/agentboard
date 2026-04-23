@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { CopyIcon } from './CopyIcon';
 
 export function PromptPanel({
   kind, id, onClose,
@@ -22,10 +23,23 @@ export function PromptPanel({
         <span className="tag">{kind}.md</span>
         {q.data?.path && <span className="mono muted prompt-path">{q.data.path}</span>}
         <span style={{ flex: 1 }} />
-        <button className="ghost" type="button" onClick={copy} disabled={!q.data?.content} title={t('prompt.copy', 'Copy')}>
-          {t('prompt.copy', 'Copy')}
+        <button
+          className="icon-btn"
+          type="button"
+          onClick={copy}
+          disabled={!q.data?.content}
+          title={t('prompt.copy', 'Copy')}
+          aria-label={t('prompt.copy', 'Copy')}
+        >
+          <CopyIcon />
         </button>
-        <button className="icon-btn" type="button" onClick={onClose} title={t('common.close', 'Close')} aria-label={t('common.close', 'Close')}>×</button>
+        <button
+          className="icon-btn"
+          type="button"
+          onClick={onClose}
+          title={t('common.close', 'Close')}
+          aria-label={t('common.close', 'Close')}
+        >×</button>
       </div>
       <div className="prompt-body">
         {q.isLoading && <div className="center"><div className="spinner" /></div>}

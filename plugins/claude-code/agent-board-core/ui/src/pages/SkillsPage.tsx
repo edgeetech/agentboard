@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { loadSkills } from '../data/catalog';
+import { SearchIcon } from '../components/SearchIcon';
 
 export function SkillsPage() {
   const { t } = useTranslation();
@@ -30,13 +31,13 @@ export function SkillsPage() {
         <div className="actions">
           <div className="action-group">
             <label className="search-bar">
+              <SearchIcon />
               <input
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 placeholder={t('skills.search', 'Search skills…')}
                 aria-label="Search skills"
               />
-              <span className="kbd">/</span>
             </label>
             <button className="primary" disabled title={t('common.coming_soon', 'Coming soon')}>
               + {t('skills.new', 'New skill')}

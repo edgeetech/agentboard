@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { SearchIcon } from '../components/SearchIcon';
 
 type Session = {
   id: string;
@@ -88,13 +89,13 @@ export function SessionsPage() {
         </div>
         <div className="actions">
           <label className="search-bar">
+            <SearchIcon />
             <input
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder={t('sessions.search', 'Search project or session id…')}
               aria-label="Search sessions"
             />
-            <span className="kbd">/</span>
           </label>
         </div>
       </div>

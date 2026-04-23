@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { loadRoles } from '../data/catalog';
+import { SearchIcon } from '../components/SearchIcon';
 
 export function RolesPage() {
   const { t } = useTranslation();
@@ -30,13 +31,13 @@ export function RolesPage() {
         <div className="actions">
           <div className="action-group">
             <label className="search-bar">
+              <SearchIcon />
               <input
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 placeholder={t('roles.search', 'Search roles…')}
                 aria-label="Search roles"
               />
-              <span className="kbd">/</span>
             </label>
             <button className="primary" disabled title={t('common.coming_soon', 'Coming soon')}>
               + {t('roles.new', 'New role')}

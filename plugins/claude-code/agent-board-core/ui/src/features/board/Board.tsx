@@ -12,6 +12,7 @@ import { TaskDetailPanel } from './TaskDetailPanel';
 import { useCardView } from '../../hooks/useCardView';
 import type { CardView as CardViewMode } from '../../hooks/useCardView';
 import { useDetailView } from '../../hooks/useDetailView';
+import { SearchIcon } from '../../components/SearchIcon';
 
 type Project = {
   id: string; code: string; name: string;
@@ -140,13 +141,13 @@ export function Board({ project }: { project: Project }) {
         </div>
         <div className="actions">
           <label className="search-bar">
+            <SearchIcon />
             <input
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               placeholder={t('board.search', 'Search tasks…')}
               aria-label="Search tasks"
             />
-            <span className="kbd">/</span>
           </label>
           {total.data && (
             <span className="cost-header" title={`7d $${total.data.last_7d?.toFixed(4)} · 30d $${total.data.last_30d?.toFixed(4)}`}>
