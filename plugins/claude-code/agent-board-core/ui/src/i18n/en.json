@@ -29,7 +29,9 @@
     "active": "Active project"
   },
   "foot": {
-    "connected": "Connected"
+    "connected": "Connected",
+    "crafted": "Crafted at",
+    "docs": "Docs"
   },
   "settings": {
     "open": "Project settings",

@@ -1,42 +1,22 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-
-type Role = {
-  id: string;
-  name: string;
-  emblem: string;
-  description: string;
-  skills: string[];
-};
-
-const CATALOG: Role[] = [
-  { id: 'pm', name: 'PM', emblem: 'PM',
-    description: 'Enriches the task: writes description, acceptance criteria, breaks scope.',
-    skills: ['tech-spec', 'triage'] },
-  { id: 'worker', name: 'Worker', emblem: 'WK',
-    description: 'Implements the change end-to-end: edits code, runs tests, commits.',
-    skills: ['unit-tests', 'refactor', 'api-client'] },
-  { id: 'reviewer', name: 'Reviewer', emblem: 'RV',
-    description: 'Reviews the diff, raises issues, asks for rework or hands back for human approval.',
-    skills: ['code-review', 'release-notes'] },
-  { id: 'human', name: 'Human', emblem: 'HU',
-    description: 'You. Approves done work or rejects back to the worker with a comment.',
-    skills: ['approve', 'reject'] },
-];
+import { loadRoles } from '../data/catalog';
 
 export function RolesPage() {
   const { t } = useTranslation();
   const [q, setQ] = useState('');
+  const items = useMemo(loadRoles, []);
 
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return CATALOG;
-    return CATALOG.filter(r =>
+    if (!s) return items;
+    return items.filter(r =>
       r.name.toLowerCase().includes(s) ||
       r.description.toLowerCase().includes(s) ||
       r.skills.some(x => x.includes(s))
     );
-  }, [q]);
+  }, [q, items]);
 
   return (
     <>
@@ -71,14 +51,14 @@ export function RolesPage() {
       ) : (
         <div className="entity-grid">
           {list.map(role => (
-            <article key={role.id} className="entity-card">
+            <Link key={role.id} to={`/roles/${role.id}`} className="entity-card">
               <div className="emblem">{role.emblem}</div>
               <h3>{role.name}</h3>
               <p>{role.description}</p>
               <div className="tags">
                 {role.skills.map(s => <span key={s} className="tag">{s}</span>)}
               </div>
-            </article>
+            </Link>
           ))}
         </div>
       )}

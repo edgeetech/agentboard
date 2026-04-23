@@ -67,12 +67,26 @@ export function AppShell() {
       </main>
 
       <footer className={'app-foot' + (offline ? ' offline' : '')}>
-        <span>
+        <span className="foot-left">
           <span className="dot" />
           {offline ? t('app.offline') : t('foot.connected', 'Connected')}
+          <span className="foot-sep">·</span>
+          <span className="mono">{project?.code ?? '—'}</span>
         </span>
-        <span>
-          AgentBoard · <span className="mono">{project?.code ?? '—'}</span>
+        <span className="foot-center">
+          {t('foot.crafted', 'Crafted at')}{' '}
+          <a href="https://edgeetech.com" target="_blank" rel="noopener noreferrer" className="foot-brand">
+            EdgeeTech Limited
+          </a>
+        </span>
+        <span className="foot-right">
+          <a href="https://github.com/edgeetech/agentboard" target="_blank" rel="noopener noreferrer">
+            GitHub ↗
+          </a>
+          <span className="foot-sep">·</span>
+          <span>{t('foot.docs', 'Docs')}</span>
+          <span className="foot-sep">·</span>
+          <span>© {new Date().getFullYear()}</span>
         </span>
       </footer>
     </div>
