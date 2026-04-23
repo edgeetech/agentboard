@@ -137,9 +137,11 @@ export function TaskDetailPanel({
               autoFocus
             />
             <div className="actions">
-              <button onClick={() => setRejectOpen(false)}>Cancel</button>
+              <button className="ghost" onClick={() => setRejectOpen(false)}>
+                {t('common.cancel')}
+              </button>
               <button
-                className="primary"
+                className="danger"
                 disabled={rejectMsg.trim().length < 10}
                 onClick={() => reject.mutate()}
               >
