@@ -74,7 +74,7 @@ const server = createServer(async (req, res) => {
     // Authenticated from here. Accept Bearer header OR ab_token cookie
     // (cookie path is for `<a href="/api/logs/..">` links the browser opens directly.)
     const authHeader = req.headers.authorization || '';
-    const bearer = /^Bearer\s+(.+)$/.exec(authHeader)?.[1];
+    const bearer = /^Bearer (.+)$/.exec(authHeader)?.[1];
     const cookieTok = parseCookie(req.headers.cookie || '').ab_token;
     if (bearer !== token && cookieTok !== token) {
       return json(res, 401, { error: 'unauthorized' });

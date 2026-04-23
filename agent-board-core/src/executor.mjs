@@ -121,7 +121,7 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
     detached: true,
     stdio: ['ignore', stdoutFd, stderrFd],
     windowsHide: true,
-    env: { ...process.env },
+    env: buildChildEnv(),
   });
 
   db.prepare(`UPDATE agent_run SET pid=? WHERE id=?`).run(child.pid, run.id);
@@ -207,6 +207,39 @@ function safeParseAc(s) { try { return JSON.parse(s || '[]'); } catch { return [
 function loadRolePromptBody(role) {
   const url = new URL(`../prompts/${role}.md`, import.meta.url);
   return readFileSync(url, 'utf8');
+}
+
+// Keys from the parent env that are safe to pass to headless agent subprocesses.
+// Using an explicit allowlist prevents ambient cloud credentials, database passwords,
+// and other secrets that may be present in the server's environment from leaking into
+// an untrusted subprocess that may exfiltrate them via arbitrary tool calls.
+const CHILD_ENV_ALLOWLIST = new Set([
+  // Shell / execution environment
+  'PATH', 'SHELL', 'TERM', 'COLORTERM', 'LANG',
+  'LC_ALL', 'LC_CTYPE', 'LC_MESSAGES',
+  // Unix user identity & home dir (required for OAuth keychain auth)
+  'HOME', 'USER', 'LOGNAME',
+  // Windows equivalents
+  'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA',
+  'PROGRAMFILES', 'PROGRAMDATA', 'SYSTEMROOT', 'SYSTEMDRIVE',
+  'COMSPEC', 'WINDIR', 'TEMP', 'TMP', 'USERNAME',
+  // XDG base dirs (Linux config paths used by Claude for auth/cache)
+  'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_RUNTIME_DIR',
+  // Anthropic / Claude authentication
+  'ANTHROPIC_API_KEY', 'CLAUDE_API_KEY',
+  'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX',
+  // Node.js (agent may invoke node tooling in the project)
+  'NODE_PATH', 'NODE_OPTIONS',
+  // npm / package managers
+  'NPM_CONFIG_USERCONFIG', 'npm_config_cache',
+]);
+
+function buildChildEnv() {
+  const env = {};
+  for (const k of Object.keys(process.env)) {
+    if (CHILD_ENV_ALLOWLIST.has(k)) env[k] = process.env[k];
+  }
+  return env;
 }
 
 function logErr(e) { console.error('[executor]', e?.stack || e); }

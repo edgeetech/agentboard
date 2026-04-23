@@ -129,9 +129,6 @@ async function callTool(db, name, args) {
       if (!run_id) throw new Error('run_id required');
       const existing = db.prepare(`SELECT * FROM agent_run WHERE id=?`).get(run_id);
       if (!existing) throw new Error('run not found');
-      if (existing.status === 'running' && existing.token) {
-        return { run_token: existing.token, task_id: existing.task_id, already_claimed: true };
-      }
       if (existing.status !== 'queued') throw new Error('run not in queued state');
       const run_token = randomBytes(24).toString('hex');
       const ok = claimRun(db, run_id, run_token, null, null);
