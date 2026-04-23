@@ -9,6 +9,7 @@ import { logsDir, logPath, logErrPath, runConfigDir } from './paths.mjs';
 import { restrictPerms } from './config.mjs';
 import { allowlistFor } from './tool-allowlist.mjs';
 import { buildChildEnv } from './child-env.mjs';
+import { inheritedUserMcpServers } from './user-mcps.mjs';
 import { computeCost, PRICING_VERSION } from './pricing.mjs';
 import {
   listQueuedRunsForProject, runningCount, getRun, setRunCost,
@@ -82,6 +83,7 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
   const runCfgPath = join(runConfigDir(), `${run.id}.json`);
   const mcpCfg = {
     mcpServers: {
+      ...inheritedUserMcpServers(),
       'abrun': {
         type: 'http',
         url: `http://127.0.0.1:${port}/mcp`,

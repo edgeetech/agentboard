@@ -1,6 +1,8 @@
 // Per-role --allowedTools for spawned `claude -p` runs.
 // acceptEdits mode does NOT cover Bash; un-allowlisted shell deadlocks.
 
+import { inheritedUserMcpKeys } from './user-mcps.mjs';
+
 const MCP = 'mcp__abrun__*';
 
 const WORKER_BASH = [
@@ -23,5 +25,6 @@ export const ALLOWLIST = {
 };
 
 export function allowlistFor(role) {
-  return ALLOWLIST[role].join(',');
+  const inherited = inheritedUserMcpKeys().map(k => `mcp__${k}__*`);
+  return [...ALLOWLIST[role], ...inherited].join(',');
 }
