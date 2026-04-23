@@ -49,6 +49,10 @@ export const api = {
   transition: (code: string, payload: { to_status: string; to_assignee: string; by_role: string; reject_comment?: string }) =>
     call<any>('POST', `/api/tasks/${encodeURIComponent(code)}/transition`, payload),
   taskCost: (code: string) => call<any>('GET', `/api/tasks/${encodeURIComponent(code)}/cost`),
+  sessions: () => call<{ dir: string; dbs: Array<{
+    hash: string; size: string; sizeBytes: number;
+    sessions: Array<{ id: string; projectDir: string | null; startedAt: string; lastEventAt: string; eventCount: number; compactCount: number }>;
+  }>; error?: string }>('GET', '/api/sessions'),
   deleteTask: (code: string) =>
     call<{ ok: boolean; cancelled_runs: number }>('DELETE', `/api/tasks/${encodeURIComponent(code)}`),
   projectCostsTotal: (code: string) =>

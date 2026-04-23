@@ -49,6 +49,9 @@ export function AppShell() {
         <NavLink to="/roles">
           <span className="icon" aria-hidden>◉</span> {t('nav.roles', 'Roles')}
         </NavLink>
+        <NavLink to="/sessions">
+          <span className="icon" aria-hidden>⟳</span> {t('nav.sessions', 'Sessions')}
+        </NavLink>
         <div className="section">{t('nav.manage', 'Manage')}</div>
         <NavLink to="/project">
           <span className="icon" aria-hidden>⌘</span> {t('nav.project', 'Project')}

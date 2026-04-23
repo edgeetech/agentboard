@@ -1124,6 +1124,58 @@ input:focus, textarea:focus, select:focus {
 /* Column tweak for circle modern — center stack */
 .column:has(.card.modern) .cards { align-items: center; }
 
+/* ------- Sessions page ------- */
+
+.session-stats {
+  display: grid; gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-bottom: 1.25rem;
+}
+.session-kpi {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 0.9rem 1rem;
+}
+.session-kpi-value {
+  font-family: var(--mono); font-weight: 900;
+  font-size: 1.65rem; line-height: 1; color: var(--text);
+  letter-spacing: -0.02em;
+}
+.session-kpi-label {
+  font-size: 10.5px; color: var(--muted); font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.12em; margin-top: 0.35rem;
+}
+
+.session-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.session-row {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 0.7rem 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, 0.8fr));
+  gap: 1rem; align-items: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.session-row:hover { border-color: var(--line-strong); background: var(--surface-alt); }
+.session-main { min-width: 0; }
+.session-project {
+  font-weight: 800; font-size: 13.5px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.session-meta {
+  font-size: 11px; color: var(--muted); margin-top: 0.2rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.session-stat { display: flex; flex-direction: column; gap: 2px; }
+.session-stat .label {
+  font-size: 9.5px; color: var(--muted); font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.12em;
+}
+.session-stat .value {
+  font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text);
+}
+@media (max-width: 760px) {
+  .session-row { grid-template-columns: 1fr 1fr; }
+}
+
 /* Scrollbars */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
