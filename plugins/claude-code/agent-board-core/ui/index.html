@@ -16,6 +16,9 @@
             t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           }
           document.documentElement.setAttribute('data-theme', t);
+          var p = localStorage.getItem('ab.palette');
+          if (p !== 'default' && p !== 'edgeetech') p = 'default';
+          document.documentElement.setAttribute('data-palette', p);
         } catch (e) {}
       })();
     </script>

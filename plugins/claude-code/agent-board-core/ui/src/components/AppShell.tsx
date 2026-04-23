@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { Logo } from './Logo';
+import { EdgeeTechLogo } from './EdgeeTechLogo';
 import { useTheme } from '../theme/ThemeProvider';
 import { LanguageSelector } from '../features/board/LanguageSelector';
 
@@ -52,6 +53,9 @@ export function AppShell() {
         <NavLink to="/project">
           <span className="icon" aria-hidden>⌘</span> {t('nav.project', 'Project')}
         </NavLink>
+        <NavLink to="/theme">
+          <span className="icon" aria-hidden>◐</span> {t('nav.theme', 'Theme')}
+        </NavLink>
         {project && (
           <div className="project-card">
             <div className="label">{t('nav.active', 'Active project')}</div>
@@ -74,9 +78,10 @@ export function AppShell() {
           <span className="mono">{project?.code ?? '—'}</span>
         </span>
         <span className="foot-center">
-          {t('foot.crafted', 'Crafted at')}{' '}
-          <a href="https://edgeetech.com" target="_blank" rel="noopener noreferrer" className="foot-brand">
-            EdgeeTech Limited
+          <span className="foot-crafted-label">{t('foot.crafted', 'Crafted at')}</span>
+          <a href="https://edgeetech.com" target="_blank" rel="noopener noreferrer" className="foot-brand" aria-label="EdgeeTech Limited">
+            <EdgeeTechLogo size={22} />
+            <span className="foot-brand-text">EdgeeTech Limited</span>
           </a>
         </span>
         <span className="foot-right">
@@ -94,8 +99,8 @@ export function AppShell() {
 }
 
 function ThemeToggle() {
-  const { theme, toggle } = useTheme();
-  const isDark = theme === 'dark';
+  const { scheme, toggle } = useTheme();
+  const isDark = scheme === 'dark';
   return (
     <button
       className={'theme-toggle' + (isDark ? ' is-dark' : ' is-light')}

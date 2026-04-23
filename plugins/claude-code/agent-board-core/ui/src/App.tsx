@@ -6,6 +6,8 @@ import { SkillDetailPage } from './pages/SkillDetailPage';
 import { RolesPage } from './pages/RolesPage';
 import { RoleDetailPage } from './pages/RoleDetailPage';
 import { ProjectPage } from './pages/ProjectPage';
+import { TaskDetailPage } from './pages/TaskDetailPage';
+import { ThemePage } from './pages/ThemePage';
 
 export function App() {
   return (
@@ -16,6 +18,8 @@ export function App() {
         <Route path="skills/:id" element={<SkillDetailPage />} />
         <Route path="roles" element={<RolesPage />} />
         <Route path="roles/:id" element={<RoleDetailPage />} />
+        <Route path="tasks/:code" element={<TaskDetailPage />} />
+        <Route path="theme" element={<ThemePage />} />
         <Route path="project" element={<ProjectPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

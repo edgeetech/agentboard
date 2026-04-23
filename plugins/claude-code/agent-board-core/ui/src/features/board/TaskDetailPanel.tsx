@@ -3,9 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../api';
 
+type Variant = 'drawer' | 'inline';
+
 export function TaskDetailPanel({
-  taskCode, workflow, onClose,
-}: { taskCode: string; workflow: 'WF1' | 'WF2'; onClose: () => void }) {
+  taskCode, workflow, variant = 'drawer', onClose, onSwapVariant,
+}: {
+  taskCode: string;
+  workflow: 'WF1' | 'WF2';
+  variant?: Variant;
+  onClose?: () => void;
+  onSwapVariant?: () => void;
+}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -34,21 +42,39 @@ export function TaskDetailPanel({
   const retry = useMutation({ mutationFn: () => api.retryFromWorker(taskCode), onSuccess: invalidate });
   const del = useMutation({
     mutationFn: () => api.deleteTask(taskCode),
-    onSuccess: () => { invalidate(); onClose(); },
+    onSuccess: () => { invalidate(); onClose?.(); },
   });
 
-  if (q.isLoading || !q.data) return <aside className="detail-panel">Loading…</aside>;
+  const Wrapper = variant === 'drawer' ? 'aside' : 'div';
+  const wrapperClass = variant === 'drawer' ? 'detail-panel' : 'detail-inline';
+
+  if (q.isLoading || !q.data) {
+    return <Wrapper className={wrapperClass}><div className="center"><div className="spinner" /></div></Wrapper>;
+  }
   const { task, comments, runs } = q.data;
   const ac = safeParseAc(task.acceptance_criteria_json);
   const hasRunningRun = runs.some((r: any) => r.status === 'running' || r.status === 'queued');
 
   return (
-    <aside className="detail-panel">
+    <Wrapper className={wrapperClass}>
       <div className="detail-head">
-        <button onClick={onClose}>×</button>
+        {variant === 'drawer' ? (
+          <button className="close" onClick={onClose} title={t('common.close')}>×</button>
+        ) : null}
         <span className="code">{task.code}</span>
         <span className={`status status-${task.status}`}>{t(`board.${task.status}`)}</span>
-        {task.assignee_role && <span className="assignee">@ {t(`role.${task.assignee_role}`)}</span>}
+        {task.assignee_role && <span className="assignee muted">@ {t(`role.${task.assignee_role}`)}</span>}
+        <span style={{ flex: 1 }} />
+        {onSwapVariant && (
+          <button
+            className="ghost"
+            type="button"
+            onClick={onSwapVariant}
+            title={variant === 'drawer' ? t('task.open_page', 'Open as page') : t('task.open_panel', 'Open as panel')}
+          >
+            {variant === 'drawer' ? t('task.view_page', 'Full view') : t('task.view_panel', 'Panel view')}
+          </button>
+        )}
       </div>
 
       <h2>{task.title}</h2>
@@ -151,7 +177,7 @@ export function TaskDetailPanel({
           </div>
         </div>
       )}
-    </aside>
+    </Wrapper>
   );
 }
 

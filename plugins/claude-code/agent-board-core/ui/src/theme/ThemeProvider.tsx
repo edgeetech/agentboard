@@ -1,30 +1,54 @@
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 
-type Theme = 'light' | 'dark';
-type Ctx = { theme: Theme; toggle: () => void; set: (t: Theme) => void };
+export type Scheme = 'light' | 'dark';
+export type Palette = 'default' | 'edgeetech';
+
+type Ctx = {
+  scheme: Scheme;
+  palette: Palette;
+  setScheme: (s: Scheme) => void;
+  setPalette: (p: Palette) => void;
+  toggle: () => void;
+};
 
 const ThemeContext = createContext<Ctx | null>(null);
-const STORAGE_KEY = 'ab.theme';
+const KEY_SCHEME = 'ab.theme';
+const KEY_PALETTE = 'ab.palette';
 
-function initial(): Theme {
+function initialScheme(): Scheme {
   if (typeof document === 'undefined') return 'light';
   const attr = document.documentElement.getAttribute('data-theme');
   if (attr === 'dark' || attr === 'light') return attr;
   return 'light';
 }
+function initialPalette(): Palette {
+  try {
+    const p = localStorage.getItem(KEY_PALETTE);
+    return p === 'edgeetech' ? 'edgeetech' : 'default';
+  } catch { return 'default'; }
+}
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(initial);
+  const [scheme, setScheme] = useState<Scheme>(initialScheme);
+  const [palette, setPalette] = useState<Palette>(initialPalette);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    try { localStorage.setItem(STORAGE_KEY, theme); } catch {}
-  }, [theme]);
+    document.documentElement.setAttribute('data-theme', scheme);
+    try { localStorage.setItem(KEY_SCHEME, scheme); } catch {}
+  }, [scheme]);
 
-  const set = useCallback((t: Theme) => setTheme(t), []);
-  const toggle = useCallback(() => setTheme(t => (t === 'dark' ? 'light' : 'dark')), []);
+  useEffect(() => {
+    document.documentElement.setAttribute('data-palette', palette);
+    try { localStorage.setItem(KEY_PALETTE, palette); } catch {}
+  }, [palette]);
 
-  return <ThemeContext.Provider value={{ theme, toggle, set }}>{children}</ThemeContext.Provider>;
+  const toggle = useCallback(() => setScheme(s => (s === 'dark' ? 'light' : 'dark')), []);
+
+  return (
+    <ThemeContext.Provider value={{ scheme, palette, setScheme, setPalette, toggle }}>
+      {children}
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme() {

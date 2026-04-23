@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, useDraggable, useDroppable,
@@ -8,9 +9,10 @@ import {
 import { api } from '../../api';
 import { CreateTaskModal } from './CreateTaskModal';
 import { TaskDetailPanel } from './TaskDetailPanel';
-import { CostBadge } from './CostBadge';
 import { useCardView } from '../../hooks/useCardView';
 import type { CardView as CardViewMode } from '../../hooks/useCardView';
+import { useDetailView } from '../../hooks/useDetailView';
+import type { DetailView } from '../../hooks/useDetailView';
 
 type Project = {
   id: string; code: string; name: string;
@@ -55,8 +57,27 @@ export function Board({ project }: { project: Project }) {
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useCardView();
+  const [detailView, setDetailView] = useDetailView();
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [search, setSearch] = useSearchParams();
   const qc = useQueryClient();
+
+  // Support ?open=<code> query param (used when swapping from page → panel).
+  useEffect(() => {
+    const open = search.get('open');
+    if (open) {
+      setSelected(open);
+      const next = new URLSearchParams(search);
+      next.delete('open');
+      setSearch(next, { replace: true });
+    }
+  }, [search, setSearch]);
+
+  function openTask(code: string) {
+    if (detailView === 'page') navigate(`/tasks/${encodeURIComponent(code)}`);
+    else setSelected(code);
+  }
 
   const tasks = useQuery({ queryKey: ['tasks'], queryFn: api.listTasks });
   const total = useQuery({
@@ -118,6 +139,7 @@ export function Board({ project }: { project: Project }) {
             </span>
           )}
           <ViewToggle value={view} onChange={setView} />
+          <DetailViewToggle value={detailView} onChange={setDetailView} />
           <button className="primary" onClick={() => setCreating(true)}>+ {t('board.new_task')}</button>
         </div>
       </div>
@@ -131,7 +153,7 @@ export function Board({ project }: { project: Project }) {
                   key={task.id}
                   task={task}
                   view={view}
-                  onClick={() => setSelected(task.code)}
+                  onClick={() => openTask(task.code)}
                 />
               ))}
             </DroppableColumn>
@@ -148,10 +170,35 @@ export function Board({ project }: { project: Project }) {
         <TaskDetailPanel
           taskCode={selected}
           workflow={project.workflow_type}
+          variant="drawer"
           onClose={() => setSelected(null)}
+          onSwapVariant={() => {
+            setDetailView('page');
+            navigate(`/tasks/${encodeURIComponent(selected)}`);
+          }}
         />
       )}
     </>
+  );
+}
+
+function DetailViewToggle({ value, onChange }: { value: DetailView; onChange: (v: DetailView) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="view-toggle" role="tablist" aria-label={t('board.detail_view', 'Detail view')}>
+      <button
+        className={value === 'panel' ? 'active' : ''}
+        onClick={() => onChange('panel')}
+        role="tab" aria-selected={value === 'panel'}
+        title={t('board.detail_panel_hint', 'Open task detail as side panel')}
+      >{t('board.detail_panel', 'Panel')}</button>
+      <button
+        className={value === 'page' ? 'active' : ''}
+        onClick={() => onChange('page')}
+        role="tab" aria-selected={value === 'page'}
+        title={t('board.detail_page_hint', 'Open task detail as full page')}
+      >{t('board.detail_page', 'Page')}</button>
+    </div>
   );
 }
 
@@ -232,16 +279,13 @@ function CardView({
         <span className="code">{task.code}</span>
         {(task.rework_count ?? 0) > 3 && <span className="stall-badge">{t('board.stalled')}</span>}
         {isModern && <span className="card-head-spacer" />}
-        {isModern
-          ? <span className="rec">{live ? 'LIVE' : 'IDLE'}</span>
-          : <CostBadge taskCode={task.code} />}
+        {isModern && <span className="rec">{live ? 'LIVE' : 'IDLE'}</span>}
       </div>
       <div className="card-title">{task.title}</div>
       <div className="card-foot">
         {task.assignee_role ? (
           <span className={`role-chip ${role}`}>{t(`role.${task.assignee_role}`, task.assignee_role)}</span>
         ) : <span className="muted">—</span>}
-        <CostBadge taskCode={task.code} />
       </div>
     </div>
   );

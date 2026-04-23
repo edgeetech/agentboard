@@ -24,9 +24,20 @@
     "skills": "Skills",
     "roles": "Roles",
     "project": "Project",
+    "theme": "Theme",
     "workspace": "Workspace",
     "manage": "Manage",
     "active": "Active project"
+  },
+  "theme": {
+    "title": "Theme",
+    "subtitle": "Pick a palette and colour scheme. Applied instantly, persisted per browser.",
+    "scheme": "Colour scheme",
+    "scheme_light": "Light",
+    "scheme_dark": "Dark",
+    "palette": "Palette",
+    "active": "Active",
+    "click_apply": "Click to apply"
   },
   "foot": {
     "connected": "Connected",
