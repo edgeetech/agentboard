@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getSkill, upsertSkill, Skill } from '../data/catalog';
+import { PromptPanel } from '../components/PromptPanel';
 
 export function SkillDetailPage() {
   const { t } = useTranslation();
@@ -13,6 +14,7 @@ export function SkillDetailPage() {
   const [description, setDescription] = useState(existing?.description ?? '');
   const [tagsText, setTagsText] = useState((existing?.tags ?? []).join(', '));
   const [saved, setSaved] = useState<string | null>(null);
+  const [promptOpen, setPromptOpen] = useState(true);
 
   useEffect(() => {
     if (!existing) return;
@@ -60,10 +62,16 @@ export function SkillDetailPage() {
           </span>
         </div>
         <div className="actions">
+          {!promptOpen && (
+            <button className="ghost" type="button" onClick={() => setPromptOpen(true)}>
+              {t('prompt.show', 'Show prompt')}
+            </button>
+          )}
           <Link to="/skills"><button className="ghost" type="button">← {t('skills.title', 'Skills')}</button></Link>
         </div>
       </div>
 
+      <div className={'detail-with-aside' + (promptOpen ? '' : ' no-aside')}>
       <form className="form-card" onSubmit={onSave}>
         <div className="entity-card-preview" aria-hidden>
           <div className="emblem">{emblem || '··'}</div>
@@ -104,6 +112,8 @@ export function SkillDetailPage() {
           </small>
         </div>
       </form>
+      {promptOpen && <PromptPanel kind="skill" id={existing.id} onClose={() => setPromptOpen(false)} />}
+      </div>
     </>
   );
 }

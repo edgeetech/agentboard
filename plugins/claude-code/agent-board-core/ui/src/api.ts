@@ -53,6 +53,10 @@ export const api = {
     hash: string; size: string; sizeBytes: number;
     sessions: Array<{ id: string; projectDir: string | null; startedAt: string; lastEventAt: string; eventCount: number; compactCount: number }>;
   }>; error?: string }>('GET', '/api/sessions'),
+  prompt: (kind: 'role' | 'skill', id: string) =>
+    call<{ kind: string; id: string; path?: string; content?: string; error?: string }>(
+      'GET', `/api/prompts/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`
+    ),
   sessionEvents: (hash: string, sessionId: string) => call<{
     hash: string; sessionId: string;
     meta: { session_id: string; project_dir: string | null; started_at: string; last_event_at: string; event_count: number; compact_count: number } | null;

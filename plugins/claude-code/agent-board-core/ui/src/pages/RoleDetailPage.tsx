@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getRole, upsertRole, loadSkills, Role } from '../data/catalog';
+import { PromptPanel } from '../components/PromptPanel';
 
 export function RoleDetailPage() {
   const { t } = useTranslation();
@@ -14,6 +15,7 @@ export function RoleDetailPage() {
   const [description, setDescription] = useState(existing?.description ?? '');
   const [skills, setSkills] = useState<string[]>(existing?.skills ?? []);
   const [saved, setSaved] = useState<string | null>(null);
+  const [promptOpen, setPromptOpen] = useState(true);
 
   useEffect(() => {
     if (!existing) return;
@@ -69,10 +71,16 @@ export function RoleDetailPage() {
           </span>
         </div>
         <div className="actions">
+          {!promptOpen && (
+            <button className="ghost" type="button" onClick={() => setPromptOpen(true)}>
+              {t('prompt.show', 'Show prompt')}
+            </button>
+          )}
           <Link to="/roles"><button className="ghost" type="button">← {t('roles.title', 'Roles')}</button></Link>
         </div>
       </div>
 
+      <div className={'detail-with-aside' + (promptOpen ? '' : ' no-aside')}>
       <form className="form-card" onSubmit={onSave}>
         <div className="form-grid">
           <label>
@@ -124,6 +132,8 @@ export function RoleDetailPage() {
           </small>
         </div>
       </form>
+      {promptOpen && <PromptPanel kind="role" id={existing.id} onClose={() => setPromptOpen(false)} />}
+      </div>
     </>
   );
 }

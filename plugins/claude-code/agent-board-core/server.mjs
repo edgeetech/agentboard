@@ -14,6 +14,7 @@ import { handleTasks } from './src/api-tasks.mjs';
 import { handleCosts } from './src/api-costs.mjs';
 import { handleLogs } from './src/api-logs.mjs';
 import { handleSessions } from './src/api-sessions.mjs';
+import { handlePrompts } from './src/api-prompts.mjs';
 import { handleMcp } from './src/api-mcp.mjs';
 import { startExecutor } from './src/executor.mjs';
 import { runningCount } from './src/repo.mjs';
@@ -112,7 +113,7 @@ const server = createServer(async (req, res) => {
     if (mcp) return;
 
     // REST routers (first non-null handler wins)
-    const handlers = [handleProjects, handleTasks, handleCosts, handleLogs, handleSessions];
+    const handlers = [handleProjects, handleTasks, handleCosts, handleLogs, handleSessions, handlePrompts];
     for (const h of handlers) {
       const done = await h(req, res, url);
       if (done || res.headersSent) return;
