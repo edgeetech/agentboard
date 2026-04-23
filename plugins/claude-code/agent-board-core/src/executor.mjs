@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { logsDir, logPath, logErrPath, runConfigDir } from './paths.mjs';
 import { restrictPerms } from './config.mjs';
 import { allowlistFor } from './tool-allowlist.mjs';
+import { buildChildEnv } from './child-env.mjs';
 import { computeCost, PRICING_VERSION } from './pricing.mjs';
 import {
   listQueuedRunsForProject, runningCount, getRun, setRunCost,
@@ -121,7 +122,7 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
     detached: true,
     stdio: ['ignore', stdoutFd, stderrFd],
     windowsHide: true,
-    env: { ...process.env },
+    env: buildChildEnv(),  // whitelist only — no AWS/GitHub/SSH creds leak
   });
 
   db.prepare(`UPDATE agent_run SET pid=? WHERE id=?`).run(child.pid, run.id);

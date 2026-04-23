@@ -3,7 +3,9 @@ import { validateCode, suggestCode } from './project-code.mjs';
 import { createProject, getProject, updateProject } from './repo.mjs';
 import { openOrCreate, listProjectDbs, getDb, getActiveDb } from './project-registry.mjs';
 import { writeConfig, readConfig } from './config.mjs';
+import { dataDir } from './paths.mjs';
 import { statSync } from 'node:fs';
+import { isAbsolute, resolve as pathResolve, sep } from 'node:path';
 
 export async function handleProjects(req, res, url) {
   const p = url.pathname;
@@ -41,8 +43,18 @@ export async function handleProjects(req, res, url) {
     if (!['WF1', 'WF2'].includes(workflow_type)) {
       return json(res, 400, { error: 'workflow_type must be WF1 or WF2' });
     }
+    if (!isAbsolute(repo_path)) {
+      return json(res, 400, { error: 'repo_path must be absolute' });
+    }
+    const canonical = pathResolve(repo_path);
+    // Block paths under the agentboard data dir — prevents recursive self-reference
+    // and agents accidentally clobbering their own state.
+    const dd = pathResolve(dataDir());
+    if (canonical === dd || canonical.startsWith(dd + sep)) {
+      return json(res, 400, { error: 'repo_path cannot be inside the agentboard data dir' });
+    }
     try {
-      const st = statSync(repo_path);
+      const st = statSync(canonical);
       if (!st.isDirectory()) return json(res, 400, { error: 'repo_path not a directory' });
     } catch {
       return json(res, 400, { error: 'repo_path does not exist' });
@@ -53,7 +65,7 @@ export async function handleProjects(req, res, url) {
     const db = await openOrCreate(code);
     const project = createProject(db, {
       code, name, description, workflow_type,
-      repo_path: repo_path.replace(/\\/g, '/'),
+      repo_path: canonical.replace(/\\/g, '/'),
     });
     // First project auto-activated
     const cfg = readConfig();

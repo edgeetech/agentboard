@@ -41,9 +41,12 @@ export async function handleTasks(req, res, url) {
     const task = getTask(db, mm.id) || getTaskByCode(db, mm.id);
     if (!task) return json(res, 404, { error: 'not found' });
     const body = await readJson(req);
-    const { to_status, to_assignee, by_role = 'human', reject_comment } = body || {};
+    const { to_status, to_assignee, reject_comment } = body || {};
+    // Security: REST /transition is strictly the Human path. Ignore any
+    // body-supplied `by_role` — agents transition via the HTTP MCP endpoint.
+    const by_role = 'human';
     // Human reject → require min 10-char comment
-    if (by_role === 'human' && to_assignee === 'worker') {
+    if (to_assignee === 'worker') {
       if (!reject_comment || reject_comment.trim().length < 10) {
         return json(res, 400, { error: 'reject_comment must be ≥ 10 chars' });
       }

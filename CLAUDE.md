@@ -99,6 +99,15 @@ Assignee reassigns within `agent_working` also require a prefixed comment (`REWO
 - **Pricing table in `src/pricing.mjs`** has `PRICING_VERSION`. Bump it when Anthropic prices change, so v1.1 `/agentboard reprice` can recompute historical runs.
 - **Role prompts in `agent-board-core/prompts/*.md` are the product.** Treat them like code — version them, iterate against real runs. Drift-guards (postflight + required-comment checks) catch structural mistakes, but tone/brevity is prompt-only.
 
+## Security model specifics (reviewer's Q → A)
+
+- **Child env is whitelisted, not inherited.** `src/child-env.mjs::buildChildEnv` ships only PATH/HOME/USER/LANG/TZ + Claude-auth vars (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, etc.) on POSIX; Windows adds USERPROFILE/APPDATA/LOCALAPPDATA/SYSTEM* and friends. AWS, GitHub, SSH, GCP, cloud SDK vars are dropped. If you add a new env var the CLI needs, add it to that module — not `{...process.env}`.
+- **`claim_run` returns `run_token` exactly once, to the queued→running CAS winner.** There is no "already-claimed" retry path; a subsequent call on a running run returns an error. This is deliberate; don't add a "convenience" retry.
+- **REST `/api/tasks/:id/transition` always writes `by_role='human'`.** Client-supplied `by_role` is ignored. Agent transitions happen through the HTTP MCP endpoint, which is the only place `by_role` is derived from `run.role`.
+- **`/alive` is intentionally unauth.** It returns `{ok, server_id, plugin_version}` — used by `ensure-server.mjs` to detect stale config or version mismatch. No token, no secrets. Do not protect it.
+- **Log files at `~/.agentboard/logs/<run_id>.jsonl` contain full agent transcripts** (prompts, tool I/O, anything the agent echoed). Served via `/api/logs/:run_id` (Bearer-protected, ULID-gated for traversal). Treat the data dir as sensitive — document for users.
+- **No rate limiting yet** — planned for v1.1 (`#security-v1.1`). 127.0.0.1-only binding limits risk to local processes with the token.
+
 ## Known sharp edges
 
 - `--allowedTools` only matches single commands. Compound shell (`cd X && npx tsc`) triggers permission prompts that deadlock headless runs. If Worker hits this, extend allowlist or push the command structure into the prompt.

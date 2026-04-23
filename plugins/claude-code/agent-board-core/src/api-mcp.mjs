@@ -129,10 +129,12 @@ async function callTool(db, name, args) {
       if (!run_id) throw new Error('run_id required');
       const existing = db.prepare(`SELECT * FROM agent_run WHERE id=?`).get(run_id);
       if (!existing) throw new Error('run not found');
-      if (existing.status === 'running' && existing.token) {
-        return { run_token: existing.token, task_id: existing.task_id, already_claimed: true };
-      }
-      if (existing.status !== 'queued') throw new Error('run not in queued state');
+      // Security: never return an existing run_token. A run is claimed exactly
+      // once by the process that wins the queued→running CAS. Any later caller
+      // — even holding the server Bearer token — must get an error, otherwise
+      // it could impersonate the running agent via update_task / add_comment /
+      // finish_run with its run_token.
+      if (existing.status !== 'queued') throw new Error(`run not in queued state (status=${existing.status})`);
       const run_token = randomBytes(24).toString('hex');
       const ok = claimRun(db, run_id, run_token, null, null);
       if (!ok) throw new Error('claim CAS failed');

@@ -72,7 +72,16 @@ Outside the repo, never touched by plugin upgrades:
 
 ## Security
 
-127.0.0.1-only binding. 32-byte hex Bearer token (file perms 0600 on Unix, ACL-restricted on Windows). All `/api/*` and the HTTP MCP endpoint require the token. `/alive` is the only unauthenticated endpoint and reveals only liveness + plugin version, never the token. DNS-rebinding blocked via `Host` header guard.
+- Binds `127.0.0.1` only; DNS-rebinding blocked via `Host`-header guard (421 on mismatch).
+- 32-byte hex Bearer token in `~/.agentboard/config.json` (0600 on Unix, owner-only ACL on Windows via `os.userInfo().username`).
+- **Spawned agents receive a whitelisted env** — AWS / GitHub / SSH / cloud-SDK secrets in your shell are **not** passed to `claude -p` subprocesses. Only `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, and OS basics (`PATH`, `HOME`, `LANG`, Windows `APPDATA`/`LOCALAPPDATA`, etc.). See [`src/child-env.mjs`](./plugins/claude-code/agent-board-core/src/child-env.mjs).
+- `run_token` is issued to an agent **exactly once** at `claim_run`, to the process that wins the queued→running CAS. No re-issue on retry.
+- REST `/api/tasks/:id/transition` always attributes to `by_role='human'` — agent transitions go through the HTTP MCP endpoint.
+- UI HTML carries a per-request CSP nonce; inline scripts without the nonce are blocked. Token delivered via `Set-Cookie: ab_token=…; HttpOnly; SameSite=Strict` + inline script for fetch. `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` also set.
+- `/alive` is intentionally unauthenticated — returns only `{ok, server_id, plugin_version}` for the plugin's `ensure-server` probe. No token is ever reflected in any endpoint response.
+- **`~/.agentboard/logs/` contains full Claude stream-json transcripts** (prompts + tool I/O). Served via `/api/logs/:run_id` (Bearer-protected, ULID-gated). Treat the data dir as sensitive.
+
+v1.1 planned: per-run rate limiting on MCP mutations, stricter UTF-8 body validation.
 
 ## Development
 

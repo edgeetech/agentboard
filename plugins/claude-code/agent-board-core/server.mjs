@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync, createReadStream } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { ensureDirs } from './src/paths.mjs';
 import { readConfig, writeConfig } from './src/config.mjs';
 import { generateServerToken } from './src/auth.mjs';
@@ -65,7 +65,7 @@ const server = createServer(async (req, res) => {
 
     // UI: /index.html injects token (needs no Bearer — delivery channel itself)
     if (p === '/' || p === '/index.html') {
-      return serveIndex(res, token);
+      return serveIndex(res, token, port);
     }
     if (p.startsWith('/assets/') || p === '/favicon.ico') {
       return serveStatic(res, p);
@@ -156,30 +156,49 @@ function getOrCreateServerToken() {
   return generateServerToken();
 }
 
-function serveIndex(res, tok) {
+function serveIndex(res, tok, port) {
   const indexUrl = new URL('./index.html', UI_DIST);
   let html;
   try { html = readFileSync(indexUrl, 'utf8'); }
   catch {
-    // Fallback placeholder when UI not built yet
-    html = `<!doctype html><meta charset="utf-8"><title>agent-board</title>
+    // Fallback placeholder when UI not built yet — never leak any portion of the token.
+    html = `<!doctype html><meta charset="utf-8"><title>agentboard</title>
       <style>body{font:14px system-ui;padding:2rem;max-width:600px;margin:auto;color:#222}
       code{background:#f3f3f3;padding:.15rem .4rem;border-radius:3px}</style>
-      <h1>agent-board</h1>
+      <h1>agentboard</h1>
       <p>Server is running but the UI bundle is not built yet.</p>
-      <p>Run <code>cd agent-board-core/ui && npm install && npm run build</code> then reload.</p>
-      <p>Healthz (with Bearer token): <code>curl -H "Authorization: Bearer ${tok.slice(0,8)}…" http://127.0.0.1:${/* port */ ''}/healthz</code></p>`;
+      <p>Run <code>cd plugins/claude-code/agent-board-core/ui &amp;&amp; npm install &amp;&amp; npm run build</code> then reload.</p>
+      <p>Healthz: <code>curl -H "Authorization: Bearer &lt;token from ~/.agentboard/config.json&gt;" http://127.0.0.1:${port}/healthz</code></p>`;
   }
+  // Per-request nonce authorizes exactly the token-injection script. CSP below
+  // refuses any other inline or external script — so UI XSS can't read token.
+  const nonce = randomBytes(16).toString('base64');
   const injected = html.replace(
     /<\/head>/i,
-    `<script>window.__AGENTBOARD_TOKEN=${JSON.stringify(tok)};</script></head>`
+    `<script nonce="${nonce}">window.__AGENTBOARD_TOKEN=${JSON.stringify(tok)};</script></head>`
   );
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}'`,
+    "style-src 'self' 'unsafe-inline'", // Vite emits inline styles; nonce tighter in v1.1
+    "connect-src 'self'",
+    "img-src 'self' data:",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+  ].join('; ');
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
-    // Cookie lets plain <a href="/api/logs/..."> links authenticate without JS.
-    // Safe because server is 127.0.0.1-only + Host-header guard blocks DNS rebinding.
-    'Set-Cookie': `ab_token=${tok}; Path=/; SameSite=Strict`,
+    'Content-Security-Policy': csp,
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    // HttpOnly: cookie unreadable from JS. Token still in window.__AGENTBOARD_TOKEN
+    // for fetch calls; defense-in-depth — if we later drop the window global,
+    // the cookie alone carries auth via browser-auto-attach.
+    'Set-Cookie': `ab_token=${tok}; Path=/; SameSite=Strict; HttpOnly`,
   });
   res.end(injected);
 }
