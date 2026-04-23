@@ -46,6 +46,8 @@ export const api = {
     call<any>('POST', `/api/tasks/${encodeURIComponent(code)}/transition`, {
       to_status: 'agent_working', to_assignee: 'worker', by_role: 'human', reject_comment,
     }),
+  transition: (code: string, payload: { to_status: string; to_assignee: string; by_role: string; reject_comment?: string }) =>
+    call<any>('POST', `/api/tasks/${encodeURIComponent(code)}/transition`, payload),
   taskCost: (code: string) => call<any>('GET', `/api/tasks/${encodeURIComponent(code)}/cost`),
   deleteTask: (code: string) =>
     call<{ ok: boolean; cancelled_runs: number }>('DELETE', `/api/tasks/${encodeURIComponent(code)}`),

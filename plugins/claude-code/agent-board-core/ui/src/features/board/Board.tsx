@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import {
+  DndContext, DragEndEvent, DragOverlay, DragStartEvent,
+  PointerSensor, useSensor, useSensors, useDraggable, useDroppable,
+} from '@dnd-kit/core';
 import { api } from '../../api';
 import { CreateTaskModal } from './CreateTaskModal';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { CostBadge } from './CostBadge';
-import { LanguageSelector } from './LanguageSelector';
-import { ProjectSettingsDrawer } from './ProjectSettingsDrawer';
+import { useCardView } from '../../hooks/useCardView';
+import type { CardView as CardViewMode } from '../../hooks/useCardView';
 
 type Project = {
   id: string; code: string; name: string;
@@ -18,14 +22,41 @@ type Project = {
   version: number;
 };
 
+type Task = {
+  id: string; code: string; title: string;
+  status: string;
+  assignee_role: string | null;
+  rework_count: number;
+  updated_at?: string;
+};
+
 const COLUMNS_WF1 = ['todo', 'agent_working', 'agent_review', 'human_approval', 'done'] as const;
 const COLUMNS_WF2 = ['todo', 'agent_working', 'human_approval', 'done'] as const;
+
+const ROLE_FOR_STATUS: Record<string, string> = {
+  todo: 'pm',
+  agent_working: 'worker',
+  agent_review: 'reviewer',
+  human_approval: 'human',
+  done: 'human',
+};
+
+function needsAttention(t: Task): boolean {
+  if ((t.rework_count ?? 0) > 2) return true;
+  if (t.status === 'human_approval') {
+    const ts = t.updated_at ? Date.parse(t.updated_at) : NaN;
+    if (!Number.isNaN(ts) && Date.now() - ts > 24 * 3600_000) return true;
+  }
+  return false;
+}
 
 export function Board({ project }: { project: Project }) {
   const { t } = useTranslation();
   const [creating, setCreating] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [view, setView] = useCardView();
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const qc = useQueryClient();
 
   const tasks = useQuery({ queryKey: ['tasks'], queryFn: api.listTasks });
   const total = useQuery({
@@ -35,55 +66,84 @@ export function Board({ project }: { project: Project }) {
 
   const cols = project.workflow_type === 'WF1' ? COLUMNS_WF1 : COLUMNS_WF2;
   const grouped = useMemo(() => {
-    const g: Record<string, any[]> = Object.fromEntries(cols.map(c => [c, []]));
-    for (const task of tasks.data?.tasks ?? []) {
-      (g[task.status] ||= []).push(task);
-    }
+    const g: Record<string, Task[]> = Object.fromEntries(cols.map(c => [c, []]));
+    for (const task of tasks.data?.tasks ?? []) (g[task.status] ||= []).push(task);
     return g;
   }, [tasks.data, cols]);
 
-  return (
-    <div className="board">
-      <header>
-        <div>
-          <h1>{project.name} <span className="code">{project.code}</span></h1>
-          <small className="muted">{project.workflow_type}</small>
-        </div>
-        <div className="header-actions">
-          {total.data && (
-            <div className="cost-header" title={`7d $${total.data.last_7d?.toFixed(4)} · 30d $${total.data.last_30d?.toFixed(4)}`}>
-              {t('board.cost_total')}: ${total.data.all_time?.toFixed(4) ?? '0.0000'}
-              {total.data.uncosted_runs > 0 && <span className="warn"> · {total.data.uncosted_runs} uncosted</span>}
-            </div>
-          )}
-          <button onClick={() => setCreating(true)}>{t('board.new_task')}</button>
-          <button
-            className="icon-btn"
-            onClick={() => setSettingsOpen(true)}
-            title={t('settings.open')}
-            aria-label={t('settings.open')}
-          >⚙</button>
-          <LanguageSelector />
-        </div>
-      </header>
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-      <div className="columns">
-        {cols.map(c => (
-          <div key={c} className="column">
-            <h2>{t(`board.${c}`)}<span className="count">{grouped[c]?.length ?? 0}</span></h2>
-            <div className="cards">
-              {(grouped[c] ?? []).map(task => (
-                <TaskCard key={task.id} task={task} onClick={() => setSelected(task.code)} />
-              ))}
-            </div>
-          </div>
-        ))}
+  const transition = useMutation({
+    mutationFn: async (input: { code: string; to: string }) => {
+      return api.transition(input.code, {
+        to_status: input.to,
+        to_assignee: ROLE_FOR_STATUS[input.to] ?? 'human',
+        by_role: 'human',
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+  });
+
+  function onDragStart(e: DragStartEvent) {
+    setDraggingId(String(e.active.id));
+  }
+  function onDragEnd(e: DragEndEvent) {
+    setDraggingId(null);
+    const code = e.active.data.current?.code as string | undefined;
+    const fromStatus = e.active.data.current?.status as string | undefined;
+    const targetCol = e.over?.id ? String(e.over.id) : null;
+    if (!code || !targetCol || !fromStatus || targetCol === fromStatus) return;
+    transition.mutate({ code, to: targetCol });
+  }
+
+  const activeTask = useMemo(
+    () => (draggingId ? tasks.data?.tasks.find(x => x.code === draggingId) ?? null : null),
+    [draggingId, tasks.data]
+  );
+
+  return (
+    <>
+      <div className="page-head">
+        <div className="title">
+          <h1>
+            {project.name} <span className="code">{project.code}</span>
+          </h1>
+          <span className="subtitle">{t(`wizard.${project.workflow_type.toLowerCase()}`, project.workflow_type)}</span>
+        </div>
+        <div className="actions">
+          {total.data && (
+            <span className="cost-header" title={`7d $${total.data.last_7d?.toFixed(4)} · 30d $${total.data.last_30d?.toFixed(4)}`}>
+              {t('board.cost_total')} <span className="amount">${total.data.all_time?.toFixed(4) ?? '0.0000'}</span>
+              {total.data.uncosted_runs > 0 && <span className="warn"> · {total.data.uncosted_runs} uncosted</span>}
+            </span>
+          )}
+          <ViewToggle value={view} onChange={setView} />
+          <button className="primary" onClick={() => setCreating(true)}>+ {t('board.new_task')}</button>
+        </div>
       </div>
 
+      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+        <div className="columns">
+          {cols.map(c => (
+            <DroppableColumn key={c} id={c} label={t(`board.${c}`)} count={grouped[c]?.length ?? 0}>
+              {(grouped[c] ?? []).map(task => (
+                <DraggableCard
+                  key={task.id}
+                  task={task}
+                  view={view}
+                  onClick={() => setSelected(task.code)}
+                />
+              ))}
+            </DroppableColumn>
+          ))}
+        </div>
+
+        <DragOverlay dropAnimation={null}>
+          {activeTask ? <CardView task={activeTask} view={view} overlay /> : null}
+        </DragOverlay>
+      </DndContext>
+
       {creating && <CreateTaskModal onClose={() => setCreating(false)} />}
-      {settingsOpen && (
-        <ProjectSettingsDrawer project={project} onClose={() => setSettingsOpen(false)} />
-      )}
       {selected && (
         <TaskDetailPanel
           taskCode={selected}
@@ -91,21 +151,91 @@ export function Board({ project }: { project: Project }) {
           onClose={() => setSelected(null)}
         />
       )}
+    </>
+  );
+}
+
+function ViewToggle({ value, onChange }: { value: CardViewMode; onChange: (v: CardViewMode) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="view-toggle" role="tablist" aria-label={t('board.view', 'View')}>
+      <button
+        className={value === 'modern' ? 'active' : ''}
+        onClick={() => onChange('modern')}
+        role="tab" aria-selected={value === 'modern'}
+      >{t('board.modern', 'Modern')}</button>
+      <button
+        className={value === 'classic' ? 'active' : ''}
+        onClick={() => onChange('classic')}
+        role="tab" aria-selected={value === 'classic'}
+      >{t('board.classic', 'Classic')}</button>
     </div>
   );
 }
 
-function TaskCard({ task, onClick }: { task: any; onClick: () => void }) {
-  const { t } = useTranslation();
+function DroppableColumn({
+  id, label, count, children,
+}: { id: string; label: string; count: number; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div className="card" onClick={onClick}>
-      <div className="card-top">
+    <div ref={setNodeRef} className={'column' + (isOver ? ' drop-hint' : '')}>
+      <h2>{label}<span className="count">{count}</span></h2>
+      <div className="cards">{children}</div>
+    </div>
+  );
+}
+
+function DraggableCard({
+  task, view, onClick,
+}: { task: Task; view: CardViewMode; onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
+    id: task.code,
+    data: { code: task.code, status: task.status },
+  });
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      onClick={e => { if (!isDragging) onClick(); e.stopPropagation(); }}
+    >
+      <CardView task={task} view={view} dragging={isDragging} />
+    </div>
+  );
+}
+
+function CardView({
+  task, view, dragging = false, overlay = false,
+}: { task: Task; view: CardViewMode; dragging?: boolean; overlay?: boolean }) {
+  const { t } = useTranslation();
+  const attention = needsAttention(task);
+  const role = (task.assignee_role || '').toLowerCase();
+  const cls = [
+    'card',
+    view === 'classic' ? 'classic' : '',
+    role ? `role-${role}` : '',
+    attention ? 'needs-attention' : '',
+    dragging ? 'dragging' : '',
+    overlay ? 'is-drag-overlay' : '',
+  ].filter(Boolean).join(' ');
+  return (
+    <div className={cls}>
+      {attention && <span className="attention-dot" aria-label={t('board.needs_attention', 'Needs attention')} />}
+      <div className="row card-head">
         <span className="code">{task.code}</span>
-        {task.rework_count > 3 && <span className="stall-badge">{t('board.stalled')}</span>}
+        {(task.rework_count ?? 0) > 3 && <span className="stall-badge">{t('board.stalled')}</span>}
         <CostBadge taskCode={task.code} />
       </div>
       <div className="card-title">{task.title}</div>
-      {task.assignee_role && <div className="assignee">@ {t(`role.${task.assignee_role}`)}</div>}
+      <div className="card-foot">
+        {task.assignee_role ? (
+          <span className={`role-chip ${role}`}>{t(`role.${task.assignee_role}`, task.assignee_role)}</span>
+        ) : <span className="muted">—</span>}
+      </div>
     </div>
   );
 }

@@ -67,8 +67,20 @@ const server = createServer(async (req, res) => {
     if (p === '/' || p === '/index.html') {
       return serveIndex(res, token, port);
     }
-    if (p.startsWith('/assets/') || p === '/favicon.ico') {
+    if (p.startsWith('/assets/') || p === '/favicon.ico' || p === '/favicon.svg') {
       return serveStatic(res, p);
+    }
+
+    // SPA fallback: non-API, non-asset GET requests → serve index so client
+    // router can handle the route (deep links + refresh work).
+    if (
+      req.method === 'GET' &&
+      !p.startsWith('/api/') &&
+      !p.startsWith('/mcp') &&
+      p !== '/healthz' &&
+      !/\.[a-z0-9]+$/i.test(p)
+    ) {
+      return serveIndex(res, token, port);
     }
 
     // Authenticated from here. Accept Bearer header OR ab_token cookie

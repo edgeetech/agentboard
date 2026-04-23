@@ -16,7 +16,20 @@
     "cancel": "Cancel",
     "save": "Save",
     "close": "Close",
-    "saved": "Saved."
+    "saved": "Saved.",
+    "coming_soon": "Coming soon"
+  },
+  "nav": {
+    "board": "Board",
+    "skills": "Skills",
+    "roles": "Roles",
+    "project": "Project",
+    "workspace": "Workspace",
+    "manage": "Manage",
+    "active": "Active project"
+  },
+  "foot": {
+    "connected": "Connected"
   },
   "settings": {
     "open": "Project settings",
@@ -55,7 +68,33 @@
     "done": "Done",
     "new_task": "New task",
     "cost_total": "Total cost",
-    "stalled": "Stalled"
+    "stalled": "Stalled",
+    "view": "View",
+    "modern": "Modern",
+    "classic": "Classic",
+    "needs_attention": "Needs attention"
+  },
+  "skills": {
+    "title": "Skills",
+    "subtitle": "Reusable abilities you can attach to a role or run.",
+    "search": "Search skills…",
+    "new": "New skill",
+    "empty_title": "No matches",
+    "empty_body": "Try a different search term."
+  },
+  "roles": {
+    "title": "Roles",
+    "subtitle": "Agent personas that act on your tasks.",
+    "search": "Search roles…",
+    "new": "New role",
+    "empty_title": "No matches",
+    "empty_body": "Try a different search term."
+  },
+  "project": {
+    "title": "Project",
+    "subtitle": "Settings, repo path, and dispatch limits.",
+    "none_title": "No active project",
+    "none_body": "Create a project from the Board page first."
   },
   "task": {
     "title": "Title",
