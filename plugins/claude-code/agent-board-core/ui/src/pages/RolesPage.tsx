@@ -28,18 +28,20 @@ export function RolesPage() {
           </span>
         </div>
         <div className="actions">
-          <label className="search-bar">
-            <input
-              value={q}
-              onChange={e => setQ(e.target.value)}
-              placeholder={t('roles.search', 'Search roles…')}
-              aria-label="Search roles"
-            />
-            <span className="kbd">/</span>
-          </label>
-          <button className="primary" disabled title={t('common.coming_soon', 'Coming soon')}>
-            + {t('roles.new', 'New role')}
-          </button>
+          <div className="action-group">
+            <label className="search-bar">
+              <input
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder={t('roles.search', 'Search roles…')}
+                aria-label="Search roles"
+              />
+              <span className="kbd">/</span>
+            </label>
+            <button className="primary" disabled title={t('common.coming_soon', 'Coming soon')}>
+              + {t('roles.new', 'New role')}
+            </button>
+          </div>
         </div>
       </div>
 

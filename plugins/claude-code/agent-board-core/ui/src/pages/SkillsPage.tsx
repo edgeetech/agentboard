@@ -28,18 +28,20 @@ export function SkillsPage() {
           </span>
         </div>
         <div className="actions">
-          <label className="search-bar">
-            <input
-              value={q}
-              onChange={e => setQ(e.target.value)}
-              placeholder={t('skills.search', 'Search skills…')}
-              aria-label="Search skills"
-            />
-            <span className="kbd">/</span>
-          </label>
-          <button className="primary" disabled title={t('common.coming_soon', 'Coming soon')}>
-            + {t('skills.new', 'New skill')}
-          </button>
+          <div className="action-group">
+            <label className="search-bar">
+              <input
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder={t('skills.search', 'Search skills…')}
+                aria-label="Search skills"
+              />
+              <span className="kbd">/</span>
+            </label>
+            <button className="primary" disabled title={t('common.coming_soon', 'Coming soon')}>
+              + {t('skills.new', 'New skill')}
+            </button>
+          </div>
         </div>
       </div>
 

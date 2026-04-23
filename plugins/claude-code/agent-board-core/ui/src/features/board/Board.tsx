@@ -154,8 +154,10 @@ export function Board({ project }: { project: Project }) {
               {total.data.uncosted_runs > 0 && <span className="warn"> · {total.data.uncosted_runs} uncosted</span>}
             </span>
           )}
-          <ViewToggle value={view} onChange={setView} />
-          <button className="primary" onClick={() => setCreating(true)}>+ {t('board.new_task')}</button>
+          <div className="action-group">
+            <ViewToggle value={view} onChange={setView} />
+            <button className="primary" onClick={() => setCreating(true)}>+ {t('board.new_task')}</button>
+          </div>
         </div>
       </div>
 
