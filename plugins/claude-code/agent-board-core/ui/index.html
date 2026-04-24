@@ -17,7 +17,8 @@
           }
           document.documentElement.setAttribute('data-theme', t);
           var p = localStorage.getItem('ab.palette');
-          if (p !== 'default' && p !== 'edgeetech') p = 'edgeetech';
+          var valid = ['default','edgeetech','primer','mono','neon','warm','pastel','jewel','vibrant'];
+          if (valid.indexOf(p) === -1) p = 'edgeetech';
           document.documentElement.setAttribute('data-palette', p);
         } catch (e) {}
       })();

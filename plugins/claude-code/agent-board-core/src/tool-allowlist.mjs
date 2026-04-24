@@ -18,10 +18,15 @@ const REVIEWER_BASH = [
   'ls', 'cat', 'find',
 ].map(c => `Bash(${c}:*)`);
 
+// `Skill` lets agents invoke user-installed skills (caveman, ctx-*, etc.).
+// Skills don't execute until called; each tool they use still honours this
+// allowlist, so exposure is bounded.
+const SKILL = 'Skill';
+
 export const ALLOWLIST = {
-  pm:       [MCP, 'Read', 'Grep', 'Glob'],
-  worker:   [MCP, 'Read', 'Edit', 'Write', 'Grep', 'Glob', ...WORKER_BASH],
-  reviewer: [MCP, 'Read', 'Grep', 'Glob', ...REVIEWER_BASH],
+  pm:       [MCP, SKILL, 'Read', 'Grep', 'Glob'],
+  worker:   [MCP, SKILL, 'Read', 'Edit', 'Write', 'Grep', 'Glob', ...WORKER_BASH],
+  reviewer: [MCP, SKILL, 'Read', 'Grep', 'Glob', ...REVIEWER_BASH],
 };
 
 export function allowlistFor(role) {

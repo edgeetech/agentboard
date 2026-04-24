@@ -23,7 +23,8 @@
     "untitled": "Sin título",
     "more": "ver más…",
     "less": "ver menos",
-    "clear": "Limpiar"
+    "clear": "Limpiar",
+    "copied": "Copiado ✓"
   },
   "nav": {
     "board": "Tablero",
@@ -102,6 +103,11 @@
     "reject_title": "Rechazar tarea",
     "reject_prompt": "Di al Worker qué cambiar (mín. 10 caracteres)",
     "retry_from_worker": "Reintentar desde Worker",
+    "resume": "Abrir en CLI",
+    "resume_live": "Unirse por CLI",
+    "resume_live_hint": "El agente sigue ejecutándose — reanudar puede bifurcar su sesión. Comando copiado al portapapeles.",
+    "copy_context": "Copiar contexto",
+    "copy_context_hint": "Copia el contexto de la tarea como markdown — pégalo en una sesión `claude` nueva en el directorio del proyecto para continuar donde el agente lo dejó.",
     "cost": "Coste",
     "open_page": "Abrir como página",
     "open_panel": "Abrir como panel",
@@ -225,7 +231,9 @@
     "scheme_dark": "Oscuro",
     "palette": "Paleta",
     "active": "Activo",
-    "click_apply": "Haz clic para aplicar"
+    "click_apply": "Haz clic para aplicar",
+    "dark_only": "Sólo modo oscuro",
+    "dark_only_hint": "Esta paleta sólo se aplica cuando está seleccionado el modo oscuro."
   },
   "project": {
     "title": "Proyecto",

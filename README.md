@@ -83,6 +83,48 @@ Outside the repo, never touched by plugin upgrades:
 
 v1.1 planned: per-run rate limiting on MCP mutations, stricter UTF-8 body validation.
 
+## Letting agents use your own plugins / MCPs
+
+Spawned agents run with `--strict-mcp-config`, so only the per-run `abrun`
+HTTP MCP is loaded by default — your other plugins' MCP servers are
+filtered out. Two knobs exist to opt in:
+
+1. **User MCPs from `~/.claude.json`** (Anthropic CLI's own config): enable
+   them in `~/.agentboard/config.json`:
+
+   ```json
+   {
+     "inherit_user_mcps": true
+   }
+   ```
+
+   Or scope to specific keys: `"inherit_user_mcps": ["mcp-atlassian"]`.
+
+2. **Skill tool** is now included in every role's allowlist, so agents can
+   invoke your installed skills (caveman, ctx-*, etc.) via the `Skill(name)`
+   tool. Caveman's `SessionStart` hook additionally fires automatically on
+   every spawned run, so any injected context (caveman mode, context-mode
+   priority instructions) reaches the agent by default.
+
+Plugin-registered MCPs (e.g. `context-mode`) are not in `~/.claude.json`.
+To expose them to agents, either (a) mirror the server config under
+`mcpServers` in `~/.claude.json`, or (b) add the same shape to
+`~/.agentboard/mcps.json` (both are merged into the per-run mcp-config
+via `src/user-mcps.mjs`). Future work: scan plugin cache directly.
+
+## Stepping into a running agent
+
+Each agent run is spawned with `--session-id <uuid>`. The task detail panel
+shows an "Open in CLI" button per run; it copies the exact command:
+
+```
+claude --resume <session-id>
+```
+
+Paste in a terminal at the project repo to jump into that Claude session.
+If the agent is still running, the button reads "Join in CLI" and warns
+that resume may fork the session — best to cancel the run first.
+
 ## Development
 
 Repo layout:

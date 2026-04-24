@@ -81,11 +81,26 @@ function wrapNode(db) {
 
 const SCHEMA_SQL = readFileSync(SCHEMA_SQL_PATH, 'utf8');
 
-// Open project DB, run idempotent schema, return handle.
+// Lightweight migrations for existing DBs. Each entry: (sql, why). Errors are
+// swallowed — the expected failure mode is "column already exists" on an
+// already-migrated DB, which is fine.
+const MIGRATIONS = [
+  { sql: `ALTER TABLE agent_run ADD COLUMN claude_session_id TEXT`,
+    why: 'store claude --session-id for resume' },
+];
+
+function applyMigrations(db) {
+  for (const m of MIGRATIONS) {
+    try { db.exec(m.sql); } catch { /* idempotent: column/table already present */ }
+  }
+}
+
+// Open project DB, run idempotent schema, apply migrations, return handle.
 export async function openProjectDb(path) {
   const a = await loadAdapter();
   const db = a.open(path);
   db.exec(SCHEMA_SQL);
+  applyMigrations(db);
   return db;
 }
 

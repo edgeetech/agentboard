@@ -8,7 +8,7 @@ type Cat = 'file' | 'rule' | 'cwd' | 'error' | 'git' | 'env' | 'task'
          | 'prompt' | 'role' | 'intent' | 'data' | 'hook' | 'session'
          | 'stop' | 'notify' | 'default';
 
-function categoryOf(type: string): Cat {
+export function categoryOf(type: string): Cat {
   if (type.startsWith('file_'))      return 'file';
   if (type === 'rule' || type === 'rule_content') return 'rule';
   if (type === 'cwd')                return 'cwd';
@@ -70,8 +70,14 @@ const ICONS: Record<Cat, ReactNode> = {
 };
 
 export function EventTooltip({
-  type, description, children,
-}: { type: string; description: string; children: ReactNode }) {
+  type, description, children, triggerClassName, triggerStyle,
+}: {
+  type: string;
+  description: string;
+  children: ReactNode;
+  triggerClassName?: string;
+  triggerStyle?: React.CSSProperties;
+}) {
   const cat = categoryOf(type);
   const content = (
     <div className="event-tt">
@@ -83,5 +89,9 @@ export function EventTooltip({
       {description && <div className="event-tt-body">{description}</div>}
     </div>
   );
-  return <Tooltip content={content} maxWidth={360}>{children}</Tooltip>;
+  return (
+    <Tooltip content={content} maxWidth={360} triggerClassName={triggerClassName} triggerStyle={triggerStyle}>
+      {children}
+    </Tooltip>
+  );
 }

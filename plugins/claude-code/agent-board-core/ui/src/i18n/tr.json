@@ -23,7 +23,8 @@
     "untitled": "Adsız",
     "more": "daha fazla…",
     "less": "daha az",
-    "clear": "Temizle"
+    "clear": "Temizle",
+    "copied": "Kopyalandı ✓"
   },
   "nav": {
     "board": "Pano",
@@ -102,6 +103,11 @@
     "reject_title": "Görevi reddet",
     "reject_prompt": "Worker'a neyi değiştireceğini söyle (en az 10 karakter)",
     "retry_from_worker": "Worker'dan yeniden başla",
+    "resume": "CLI'de aç",
+    "resume_live": "CLI'de katıl",
+    "resume_live_hint": "Ajan hâlâ çalışıyor — oturuma katılmak oturumu çatallayabilir. Komut panoya kopyalandı.",
+    "copy_context": "Bağlamı kopyala",
+    "copy_context_hint": "Görev bağlamını markdown olarak panoya kopyalar — proje dizininde yeni bir `claude` oturumuna yapıştırarak ajanın kaldığı yerden devam et.",
     "cost": "Maliyet",
     "open_page": "Sayfa olarak aç",
     "open_panel": "Panel olarak aç",
@@ -225,7 +231,9 @@
     "scheme_dark": "Karanlık",
     "palette": "Palet",
     "active": "Aktif",
-    "click_apply": "Uygulamak için tıkla"
+    "click_apply": "Uygulamak için tıkla",
+    "dark_only": "Sadece karanlık mod",
+    "dark_only_hint": "Bu palet yalnızca Karanlık renk modu seçildiğinde uygulanır."
   },
   "project": {
     "title": "Proje",

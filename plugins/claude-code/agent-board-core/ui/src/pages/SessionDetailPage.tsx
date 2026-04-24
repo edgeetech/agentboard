@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
-import { EventTooltip } from '../features/sessions/EventTooltip';
+import { EventTooltip, categoryOf } from '../features/sessions/EventTooltip';
 
 function projectName(dir: string | null | undefined) {
   if (!dir) return '—';
@@ -82,6 +82,12 @@ export function SessionDetailPage() {
           </span>
         </div>
         <div className="actions">
+          {meta && (
+            <CopySessionContextButton meta={meta} enrich={data?.enrich ?? null} />
+          )}
+          {meta?.session_id && (
+            <ResumeCliButton sessionId={meta.session_id} repoPath={meta.project_dir} />
+          )}
           <Link to="/sessions"><button className="ghost" type="button">← {t('nav.sessions', 'Sessions')}</button></Link>
         </div>
       </div>
@@ -121,19 +127,22 @@ export function SessionDetailPage() {
         <>
           <h3 style={{ marginBottom: '0.5rem' }}>{t('sessions.breakdown', 'Event breakdown')}</h3>
           <div className="ratio-bar">
-            {topTypes.map(([type, n], i) => (
-              <span
+            {topTypes.map(([type, n]) => (
+              <EventTooltip
                 key={type}
-                className={`ratio-seg seg-${i % 8}`}
-                style={{ width: `${(n * 100) / totalTop}%` }}
-                title={`${type}: ${n}`}
-              />
+                type={type}
+                description={eventDesc(t, type)}
+                triggerClassName={`ratio-seg cat-${categoryOf(type)}`}
+                triggerStyle={{ width: `${(n * 100) / totalTop}%` }}
+              >
+                <span className="sr-only">{type}: {n}</span>
+              </EventTooltip>
             ))}
           </div>
           <div className="type-tags">
             {typeCounts.map(([type, n]) => (
               <EventTooltip key={type} type={type} description={eventDesc(t, type)}>
-                <span className="type-tag">{type}<span className="n">{n}</span></span>
+                <span className={`type-tag cat-${categoryOf(type)}`}>{type}<span className="n">{n}</span></span>
               </EventTooltip>
             ))}
           </div>
@@ -291,5 +300,99 @@ function SummaryPane({ enrich }: {
         </dl>
       )}
     </section>
+  );
+}
+
+function ResumeCliButton({
+  sessionId, repoPath,
+}: { sessionId: string; repoPath: string | null | undefined }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  // PowerShell 5 doesn't support `&&`; `;` works in bash / PS5+.
+  const cmd = repoPath
+    ? `cd "${repoPath}"; claude --resume ${sessionId}`
+    : `claude --resume ${sessionId}`;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch { /* clipboard blocked */ }
+  }
+  return (
+    <button
+      type="button"
+      className="ghost"
+      onClick={copy}
+      title={cmd}
+    >
+      {copied ? t('common.copied', 'Copied ✓') : `⏎ ${t('task.resume', 'Open in CLI')}`}
+    </button>
+  );
+}
+
+function CopySessionContextButton({
+  meta, enrich,
+}: {
+  meta: { session_id: string; project_dir: string | null; started_at: string; last_event_at: string; event_count: number; compact_count: number };
+  enrich: {
+    firstPrompt: string | null;
+    intent: string | null;
+    role: string | null;
+    topFiles: Array<{ path: string; count: number }>;
+    planFiles: string[];
+  } | null;
+}) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  function buildContext(): string {
+    const lines: string[] = [];
+    lines.push(`# Session handoff — ${meta.session_id.slice(0, 12)}`);
+    lines.push('');
+    lines.push(`**Project**: ${meta.project_dir ?? '—'}`);
+    lines.push(`**Started**: ${meta.started_at}`);
+    lines.push(`**Last event**: ${meta.last_event_at}`);
+    lines.push(`**Events**: ${meta.event_count} (${meta.compact_count} compactions)`);
+    if (enrich?.intent) lines.push(`**Intent**: ${enrich.intent}`);
+    if (enrich?.role) lines.push(`**Role**: ${enrich.role}`);
+    lines.push('');
+    if (enrich?.firstPrompt) {
+      lines.push('## First prompt');
+      lines.push(enrich.firstPrompt);
+      lines.push('');
+    }
+    if (enrich?.topFiles?.length) {
+      lines.push('## Top-touched files');
+      for (const f of enrich.topFiles) lines.push(`- \`${f.path}\` (×${f.count})`);
+      lines.push('');
+    }
+    if (enrich?.planFiles?.length) {
+      lines.push('## Plan files');
+      for (const p of enrich.planFiles) lines.push(`- \`${p}\``);
+      lines.push('');
+    }
+    lines.push('---');
+    lines.push('Please pick up from here. If the session is resumable via the CLI, prefer that; otherwise continue from this context.');
+    return lines.join('\n');
+  }
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(buildContext());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch { /* clipboard blocked */ }
+  }
+
+  return (
+    <button
+      type="button"
+      className="ghost"
+      onClick={copy}
+      title={t('task.copy_context_hint', 'Copies session context as markdown — paste into a fresh claude session.')}
+    >
+      {copied ? t('common.copied', 'Copied ✓') : `⏎ ${t('task.copy_context', 'Copy context')}`}
+    </button>
   );
 }

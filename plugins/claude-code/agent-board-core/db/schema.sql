@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS agent_run (
   status                 TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','failed','blocked','cancelled')),
   token                  TEXT,
   pid                    INTEGER,
+  claude_session_id      TEXT,
   error                  TEXT,
   logs_path              TEXT,
   summary                TEXT,

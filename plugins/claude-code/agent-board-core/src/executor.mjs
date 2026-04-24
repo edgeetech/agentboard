@@ -2,9 +2,10 @@
 // stream-json for cost, reaps orphans.
 
 import { spawn } from 'node:child_process';
-import { openSync, writeFileSync, unlinkSync, readFileSync, readSync, closeSync, statSync } from 'node:fs';
+import { openSync, writeFileSync, appendFileSync, unlinkSync, readFileSync, readSync, closeSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { homedir } from 'node:os';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { logsDir, logPath, logErrPath, runConfigDir } from './paths.mjs';
 import { restrictPerms } from './config.mjs';
 import { allowlistFor } from './tool-allowlist.mjs';
@@ -74,6 +75,9 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
 
   // Issue run_token for claim; child MCP calls use it
   const run_token = randomBytes(24).toString('hex');
+  // Pre-assign Claude session id so the user can later `claude --resume <id>`
+  // to jump into this exact session from a terminal.
+  const claude_session_id = randomUUID();
   const stdoutPath = logPath(run.id);
   const stderrPath = logErrPath(run.id);
   const stdoutFd = openSync(stdoutPath, 'w', 0o600);
@@ -110,6 +114,7 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
     '-p', promptBody,
     // NOTE: intentionally NOT using --bare (would disable OAuth/keychain auth).
     '--strict-mcp-config',             // only our abrun HTTP MCP, ignore user config + plugin MCPs
+    '--session-id', claude_session_id, // lets human resume via `claude --resume <id>`
     '--append-system-prompt', systemPrompt,
     '--mcp-config', runCfgPath,
     '--allowedTools', allowlistFor(run.role),
@@ -127,7 +132,14 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
     env: buildChildEnv(),  // whitelist only — no AWS/GitHub/SSH creds leak
   });
 
-  db.prepare(`UPDATE agent_run SET pid=? WHERE id=?`).run(child.pid, run.id);
+  db.prepare(`UPDATE agent_run SET pid=?, claude_session_id=? WHERE id=?`)
+    .run(child.pid, claude_session_id, run.id);
+
+  registerWithClaudeHistory({
+    sessionId: claude_session_id,
+    projectPath: project.repo_path,
+    display: `agentboard ${run.role} run — ${task.code}`,
+  });
   child.unref();
 
   child.on('exit', (code) => {
@@ -213,3 +225,34 @@ function loadRolePromptBody(role) {
 }
 
 function logErr(e) { console.error('[executor]', e?.stack || e); }
+
+/**
+ * Register this run's session in Claude's interactive history index
+ * (`~/.claude/history.jsonl`). Headless `-p` mode saves the session JSONL
+ * but does NOT write a history entry, so `claude --resume <id>` reports
+ * "No conversation found". Writing one line here makes the session
+ * appear in the `/resume` picker and work with `--resume`.
+ *
+ * Best-effort: any error (file missing, permissions, etc.) is logged and
+ * swallowed — the agent run itself already succeeded by this point.
+ */
+function registerWithClaudeHistory({ sessionId, projectPath, display }) {
+  try {
+    // Claude stores project paths with OS-native separators. Normalize forward
+    // slashes back to backslashes on Windows so the picker groups this session
+    // under the right project.
+    const osPath = process.platform === 'win32'
+      ? projectPath.replace(/\//g, '\\')
+      : projectPath;
+    const entry = JSON.stringify({
+      display,
+      pastedContents: {},
+      timestamp: Date.now(),
+      project: osPath,
+      sessionId,
+    }) + '\n';
+    appendFileSync(join(homedir(), '.claude', 'history.jsonl'), entry);
+  } catch (e) {
+    console.warn('[executor] could not register with claude history:', e?.message || e);
+  }
+}

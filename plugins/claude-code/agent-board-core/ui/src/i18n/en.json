@@ -23,7 +23,8 @@
     "untitled": "Untitled",
     "more": "see more…",
     "less": "see less",
-    "clear": "Clear"
+    "clear": "Clear",
+    "copied": "Copied ✓"
   },
   "catalog": { "local_note": "Stored locally in this browser until the server adds a catalog API." },
   "nav": {
@@ -127,7 +128,9 @@
     "scheme_dark": "Dark",
     "palette": "Palette",
     "active": "Active",
-    "click_apply": "Click to apply"
+    "click_apply": "Click to apply",
+    "dark_only": "Dark mode only",
+    "dark_only_hint": "This palette only applies when the Dark colour scheme is selected."
   },
   "foot": {
     "connected": "Connected",
@@ -228,6 +231,11 @@
     "reject_title": "Reject task",
     "reject_prompt": "Tell Worker what to change (min 10 chars)",
     "retry_from_worker": "Retry from Worker",
+    "resume": "Open in CLI",
+    "resume_live": "Join in CLI",
+    "resume_live_hint": "Agent is still running — resuming will fork its session. Command copied to clipboard.",
+    "copy_context": "Copy context",
+    "copy_context_hint": "Copies task context as markdown — paste into a fresh `claude` session in the project directory to pick up where the agent left off.",
     "cost": "Cost"
   }
 }

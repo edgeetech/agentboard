@@ -1676,29 +1676,166 @@ input:focus, textarea:focus, select:focus {
   font-size: 12px;
 }
 
-/* Category hues (--cat shines through icon + cat-pill) */
-.cat-file     { --cat: #2b6cb0; }
-.cat-rule     { --cat: #c77c2e; }
-.cat-cwd      { --cat: #5a8c7a; }
-.cat-error    { --cat: var(--danger); }
-.cat-git      { --cat: #e0733a; }
-.cat-env      { --cat: #7a5cc4; }
-.cat-task     { --cat: var(--success); }
-.cat-plan     { --cat: #5e7ce2; }
-.cat-skill    { --cat: #c49a1e; }
-.cat-subagent { --cat: #2b8aa0; }
-.cat-mcp      { --cat: #9b7cd9; }
-.cat-decision { --cat: #d97842; }
-.cat-worktree { --cat: #5a8c7a; }
-.cat-prompt   { --cat: #3874a8; }
-.cat-role     { --cat: #a55c8a; }
-.cat-intent   { --cat: #a07830; }
-.cat-data     { --cat: #687085; }
-.cat-hook     { --cat: #6d8f3a; }
+/* Category hues — spread wide across the hue wheel for strong pairwise
+   contrast. Chosen at ~65% saturation / 48% lightness for legibility on
+   both light and dark themes. */
+.cat-file     { --cat: #1d6fe0; }  /* blue */
+.cat-rule     { --cat: #d78a00; }  /* amber */
+.cat-cwd      { --cat: #14a081; }  /* teal */
+.cat-error    { --cat: #e63946; }  /* red */
+.cat-git      { --cat: #ee5a24; }  /* orange */
+.cat-env      { --cat: #7d3cd8; }  /* violet */
+.cat-task     { --cat: #2eb86d; }  /* green */
+.cat-plan     { --cat: #4a5bd9; }  /* indigo */
+.cat-skill    { --cat: #d4a017; }  /* gold */
+.cat-subagent { --cat: #00a8b5; }  /* cyan */
+.cat-mcp      { --cat: #b840c1; }  /* magenta */
+.cat-decision { --cat: #ff6b1f; }  /* tangerine */
+.cat-worktree { --cat: #00875a; }  /* forest */
+.cat-prompt   { --cat: #0ea5e9; }  /* sky */
+.cat-role     { --cat: #d03180; }  /* pink */
+.cat-intent   { --cat: #a0522d; }  /* sienna */
+.cat-data     { --cat: #525f7a; }  /* slate */
+.cat-hook     { --cat: #7cb342; }  /* lime */
 .cat-session  { --cat: var(--primary); }
-.cat-stop     { --cat: #8b3a3a; }
-.cat-notify   { --cat: #b47e1c; }
-.cat-default  { --cat: var(--muted); }
+.cat-stop     { --cat: #6b2d2d; }  /* deep red */
+.cat-notify   { --cat: #e8a20a; }  /* marigold */
+.cat-default  { --cat: #7c8699; }  /* gray */
+
+/* ─── Task detail panel: sticky head / tabs / sticky foot ───────────── */
+
+.detail-panel {
+  display: flex; flex-direction: column;
+  padding: 0;
+}
+.detail-panel .detail-head {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 0.75rem 1rem 0.65rem;
+  margin: 0;
+  display: flex; flex-direction: column; gap: 0.35rem;
+  align-items: stretch;
+}
+.detail-head-title { display: flex; align-items: flex-start; gap: 0.55rem; }
+.detail-head-title .code {
+  font-family: var(--mono); color: var(--muted); font-size: 11px;
+  font-weight: 700; padding-top: 0.25rem; flex-shrink: 0;
+}
+.detail-head-title h2 {
+  margin: 0; flex: 1; min-width: 0;
+  font-size: 1.05rem; line-height: 1.3; font-weight: 800;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal;
+  letter-spacing: -0.01em;
+}
+.detail-head-icons {
+  display: flex; gap: 0.3rem; margin-left: auto; flex-shrink: 0;
+}
+.detail-head-icons .icon-btn { width: 28px; height: 28px; padding: 0; }
+.detail-head-icons .icon-btn.close { color: var(--muted); }
+.detail-head-icons .icon-btn.close:hover { color: var(--danger); border-color: var(--danger); }
+
+.detail-head-meta {
+  display: flex; align-items: center; gap: 0.45rem;
+  font-size: 11.5px; color: var(--text-soft);
+  flex-wrap: wrap;
+  padding-left: calc(0.55rem + 2ch);
+}
+.detail-head-meta .meta-proj {
+  font-weight: 700; color: var(--text);
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.detail-head-meta .meta-sep { color: var(--muted); }
+.detail-head-meta .meta-assignee { display: inline-flex; align-items: center; gap: 0.3rem; }
+.detail-head-meta .avatar { width: 18px; height: 18px; }
+.detail-head-meta .avatar .avatar-initials { font-size: 9px; }
+.detail-head-meta .tag { font-size: 10px; padding: 1px 6px; }
+
+.detail-panel .detail-body {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto;
+  padding: 0.9rem 1rem;
+}
+.detail-panel .detail-body > section { margin: 0.75rem 0; }
+.detail-panel .detail-body > section:first-of-type { margin-top: 0.25rem; }
+
+.detail-panel .detail-foot {
+  position: sticky; bottom: 0; z-index: 10;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding: 0.7rem 1rem;
+  box-shadow: 0 -8px 14px -10px rgba(0, 0, 0, 0.14);
+}
+.detail-panel .detail-foot .actions { margin-top: 0; }
+
+.detail-tabs {
+  display: flex; gap: 0.15rem;
+  border-bottom: 1px solid var(--line);
+  margin: 0.75rem 0 0.5rem;
+}
+.detail-tabs .tab {
+  background: transparent; border: 0;
+  padding: 0.45rem 0.85rem;
+  color: var(--text-soft);
+  font-weight: 700; font-size: 12px;
+  letter-spacing: 0.02em;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.15s;
+}
+.detail-tabs .tab:hover { color: var(--text); background: transparent; }
+.detail-tabs .tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--accent);
+}
+.detail-tabs .tab .count {
+  margin-left: 0.35rem;
+  font-size: 10.5px; color: var(--muted);
+  background: var(--bg-alt); border-radius: 999px;
+  padding: 1px 6px;
+  font-weight: 700;
+}
+
+/* Inline (page) variant: sticky anchors to page main scroll */
+.detail-inline .detail-head {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  padding: 0.75rem 0 0.65rem;
+  display: flex; flex-direction: column; gap: 0.35rem;
+}
+.detail-inline .detail-foot {
+  position: sticky; bottom: 0; z-index: 5;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  padding: 0.7rem 0;
+  margin-top: 1rem;
+}
+
+/* Ratio-bar: each <EventTooltip> trigger wrapper IS the segment — width
+   lives on the wrapper so the tooltip can measure its real rect. */
+.ratio-bar .ab-tt-trigger.ratio-seg {
+  display: inline-block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--cat, var(--muted));
+  border-radius: 2px;
+  margin-right: 2px;
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+.type-tag[class*="cat-"] {
+  background: color-mix(in srgb, var(--cat) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--cat) 42%, var(--line));
+  color: color-mix(in srgb, var(--cat) 75%, var(--text));
+}
+.type-tag[class*="cat-"] .n {
+  color: color-mix(in srgb, var(--cat) 55%, var(--muted));
+}
 
 /* ─── Session list title + tags ─────────────────────────────────────── */
 
@@ -1900,4 +2037,140 @@ button.linkish:hover {
 @keyframes abLivePulse {
   0%, 100% { box-shadow: 0 0 0 0   color-mix(in srgb, var(--primary) 20%, transparent) }
   50%      { box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 0%,  transparent) }
+}
+
+/* ─── Primer (GitHub) palette — works in both light and dark ────────── */
+/* Tokens sourced from https://primer.style/foundations/primitives/color
+   (light) and GitHub's dark-default theme. Mapped onto our variable set. */
+
+:root[data-palette='primer'] {
+  --bg: #ffffff;          --bg-alt: #f6f8fa;
+  --surface: #ffffff;     --surface-alt: #f6f8fa;
+  --line: #d0d7de;        --line-strong: #afb8c1;
+  --text: #1f2328;        --text-soft: #59636e;  --muted: #818b98;
+  --primary: #0969da;     --primary-hover: #0860c4; --on-primary: #ffffff;
+  --accent: #bf3989;      --accent-soft: #ffeff7;
+  --success: #1a7f37;     --warn: #9a6700;
+  --warn-soft: #fff8c5;   --danger: #d1242f;
+  --stall: #bc4c00;       --attention: #9a6700;
+  --attention-ring: rgba(154, 103, 0, 0.2);
+}
+
+:root[data-theme='dark'][data-palette='primer'] {
+  --bg: #0d1117;          --bg-alt: #010409;
+  --surface: #161b22;     --surface-alt: #1f2428;
+  --line: #30363d;        --line-strong: #444c56;
+  --text: #e6edf3;        --text-soft: #9198a1;  --muted: #6e7681;
+  --primary: #2f81f7;     --primary-hover: #58a6ff; --on-primary: #ffffff;
+  --accent: #db61a2;      --accent-soft: #2e1925;
+  --success: #3fb950;     --warn: #d29922;
+  --warn-soft: #2d2a1e;   --danger: #f85149;
+  --stall: #db6d28;       --attention: #d29922;
+  --attention-ring: rgba(210, 153, 34, 0.24);
+}
+
+/* ─── Dark-mode palettes (scoped; light scheme keeps default tokens) ──── */
+
+/* 1. Monochrome Minimalism */
+:root[data-theme='dark'][data-palette='mono'] {
+  --bg: #121212;          --bg-alt: #1a1a1a;
+  --surface: #222222;     --surface-alt: #2b2b2b;
+  --line: #333333;        --line-strong: #4a4a4a;
+  --text: #E0E0E0;        --text-soft: #C4C4C4;  --muted: #888888;
+  --primary: #E0E0E0;     --primary-hover: #F2F2F2; --on-primary: #121212;
+  --accent: #B0B0B0;      --accent-soft: #333333;
+  --success: #A8C4A8;     --warn: #C9A86B;
+  --warn-soft: #2e2620;   --danger: #E27070;
+  --stall: #A08060;       --attention: #C0C0C0;
+  --attention-ring: rgba(224, 224, 224, 0.18);
+}
+
+/* 2. Neon Highlights */
+:root[data-theme='dark'][data-palette='neon'] {
+  --bg: #0D0D0D;          --bg-alt: #141414;
+  --surface: #1a1a1a;     --surface-alt: #222222;
+  --line: #2a2a2a;        --line-strong: #404040;
+  --text: #FFFFFF;        --text-soft: #D8D8D8;  --muted: #8a8a8a;
+  --primary: #00FF85;     --primary-hover: #33ff9a; --on-primary: #0D0D0D;
+  --accent: #FF0099;      --accent-soft: #2a0a1e;
+  --success: #00FF85;     --warn: #FFD700;
+  --warn-soft: #2a2410;   --danger: #FF3355;
+  --stall: #FF0099;       --attention: #1E90FF;
+  --attention-ring: rgba(30, 144, 255, 0.32);
+}
+
+/* 3. Warm Tones */
+:root[data-theme='dark'][data-palette='warm'] {
+  --bg: #1C1C1C;          --bg-alt: #221c17;
+  --surface: #2a2018;     --surface-alt: #362a20;
+  --line: #3a2a20;        --line-strong: #5a3e2c;
+  --text: #F5E8D8;        --text-soft: #D5C4B0;  --muted: #8a7864;
+  --primary: #FF6F61;     --primary-hover: #ff8478; --on-primary: #1C1C1C;
+  --accent: #DAA520;      --accent-soft: #3a2e14;
+  --success: #B8C964;     --warn: #DAA520;
+  --warn-soft: #3a2e14;   --danger: #E85042;
+  --stall: #FF4500;       --attention: #DAA520;
+  --attention-ring: rgba(218, 165, 32, 0.24);
+}
+
+/* 4. Muted Pastels */
+:root[data-theme='dark'][data-palette='pastel'] {
+  --bg: #2C2C2C;          --bg-alt: #333333;
+  --surface: #3a3a3a;     --surface-alt: #444444;
+  --line: #4a4a4a;        --line-strong: #5c5c5c;
+  --text: #E4E4E4;        --text-soft: #C8C8C8;  --muted: #909090;
+  --primary: #B39CD0;     --primary-hover: #c4afdd; --on-primary: #1a1a1a;
+  --accent: #FFC1CC;      --accent-soft: #3a2830;
+  --success: #A8DADC;     --warn: #F0D58A;
+  --warn-soft: #2e2a1a;   --danger: #F28FA0;
+  --stall: #D4A7E0;       --attention: #A8DADC;
+  --attention-ring: rgba(168, 218, 220, 0.24);
+}
+
+/* 5. Deep Jewel Tones */
+:root[data-theme='dark'][data-palette='jewel'] {
+  --bg: #1A1A1A;          --bg-alt: #1f1f22;
+  --surface: #252528;     --surface-alt: #2e2e33;
+  --line: #333338;        --line-strong: #4a4a52;
+  --text: #F0F0F0;        --text-soft: #C8C8CC;  --muted: #8a8a90;
+  --primary: #3E5641;     --primary-hover: #4f6c54; --on-primary: #F0F0F0;
+  --accent: #822659;      --accent-soft: #2a1522;
+  --success: #3E5641;     --warn: #B8913D;
+  --warn-soft: #2e2414;   --danger: #822659;
+  --stall: #004D61;       --attention: #004D61;
+  --attention-ring: rgba(0, 77, 97, 0.34);
+}
+
+/* 6. Contrasting Vibrancy */
+:root[data-theme='dark'][data-palette='vibrant'] {
+  --bg: #181818;          --bg-alt: #202020;
+  --surface: #262626;     --surface-alt: #2f2f2f;
+  --line: #383838;        --line-strong: #484848;
+  --text: #F7F7F7;        --text-soft: #D8D8D8;  --muted: #8a8a8a;
+  --primary: #FF5722;     --primary-hover: #ff7a4a; --on-primary: #181818;
+  --accent: #673AB7;      --accent-soft: #2a1e44;
+  --success: #4CAF50;     --warn: #FFEB3B;
+  --warn-soft: #2e2a10;   --danger: #E53935;
+  --stall: #FFEB3B;       --attention: #FFEB3B;
+  --attention-ring: rgba(255, 235, 59, 0.3);
+}
+
+/* "Dark mode only" badge inside theme cards */
+.pill.dark-only {
+  margin-left: 0.5rem;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #111827;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+  vertical-align: middle;
+}
+:root[data-theme='dark'] .pill.dark-only {
+  background: color-mix(in srgb, var(--text) 12%, var(--surface));
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 30%, var(--line-strong));
 }

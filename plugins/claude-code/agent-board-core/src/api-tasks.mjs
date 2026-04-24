@@ -3,7 +3,7 @@ import { getActiveDb } from './project-registry.mjs';
 import {
   listTasks, getTask, getTaskByCode, createTask, transitionTask, retryFromWorker,
   listComments, listRuns, addComment, enqueueRun,
-  finishRun,
+  finishRun, getProject,
 } from './repo.mjs';
 import { isoNow } from './time.mjs';
 
@@ -29,6 +29,7 @@ function killProcess(pid, graceMs = KILL_GRACE_MS) {
 async function handleGetTask(_req, res, _url, _active, task, db) {
   return json(res, 200, {
     task,
+    project: getProject(db),
     comments: listComments(db, task.id),
     runs: listRuns(db, task.id, RECENT_RUNS_LIMIT),
   });

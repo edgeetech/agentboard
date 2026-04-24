@@ -11,12 +11,16 @@ export function Tooltip({
   delay = 160,
   placement = 'top',
   maxWidth = 320,
+  triggerClassName,
+  triggerStyle,
 }: {
   content: ReactNode;
   children: ReactNode;
   delay?: number;
   placement?: Placement;
   maxWidth?: number;
+  triggerClassName?: string;
+  triggerStyle?: React.CSSProperties;
 }) {
   const triggerRef = useRef<HTMLSpanElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
@@ -52,7 +56,8 @@ export function Tooltip({
     <>
       <span
         ref={triggerRef}
-        className="ab-tt-trigger"
+        className={`ab-tt-trigger${triggerClassName ? ` ${triggerClassName}` : ''}`}
+        style={triggerStyle}
         onMouseEnter={open}
         onMouseLeave={close}
         onFocus={open}

@@ -17,13 +17,14 @@
           }
           document.documentElement.setAttribute('data-theme', t);
           var p = localStorage.getItem('ab.palette');
-          if (p !== 'default' && p !== 'edgeetech') p = 'edgeetech';
+          var valid = ['default','edgeetech','primer','mono','neon','warm','pastel','jewel','vibrant'];
+          if (valid.indexOf(p) === -1) p = 'edgeetech';
           document.documentElement.setAttribute('data-palette', p);
         } catch (e) {}
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-Ci7cIs6R.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-B9ikD5G3.css">
+    <script type="module" crossorigin src="/assets/index-sFfbzhKe.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CvNCO6bR.css">
   </head>
   <body>
     <div id="root"></div>

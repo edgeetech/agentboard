@@ -31,7 +31,7 @@ export const api = {
   createTask: (body: { title: string; description?: string }) =>
     call<{ task: any; runId?: string }>('POST', '/api/tasks', body),
   getTask: (code: string) =>
-    call<{ task: any; comments: any[]; runs: any[] }>('GET', `/api/tasks/${encodeURIComponent(code)}`),
+    call<{ task: any; project: any; comments: any[]; runs: any[] }>('GET', `/api/tasks/${encodeURIComponent(code)}`),
   dispatch: (code: string, role: 'pm' | 'worker' | 'reviewer') =>
     call<{ runId: string }>('POST', `/api/tasks/${encodeURIComponent(code)}/dispatch`, { role }),
   cancelRun: (code: string) =>
