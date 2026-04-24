@@ -1,20 +1,29 @@
-// Read-only view of the context-mode session SQLite databases.
+// Read-only view of session SQLite databases.
 //
-// Mirrors the data shape of the ctx-insight `/api/sessions` endpoint so the
-// AgentBoard UI can show the same "All recorded AI coding sessions" list
-// without depending on the ctx-insight server being running.
+// Primary source: agentboard's own session recorder at `~/.agentboard/sessions/`
+// (hooks in plugins/claude-code/hooks/session/ write these). Back-compat:
+// also reads context-mode's `~/.claude/context-mode/sessions/` if present,
+// so users with both tools see a merged history.
 //
-// Source dir defaults to `~/.claude/context-mode/sessions/` and can be
-// overridden via the `INSIGHT_SESSION_DIR` env var. DBs are opened in
-// read-only mode — we never write to another tool's data.
+// Overrides: `AGENTBOARD_SESSION_DIR` (primary), `INSIGHT_SESSION_DIR`
+// (back-compat). DBs are opened read-only.
 
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { json } from './http-util.mjs';
 
+function sessionsDirs() {
+  const primary = process.env.AGENTBOARD_SESSION_DIR
+    || join(homedir(), '.agentboard', 'sessions');
+  const legacy = process.env.INSIGHT_SESSION_DIR
+    || join(homedir(), '.claude', 'context-mode', 'sessions');
+  const seen = new Set();
+  return [primary, legacy].filter(d => (d && !seen.has(d) && seen.add(d)));
+}
 function sessionsDir() {
-  return process.env.INSIGHT_SESSION_DIR || join(homedir(), '.claude', 'context-mode', 'sessions');
+  // Writes (per-hash lookup) go to primary dir.
+  return sessionsDirs()[0];
 }
 
 let openerPromise = null;
@@ -117,8 +126,16 @@ async function listSessionsAll(res) {
   const open = await getOpener();
   if (!open) return json(res, 200, { dbs: [], error: 'sqlite adapter unavailable' });
 
-  const dir = sessionsDir();
-  const files = listDbFiles(dir);
+  const dirs = sessionsDirs();
+  const files = [];
+  const seenPaths = new Set();
+  for (const d of dirs) {
+    for (const f of listDbFiles(d)) {
+      if (seenPaths.has(f.path)) continue;
+      seenPaths.add(f.path);
+      files.push(f);
+    }
+  }
   const dbs = [];
 
   for (const f of files) {
@@ -155,7 +172,7 @@ async function listSessionsAll(res) {
       try { db.close(); } catch {}
     }
   }
-  return json(res, 200, { dir, dbs });
+  return json(res, 200, { dir: dirs[0], dirs, dbs });
 }
 
 function isSafeHash(s) { return typeof s === 'string' && HASH_RE.test(s); }
@@ -165,8 +182,12 @@ async function listSessionEvents(res, hash, sessionId) {
   if (!open) return json(res, 200, { events: [], resume: null, error: 'sqlite adapter unavailable' });
   if (!isSafeHash(hash)) return json(res, 400, { error: 'invalid hash' });
 
-  const dbPath = join(sessionsDir(), hash + '.db');
-  if (!existsSync(dbPath)) return json(res, 404, { error: 'db not found' });
+  let dbPath = null;
+  for (const d of sessionsDirs()) {
+    const candidate = join(d, hash + '.db');
+    if (existsSync(candidate)) { dbPath = candidate; break; }
+  }
+  if (!dbPath) return json(res, 404, { error: 'db not found' });
 
   let db;
   try { db = open(dbPath); }

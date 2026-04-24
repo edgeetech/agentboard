@@ -4,10 +4,27 @@
       {
         "matcher": "startup",
         "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/ensure-server.mjs\" --silent"
-          }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/ensure-server.mjs\" --silent" }
+        ]
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session/sessionstart.mjs\"" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session/userpromptsubmit.mjs\"" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Read|Write|Edit|Glob|Grep|TodoWrite|TaskCreate|Agent|AskUserQuestion|EnterWorktree|mcp__.*",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session/posttooluse.mjs\"" }
         ]
       }
     ]
