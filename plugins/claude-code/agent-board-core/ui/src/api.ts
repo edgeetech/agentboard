@@ -51,7 +51,16 @@ export const api = {
   taskCost: (code: string) => call<any>('GET', `/api/tasks/${encodeURIComponent(code)}/cost`),
   sessions: () => call<{ dir: string; dbs: Array<{
     hash: string; size: string; sizeBytes: number;
-    sessions: Array<{ id: string; projectDir: string | null; startedAt: string; lastEventAt: string; eventCount: number; compactCount: number }>;
+    sessions: Array<{
+      id: string; projectDir: string | null;
+      startedAt: string; lastEventAt: string;
+      eventCount: number; compactCount: number;
+      firstPrompt?: string | null;
+      intent?: string | null;
+      role?: string | null;
+      topFiles?: Array<{ path: string; count: number }>;
+      planFiles?: string[];
+    }>;
   }>; error?: string }>('GET', '/api/sessions'),
   prompt: (kind: 'role' | 'skill', id: string) =>
     call<{ kind: string; id: string; path?: string; content?: string; error?: string }>(
@@ -62,6 +71,13 @@ export const api = {
     meta: { session_id: string; project_dir: string | null; started_at: string; last_event_at: string; event_count: number; compact_count: number } | null;
     events: Array<{ id: number; type: string; category: string | null; priority: number | null; data: string | null; source_hook: string | null; created_at: string }>;
     resume: { snapshot: string | null; event_count: number | null; consumed: number | null } | null;
+    enrich?: {
+      firstPrompt: string | null;
+      intent: string | null;
+      role: string | null;
+      topFiles: Array<{ path: string; count: number }>;
+      planFiles: string[];
+    } | null;
     error?: string;
   }>('GET', `/api/sessions/${encodeURIComponent(hash)}/events/${encodeURIComponent(sessionId)}`),
   deleteTask: (code: string) =>

@@ -21,11 +21,14 @@ function initialScheme(): Scheme {
   if (attr === 'dark' || attr === 'light') return attr;
   return 'light';
 }
+const DEFAULT_PALETTE: Palette = 'edgeetech';
+
 function initialPalette(): Palette {
   try {
     const p = localStorage.getItem(KEY_PALETTE);
-    return p === 'edgeetech' ? 'edgeetech' : 'default';
-  } catch { return 'default'; }
+    if (p === 'default' || p === 'edgeetech') return p;
+    return DEFAULT_PALETTE;
+  } catch { return DEFAULT_PALETTE; }
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

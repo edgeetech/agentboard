@@ -3,10 +3,25 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { EventTooltip } from '../features/sessions/EventTooltip';
 
 function projectName(dir: string | null | undefined) {
   if (!dir) return '—';
   return dir.split(/[\\/]/).filter(Boolean).slice(-1)[0] || dir;
+}
+
+/**
+ * One-line explanation for a given event type (Claude Code hook/session event
+ * names + context-mode hook sub-types). Falls back to '' when unknown so the
+ * tooltip just shows the raw type string. Translations live under
+ * `sessions.event_desc.<type>` in each locale.
+ */
+function eventDesc(t: (k: string, opts?: any) => string, type: string): string {
+  if (!type) return '';
+  const key = `sessions.event_desc.${type}`;
+  const v = t(key, { defaultValue: '' }) as string;
+  if (!v || v === key) return '';
+  return v;
 }
 
 function formatDuration(a?: string | null, b?: string | null) {
@@ -79,6 +94,10 @@ export function SessionDetailPage() {
         </div>
       </div>
 
+      {data?.enrich && (
+        <SummaryPane enrich={data.enrich} />
+      )}
+
       <div className="session-stats">
         <div className="session-kpi">
           <div className="session-kpi-value">{events.length}</div>
@@ -113,7 +132,9 @@ export function SessionDetailPage() {
           </div>
           <div className="type-tags">
             {typeCounts.map(([type, n]) => (
-              <span key={type} className="type-tag">{type}<span className="n">{n}</span></span>
+              <EventTooltip key={type} type={type} description={eventDesc(t, type)}>
+                <span className="type-tag">{type}<span className="n">{n}</span></span>
+              </EventTooltip>
             ))}
           </div>
         </>
@@ -130,7 +151,9 @@ export function SessionDetailPage() {
           return (
             <div key={e.id} className={`event-row prio-${Math.min(4, Math.max(0, prio))}`}>
               <div className="event-time mono">{(e.created_at || '').replace('T', ' ').slice(0, 19)}</div>
-              <div className="event-type-badge">{e.type}</div>
+              <EventTooltip type={e.type} description={eventDesc(t, e.type)}>
+                <div className="event-type-badge">{e.type}</div>
+              </EventTooltip>
               <pre className="event-data">
                 {truncated && !isOpen ? dataStr.slice(0, 140) + '…' : dataStr}
               </pre>
@@ -166,5 +189,107 @@ export function SessionDetailPage() {
         </section>
       )}
     </>
+  );
+}
+
+function ExpandableRole({ text }: { text: string }) {
+  const { t } = useTranslation();
+  const LIMIT = 140;
+  const [open, setOpen] = useState(false);
+  const overflow = text.length > LIMIT;
+  const body = !overflow || open ? text : text.slice(0, LIMIT).trimEnd() + '…';
+  return (
+    <span className="summary-role-wrap">
+      <span className="summary-role">{body}</span>
+      {overflow && (
+        <button
+          type="button"
+          className="linkish"
+          onClick={() => setOpen(v => !v)}
+          aria-expanded={open}
+        >
+          {open ? t('common.less', 'see less') : t('common.more', 'see more…')}
+        </button>
+      )}
+    </span>
+  );
+}
+
+function SummaryPane({ enrich }: {
+  enrich: {
+    firstPrompt: string | null;
+    intent: string | null;
+    role: string | null;
+    topFiles: Array<{ path: string; count: number }>;
+    planFiles: string[];
+  };
+}) {
+  const { t } = useTranslation();
+  const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).slice(-1)[0] || p;
+  const hasFacts =
+    enrich.intent || enrich.role ||
+    (enrich.topFiles?.length ?? 0) > 0 ||
+    (enrich.planFiles?.length ?? 0) > 0;
+  if (!enrich.firstPrompt && !hasFacts) return null;
+
+  return (
+    <section className="session-summary" aria-labelledby="summary-h">
+      <div className="summary-head">
+        <span className="dot" aria-hidden />
+        <h3 id="summary-h">{t('sessions.summary', 'Summary')}</h3>
+      </div>
+
+      {enrich.firstPrompt && (
+        <blockquote className="summary-quote">
+          {enrich.firstPrompt}
+        </blockquote>
+      )}
+
+      {hasFacts && (
+        <dl className="summary-facts">
+          {enrich.intent && (
+            <>
+              <dt>{t('sessions.intent', 'Intent')}</dt>
+              <dd>
+                <span className={`session-tag intent intent-${enrich.intent}`}>
+                  {enrich.intent}
+                </span>
+              </dd>
+            </>
+          )}
+          {enrich.role && (
+            <>
+              <dt>{t('sessions.role', 'Role')}</dt>
+              <dd><ExpandableRole text={enrich.role} /></dd>
+            </>
+          )}
+          {enrich.planFiles?.length > 0 && (
+            <>
+              <dt>{t('sessions.plan_files', 'Plan files')}</dt>
+              <dd className="summary-chip-row">
+                {enrich.planFiles.map(p => (
+                  <span key={p} className="session-tag plan mono" title={p}>
+                    {baseName(p)}
+                  </span>
+                ))}
+              </dd>
+            </>
+          )}
+          {enrich.topFiles?.length > 0 && (
+            <>
+              <dt>{t('sessions.top_files', 'Top-touched files')}</dt>
+              <dd className="summary-chip-row">
+                {enrich.topFiles.map(f => (
+                  <span key={f.path} className="session-tag file mono" title={`${f.path} (×${f.count})`}>
+                    {baseName(f.path)}
+                    <span className="n">×{f.count}</span>
+                  </span>
+                ))}
+              </dd>
+            </>
+          )}
+        </dl>
+      )}
+    </section>
   );
 }

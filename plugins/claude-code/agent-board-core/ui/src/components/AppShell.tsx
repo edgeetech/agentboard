@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -6,15 +7,40 @@ import { Logo } from './Logo';
 import { useTheme } from '../theme/ThemeProvider';
 import { LanguageSelector } from '../features/board/LanguageSelector';
 
+const SIDEBAR_KEY = 'agentboard.sidebar.collapsed';
+
+function useSidebarCollapsed(): [boolean, (v: boolean) => void] {
+  const [v, setV] = useState<boolean>(() => {
+    try { return localStorage.getItem(SIDEBAR_KEY) === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SIDEBAR_KEY, v ? '1' : '0'); } catch {}
+  }, [v]);
+  // Keyboard shortcut: `[` toggles (ignored while typing in inputs)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== '[') return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && /INPUT|TEXTAREA|SELECT/.test(el.tagName)) return;
+      if (el && el.isContentEditable) return;
+      setV(prev => !prev);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return [v, setV];
+}
+
 export function AppShell() {
   const { t } = useTranslation();
+  const [collapsed, setCollapsed] = useSidebarCollapsed();
   const alive = useQuery({ queryKey: ['alive'], queryFn: api.alive, refetchInterval: 5000 });
   const active = useQuery({ queryKey: ['active-project'], queryFn: api.activeProject, enabled: alive.isSuccess });
   const offline = alive.failureCount >= 3;
   const project = active.data?.project;
 
   return (
-    <div className="app-shell">
+    <div className={'app-shell' + (collapsed ? ' side-collapsed' : '')}>
       <nav className="app-nav">
         <NavLink to="/" className="brand" aria-label="AgentBoard">
           <Logo size={28} />
@@ -39,24 +65,30 @@ export function AppShell() {
 
       <aside className="app-side">
         <div className="section">{t('nav.workspace', 'Workspace')}</div>
-        <NavLink to="/" end>
-          <span className="icon" aria-hidden>▦</span> {t('nav.board', 'Board')}
+        <NavLink to="/" end title={t('nav.board', 'Board')}>
+          <span className="icon" aria-hidden>▦</span>
+          <span className="nav-label">{t('nav.board', 'Board')}</span>
         </NavLink>
-        <NavLink to="/skills">
-          <span className="icon" aria-hidden>✦</span> {t('nav.skills', 'Skills')}
+        <NavLink to="/skills" title={t('nav.skills', 'Skills')}>
+          <span className="icon" aria-hidden>✦</span>
+          <span className="nav-label">{t('nav.skills', 'Skills')}</span>
         </NavLink>
-        <NavLink to="/roles">
-          <span className="icon" aria-hidden>◉</span> {t('nav.roles', 'Roles')}
+        <NavLink to="/roles" title={t('nav.roles', 'Roles')}>
+          <span className="icon" aria-hidden>◉</span>
+          <span className="nav-label">{t('nav.roles', 'Roles')}</span>
         </NavLink>
-        <NavLink to="/sessions">
-          <span className="icon" aria-hidden>⟳</span> {t('nav.sessions', 'Sessions')}
+        <NavLink to="/sessions" title={t('nav.sessions', 'Sessions')}>
+          <span className="icon" aria-hidden>⟳</span>
+          <span className="nav-label">{t('nav.sessions', 'Sessions')}</span>
         </NavLink>
         <div className="section">{t('nav.manage', 'Manage')}</div>
-        <NavLink to="/project">
-          <span className="icon" aria-hidden>⌘</span> {t('nav.project', 'Project')}
+        <NavLink to="/project" title={t('nav.project', 'Project')}>
+          <span className="icon" aria-hidden>⌘</span>
+          <span className="nav-label">{t('nav.project', 'Project')}</span>
         </NavLink>
-        <NavLink to="/theme">
-          <span className="icon" aria-hidden>◐</span> {t('nav.theme', 'Theme')}
+        <NavLink to="/theme" title={t('nav.theme', 'Theme')}>
+          <span className="icon" aria-hidden>◐</span>
+          <span className="nav-label">{t('nav.theme', 'Theme')}</span>
         </NavLink>
         {project && (
           <div className="project-card">
@@ -65,6 +97,22 @@ export function AppShell() {
             <div className="code">{project.code} · {project.workflow_type}</div>
           </div>
         )}
+
+        <button
+          type="button"
+          className="side-toggle"
+          onClick={() => setCollapsed(!collapsed)}
+          title={collapsed ? t('nav.expand', 'Expand sidebar ([)') : t('nav.collapse', 'Collapse sidebar ([)')}
+          aria-label={collapsed ? t('nav.expand', 'Expand sidebar') : t('nav.collapse', 'Collapse sidebar')}
+          aria-expanded={!collapsed}
+        >
+          <svg className="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <polyline points={collapsed ? '9 6 15 12 9 18' : '15 6 9 12 15 18'} />
+          </svg>
+          <span className="side-toggle-label">
+            {collapsed ? t('nav.expand', 'Expand') : t('nav.collapse', 'Collapse')}
+          </span>
+        </button>
       </aside>
 
       <main className="app-main">

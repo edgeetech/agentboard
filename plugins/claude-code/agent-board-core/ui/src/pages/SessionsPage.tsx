@@ -12,9 +12,22 @@ type Session = {
   lastEventAt: string;
   eventCount: number;
   compactCount: number;
+  firstPrompt?: string | null;
+  intent?: string | null;
+  role?: string | null;
+  topFiles?: Array<{ path: string; count: number }>;
+  planFiles?: string[];
   dbHash: string;      // full hash (filename without .db)
   dbHashShort: string; // first 8 chars for display
 };
+
+const INTENT_ICON: Record<string, string> = {
+  investigate: '🔎',
+  implement: '⚙',
+  discuss: '💬',
+  review: '✓',
+};
+
 
 function timeAgo(iso: string) {
   if (!iso) return '—';
@@ -39,11 +52,6 @@ function durationMin(a: string, b: string) {
   return Math.max(0, Math.round((mb - ma) / 60_000));
 }
 
-function projectName(dir: string | null) {
-  if (!dir) return '—';
-  return dir.split(/[\\/]/).filter(Boolean).slice(-1)[0] || dir;
-}
-
 export function SessionsPage() {
   const { t } = useTranslation();
   const [q, setQ] = useState('');
@@ -66,6 +74,11 @@ export function SessionsPage() {
     return flat.filter(x =>
       x.id.toLowerCase().includes(s) ||
       (x.projectDir ?? '').toLowerCase().includes(s) ||
+      (x.firstPrompt ?? '').toLowerCase().includes(s) ||
+      (x.intent ?? '').toLowerCase().includes(s) ||
+      (x.role ?? '').toLowerCase().includes(s) ||
+      (x.topFiles ?? []).some(f => f.path.toLowerCase().includes(s)) ||
+      (x.planFiles ?? []).some(p => p.toLowerCase().includes(s)) ||
       x.dbHash.includes(s)
     );
   }, [q, flat]);
@@ -88,14 +101,28 @@ export function SessionsPage() {
           </span>
         </div>
         <div className="actions">
-          <label className="search-bar">
+          <label className="search-bar wide">
             <SearchIcon />
             <input
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder={t('sessions.search', 'Search project or session id…')}
               aria-label="Search sessions"
+              autoComplete="off"
+              spellCheck={false}
             />
+            {q && (
+              <button
+                type="button"
+                className="search-clear"
+                onClick={() => setQ('')}
+                aria-label={t('common.clear', 'Clear')}
+                title={t('common.clear', 'Clear')}
+              >×</button>
+            )}
+            <span className="search-count mono">
+              {filtered.length}/{flat.length}
+            </span>
           </label>
         </div>
       </div>
@@ -129,18 +156,45 @@ export function SessionsPage() {
             <Stat label={t('sessions.dbs', 'Databases')} value={data.data?.dbs.length ?? 0} />
           </div>
 
+          {q.trim() && filtered.length === 0 && (
+            <div className="empty-state">
+              <h3>{t('sessions.no_matches', 'No matches')}</h3>
+              <p className="muted">
+                {t('sessions.no_matches_hint', 'No session matches')} <code>{q.trim()}</code>
+              </p>
+            </div>
+          )}
+
           <div className="session-list">
             {filtered.map(s => {
               const dur = durationMin(s.startedAt, s.lastEventAt);
               return (
                 <Link
-                  key={s.id}
+                  key={`${s.dbHash}:${s.id}`}
                   to={`/sessions/${encodeURIComponent(s.dbHash)}/${encodeURIComponent(s.id)}`}
                   className="session-row"
                 >
                   <div className="session-main">
-                    <div className="session-project">{projectName(s.projectDir)}</div>
+                    <div className="session-title oneline" title={s.firstPrompt ?? undefined}>
+                      {s.firstPrompt
+                        ? <span className="quoted">“{s.firstPrompt}”</span>
+                        : <span className="muted">{t('sessions.untitled', 'No prompt recorded')}</span>}
+                    </div>
+                    <div className="session-sub mono" title={s.projectDir ?? undefined}>
+                      {s.projectDir || '—'}
+                    </div>
                     <div className="session-meta mono">{s.id.slice(0, 12)} · db:{s.dbHashShort}</div>
+                  </div>
+                  <div className="session-stat intent-col">
+                    <span className="label">{t('sessions.intent', 'Intent')}</span>
+                    <span className="value">
+                      {s.intent ? (
+                        <span className={`session-tag intent intent-${s.intent}`}>
+                          <span aria-hidden>{INTENT_ICON[s.intent] || '•'}</span>
+                          {s.intent}
+                        </span>
+                      ) : <span className="muted">—</span>}
+                    </span>
                   </div>
                   <div className="session-stat">
                     <span className="label">{t('sessions.started', 'Started')}</span>
