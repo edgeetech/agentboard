@@ -9,10 +9,9 @@ import {
 import { api } from '../../api';
 import { CreateTaskModal } from './CreateTaskModal';
 import { TaskDetailPanel } from './TaskDetailPanel';
-import { useCardView } from '../../hooks/useCardView';
-import type { CardView as CardViewMode } from '../../hooks/useCardView';
 import { useDetailView } from '../../hooks/useDetailView';
 import { SearchIcon } from '../../components/SearchIcon';
+import { iconForStatus, WorkingDots } from './ColumnIcons';
 
 type Project = {
   id: string; code: string; name: string;
@@ -56,7 +55,6 @@ export function Board({ project }: { project: Project }) {
   const { t } = useTranslation();
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [view, setView] = useCardView();
   const [, setDetailView] = useDetailView();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
@@ -156,7 +154,6 @@ export function Board({ project }: { project: Project }) {
             </span>
           )}
           <div className="action-group">
-            <ViewToggle value={view} onChange={setView} />
             <button className="primary" onClick={() => setCreating(true)}>+ {t('board.new_task')}</button>
           </div>
         </div>
@@ -170,7 +167,6 @@ export function Board({ project }: { project: Project }) {
                 <DraggableCard
                   key={task.id}
                   task={task}
-                  view={view}
                   onClick={() => openTask(task.code)}
                 />
               ))}
@@ -179,7 +175,7 @@ export function Board({ project }: { project: Project }) {
         </div>
 
         <DragOverlay dropAnimation={null}>
-          {activeTask ? <CardView task={activeTask} view={view} overlay /> : null}
+          {activeTask ? <CardView task={activeTask} overlay /> : null}
         </DragOverlay>
       </DndContext>
 
@@ -200,39 +196,25 @@ export function Board({ project }: { project: Project }) {
   );
 }
 
-function ViewToggle({ value, onChange }: { value: CardViewMode; onChange: (v: CardViewMode) => void }) {
-  const { t } = useTranslation();
-  return (
-    <div className="view-toggle" role="tablist" aria-label={t('board.view', 'View')}>
-      <button
-        className={value === 'modern' ? 'active' : ''}
-        onClick={() => onChange('modern')}
-        role="tab" aria-selected={value === 'modern'}
-      >{t('board.modern', 'Modern')}</button>
-      <button
-        className={value === 'classic' ? 'active' : ''}
-        onClick={() => onChange('classic')}
-        role="tab" aria-selected={value === 'classic'}
-      >{t('board.classic', 'Classic')}</button>
-    </div>
-  );
-}
-
 function DroppableColumn({
   id, status, label, count, children,
 }: { id: string; status: string; label: string; count: number; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div ref={setNodeRef} className={`column col-${status}` + (isOver ? ' drop-hint' : '')}>
-      <h2>{label}<span className="count">{count}</span></h2>
+      <h2>
+        <span className="col-icon-wrap">{iconForStatus(status)}</span>
+        <span className="col-label">{label}</span>
+        <span className="count">{count}</span>
+      </h2>
       <div className="cards">{children}</div>
     </div>
   );
 }
 
 function DraggableCard({
-  task, view, onClick,
-}: { task: Task; view: CardViewMode; onClick: () => void }) {
+  task, onClick,
+}: { task: Task; onClick: () => void }) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: task.code,
     data: { code: task.code, status: task.status },
@@ -248,42 +230,39 @@ function DraggableCard({
       {...attributes}
       onClick={e => { if (!isDragging) onClick(); e.stopPropagation(); }}
     >
-      <CardView task={task} view={view} dragging={isDragging} />
+      <CardView task={task} dragging={isDragging} />
     </div>
   );
 }
 
 function CardView({
-  task, view, dragging = false, overlay = false,
-}: { task: Task; view: CardViewMode; dragging?: boolean; overlay?: boolean }) {
+  task, dragging = false, overlay = false,
+}: { task: Task; dragging?: boolean; overlay?: boolean }) {
   const { t } = useTranslation();
   const attention = needsAttention(task);
   const role = (task.assignee_role || '').toLowerCase();
   const live = task.status === 'agent_working' || task.status === 'agent_review';
   const cls = [
     'card',
-    view === 'classic' ? 'classic' : 'modern',
     role ? `role-${role}` : '',
     attention ? 'needs-attention' : '',
     live ? 'live' : '',
     dragging ? 'dragging' : '',
     overlay ? 'is-drag-overlay' : '',
   ].filter(Boolean).join(' ');
-  const isModern = view !== 'classic';
   return (
     <div className={cls}>
       {attention && <span className="attention-dot" aria-label={t('board.needs_attention', 'Needs attention')} />}
       <div className="row card-head">
         <span className="code">{task.code}</span>
         {(task.rework_count ?? 0) > 3 && <span className="stall-badge">{t('board.stalled')}</span>}
-        {isModern && <span className="card-head-spacer" />}
-        {isModern && <span className="rec">{live ? 'LIVE' : 'IDLE'}</span>}
       </div>
       <div className="card-title">{task.title}</div>
       <div className="card-foot">
         {task.assignee_role ? (
           <span className={`role-chip ${role}`}>{t(`role.${task.assignee_role}`, task.assignee_role)}</span>
         ) : <span className="muted">—</span>}
+        {task.status === 'agent_working' && <WorkingDots />}
       </div>
     </div>
   );
