@@ -22,6 +22,8 @@ const CLAUDE = [
   'ANTHROPIC_AUTH_TOKEN',
   'ANTHROPIC_BASE_URL',
   'CLAUDE_CODE_OAUTH_TOKEN',
+  'CLAUDE_CONFIG_DIR',
+  'XDG_CONFIG_HOME',
 ];
 
 export function buildChildEnv(base = process.env) {
