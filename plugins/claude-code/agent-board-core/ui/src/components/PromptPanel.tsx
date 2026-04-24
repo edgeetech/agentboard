@@ -45,7 +45,11 @@ export function PromptPanel({
         {q.isLoading && <div className="center"><div className="spinner" /></div>}
         {q.isError && (
           <div className="muted" style={{ padding: '0.75rem' }}>
-            {String((q.error as Error)?.message || 'error')}
+            {(() => {
+              const raw = String((q.error as Error)?.message || 'error');
+              if (raw === 'prompt not found') return t('prompt.not_found', 'Prompt not found');
+              return raw;
+            })()}
           </div>
         )}
         {!q.isLoading && !q.isError && !q.data?.content && (

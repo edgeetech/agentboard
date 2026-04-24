@@ -26,6 +26,11 @@
     "clear": "Limpiar",
     "copied": "Copiado ✓"
   },
+  "prompt": {
+    "copy": "Copiar",
+    "missing": "Aún no hay archivo de prompt para este {{kind}}.",
+    "not_found": "Prompt no encontrado"
+  },
   "nav": {
     "board": "Tablero",
     "skills": "Habilidades",
@@ -36,6 +41,8 @@
     "workspace": "Área de trabajo",
     "manage": "Gestionar",
     "active": "Proyecto activo",
+    "pick_project": "Elige un proyecto…",
+    "new_project": "Nuevo proyecto…",
     "collapse": "Contraer barra lateral ([)",
     "expand": "Expandir barra lateral ([)"
   },
@@ -233,13 +240,24 @@
     "active": "Activo",
     "click_apply": "Haz clic para aplicar",
     "dark_only": "Sólo modo oscuro",
-    "dark_only_hint": "Esta paleta sólo se aplica cuando está seleccionado el modo oscuro."
+    "dark_only_hint": "Esta paleta sólo se aplica cuando está seleccionado el modo oscuro.",
+    "palette_default_tagline": "Neutros cálidos, ámbar + arcilla — la paleta base.",
+    "palette_edgeetech_tagline": "Degradado magenta → índigo → zafiro de la marca.",
+    "palette_primer_tagline": "Tokens GitHub Primer — accesibles, en modo claro y oscuro.",
+    "palette_mono_tagline": "Tonos de gris, carbón y negro — minimalista, editorial.",
+    "palette_neon_tagline": "Lienzo negro con verde neón, azul eléctrico y rosa intenso.",
+    "palette_warm_tagline": "Negro suave con coral, oro y naranja quemado — cálido, acogedor.",
+    "palette_pastel_tagline": "Gris pizarra con cian claro, rosa suave y lavanda — tranquilo y juguetón.",
+    "palette_jewel_tagline": "Negro profundo con turquesa, rubí y verde bosque — premium.",
+    "palette_vibrant_tagline": "Fondo oscuro con naranja vivo, morado intenso y amarillo brillante."
   },
   "project": {
     "title": "Proyecto",
     "subtitle": "Ajustes, ruta del repo y límites de despacho.",
     "none_title": "Sin proyecto activo",
-    "none_body": "Crea un proyecto desde el Tablero primero."
+    "none_body": "Crea un proyecto desde el Tablero primero.",
+    "not_found_title": "Proyecto no encontrado",
+    "not_found_body": "El proyecto <c>{{code}}</c> no existe. Elige uno a continuación o crea uno nuevo."
   },
   "catalog": {
     "local_note": "Almacenado localmente en este navegador hasta que el servidor añada una API de catálogo."

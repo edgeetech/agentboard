@@ -17,7 +17,7 @@ import {
   finishRun, getProject, getTask, listComments, reapOrphans,
   claimRun as claimRunRow,
 } from './repo.mjs';
-import { getActiveDb } from './project-registry.mjs';
+import { getActiveDb, getDb, listProjectDbs } from './project-registry.mjs';
 import { readConfig } from './config.mjs';
 import { isoNow } from './time.mjs';
 
@@ -35,26 +35,29 @@ export function startExecutor({ port, serverToken }) {
 }
 
 async function reap() {
-  const active = await getActiveDb();
-  if (!active) return;
-  const orphaned = reapOrphans(active.db, REAPER_TIMEOUT_MS);
-  if (orphaned.length) console.log('[reaper] marked', orphaned.length, 'runs as failed');
+  for (const code of listProjectDbs()) {
+    try {
+      const db = await getDb(code);
+      const orphaned = reapOrphans(db, REAPER_TIMEOUT_MS);
+      if (orphaned.length) console.log('[reaper]', code, 'marked', orphaned.length, 'runs as failed');
+    } catch (e) { logErr(e); }
+  }
 }
 
 async function drain({ port, serverToken }) {
-  const active = await getActiveDb();
-  if (!active) return;
-  const { db } = active;
-  const project = getProject(db);
-  if (!project) return;
-
-  const running = runningCount(db);
-  const budget = project.max_parallel - running;
-  if (budget <= 0) return;
-
-  const queued = listQueuedRunsForProject(db).slice(0, budget);
-  for (const q of queued) {
-    await tryClaimAndSpawn(db, project, q, { port, serverToken });
+  for (const code of listProjectDbs()) {
+    try {
+      const db = await getDb(code);
+      const project = getProject(db);
+      if (!project) continue;
+      const running = runningCount(db);
+      const budget = project.max_parallel - running;
+      if (budget <= 0) continue;
+      const queued = listQueuedRunsForProject(db).slice(0, budget);
+      for (const q of queued) {
+        await tryClaimAndSpawn(db, project, q, { port, serverToken });
+      }
+    } catch (e) { logErr(e); }
   }
 }
 

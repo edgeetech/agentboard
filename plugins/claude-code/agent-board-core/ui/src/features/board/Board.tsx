@@ -84,7 +84,7 @@ export function Board({ project }: { project: Project }) {
   }
 
   const tasks = useQuery({
-    queryKey: ['tasks', searchDebounced],
+    queryKey: ['tasks', project.code, searchDebounced],
     queryFn: () => api.listTasks(searchDebounced || undefined),
   });
   const total = useQuery({
@@ -188,7 +188,7 @@ export function Board({ project }: { project: Project }) {
           onClose={() => setSelected(null)}
           onSwapVariant={() => {
             setDetailView('page');
-            navigate(`/tasks/${encodeURIComponent(selected)}`);
+            navigate(`/projects/${encodeURIComponent(project.code)}/tasks/${encodeURIComponent(selected)}`);
           }}
         />
       )}

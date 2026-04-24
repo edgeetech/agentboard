@@ -26,6 +26,11 @@
     "clear": "Temizle",
     "copied": "Kopyalandı ✓"
   },
+  "prompt": {
+    "copy": "Kopyala",
+    "missing": "Bu {{kind}} için henüz bir prompt dosyası yok.",
+    "not_found": "Prompt bulunamadı"
+  },
   "nav": {
     "board": "Pano",
     "skills": "Yetenekler",
@@ -36,6 +41,8 @@
     "workspace": "Çalışma Alanı",
     "manage": "Yönet",
     "active": "Aktif proje",
+    "pick_project": "Bir proje seç…",
+    "new_project": "Yeni proje…",
     "collapse": "Kenar çubuğunu daralt ([)",
     "expand": "Kenar çubuğunu genişlet ([)"
   },
@@ -233,13 +240,24 @@
     "active": "Aktif",
     "click_apply": "Uygulamak için tıkla",
     "dark_only": "Sadece karanlık mod",
-    "dark_only_hint": "Bu palet yalnızca Karanlık renk modu seçildiğinde uygulanır."
+    "dark_only_hint": "Bu palet yalnızca Karanlık renk modu seçildiğinde uygulanır.",
+    "palette_default_tagline": "Sıcak nötrler, amber + kil — varsayılan palet.",
+    "palette_edgeetech_tagline": "Marka logosundan macenta → indigo → safir geçişi.",
+    "palette_primer_tagline": "GitHub Primer renkleri — erişilebilir, açık ve koyu uyumlu.",
+    "palette_mono_tagline": "Gri, kömür ve siyah tonları — minimal, editoryal.",
+    "palette_neon_tagline": "Zifiri siyah üzerinde neon yeşil, elektrik mavi, canlı pembe.",
+    "palette_warm_tagline": "Yumuşak siyah ile mercan, altın ve yanık turuncu — sıcak, davetkâr.",
+    "palette_pastel_tagline": "Arduvaz gri ile açık camgöbeği, yumuşak pembe, lavanta — sakin, eğlenceli.",
+    "palette_jewel_tagline": "Zengin siyah ile turkuaz, yakut, orman yeşili — prestijli, zarif.",
+    "palette_vibrant_tagline": "Koyu fon üzerinde canlı turuncu, derin mor, parlak sarı."
   },
   "project": {
     "title": "Proje",
     "subtitle": "Ayarlar, kod dizini ve gönderim limitleri.",
     "none_title": "Aktif proje yok",
-    "none_body": "Önce Pano sayfasından bir proje oluştur."
+    "none_body": "Önce Pano sayfasından bir proje oluştur.",
+    "not_found_title": "Proje bulunamadı",
+    "not_found_body": "<c>{{code}}</c> projesi mevcut değil. Aşağıdan birini seç veya yeni bir proje oluştur."
   },
   "catalog": {
     "local_note": "Sunucu bir katalog API'si ekleyene kadar yalnızca bu tarayıcıda saklanır."

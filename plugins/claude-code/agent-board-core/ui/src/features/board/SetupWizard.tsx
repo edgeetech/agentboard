@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../api';
 
 export function SetupWizard() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [code, setCode] = useState('');
@@ -27,7 +29,12 @@ export function SetupWizard() {
     mutationFn: () => api.createProject({
       code, name, description, workflow_type: workflow, repo_path: repoPath,
     }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['active-project'] }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['active-project'] });
+      qc.invalidateQueries({ queryKey: ['projects-list'] });
+      const newCode = data?.project?.code || code;
+      navigate(`/projects/${encodeURIComponent(newCode)}`, { replace: true });
+    },
     onError: (e: Error) => setErr(e.message),
   });
 

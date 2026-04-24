@@ -27,6 +27,11 @@
     "copied": "Copied ✓"
   },
   "catalog": { "local_note": "Stored locally in this browser until the server adds a catalog API." },
+  "prompt": {
+    "copy": "Copy",
+    "missing": "No prompt file for this {{kind}} yet.",
+    "not_found": "Prompt not found"
+  },
   "nav": {
     "board": "Board",
     "skills": "Skills",
@@ -37,6 +42,8 @@
     "workspace": "Workspace",
     "manage": "Manage",
     "active": "Active project",
+    "pick_project": "Pick a project…",
+    "new_project": "New project…",
     "collapse": "Collapse sidebar ([)",
     "expand": "Expand sidebar ([)"
   },
@@ -130,7 +137,16 @@
     "active": "Active",
     "click_apply": "Click to apply",
     "dark_only": "Dark mode only",
-    "dark_only_hint": "This palette only applies when the Dark colour scheme is selected."
+    "dark_only_hint": "This palette only applies when the Dark colour scheme is selected.",
+    "palette_default_tagline": "Warm neutrals, amber + clay — the home palette.",
+    "palette_edgeetech_tagline": "Magenta → indigo → sapphire gradient from the brand mark.",
+    "palette_primer_tagline": "GitHub Primer tokens — accessibility-first, works in light and dark.",
+    "palette_mono_tagline": "Shades of gray, charcoal, and black — minimal, editorial.",
+    "palette_neon_tagline": "Pitch-black canvas with neon green, electric blue, vivid pink.",
+    "palette_warm_tagline": "Soft black with coral, gold, and burnt orange — cosy, inviting.",
+    "palette_pastel_tagline": "Slate grey with light cyan, soft pink, lavender — calm, playful.",
+    "palette_jewel_tagline": "Rich black with teal, ruby, forest green — premium, sleek.",
+    "palette_vibrant_tagline": "Dark stage with vivid orange, deep purple, bright yellow."
   },
   "foot": {
     "connected": "Connected",
@@ -214,7 +230,9 @@
     "title": "Project",
     "subtitle": "Settings, repo path, and dispatch limits.",
     "none_title": "No active project",
-    "none_body": "Create a project from the Board page first."
+    "none_body": "Create a project from the Board page first.",
+    "not_found_title": "Project not found",
+    "not_found_body": "The project <c>{{code}}</c> doesn't exist. Pick one below or create a new project."
   },
   "task": {
     "title": "Title",

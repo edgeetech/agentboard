@@ -1,5 +1,23 @@
 const token = () => window.__AGENTBOARD_TOKEN || '';
 
+// Per-tab project scope. Set by useProjectCode() on every project-scoped route
+// mount. All task/run APIs prepend `/api/projects/${code}` when it's set.
+// A module-level variable is per-tab because each browser tab has its own JS
+// module instance. Unset (null) → fall back to the legacy active-DB routes.
+let currentProjectCode: string | null = null;
+export function setProjectCode(code: string | null) {
+  currentProjectCode = code;
+}
+export function getProjectCode(): string | null {
+  return currentProjectCode;
+}
+
+function taskBase(): string {
+  return currentProjectCode
+    ? `/api/projects/${encodeURIComponent(currentProjectCode)}/tasks`
+    : '/api/tasks';
+}
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
     method,
@@ -21,34 +39,36 @@ export const api = {
   healthz: () => call<any>('GET', '/healthz'),
   listProjects: () => call<{ projects: any[] }>('GET', '/api/projects/list'),
   activeProject: () => call<{ project: any | null }>('GET', '/api/projects/active'),
+  selectActiveProject: (code: string) =>
+    call<{ ok: boolean }>('POST', '/api/projects/active/select', { code }),
   suggestCode: (name: string) =>
     call<{ code: string }>('GET', `/api/projects/suggest-code?name=${encodeURIComponent(name)}`),
   createProject: (body: {
     code: string; name: string; description?: string;
     workflow_type: 'WF1' | 'WF2'; repo_path: string;
   }) => call<{ project: any }>('POST', '/api/projects', body),
-  listTasks: (search?: string) => call<{ tasks: any[] }>('GET', search ? `/api/tasks?search=${encodeURIComponent(search)}` : '/api/tasks'),
+  listTasks: (search?: string) => call<{ tasks: any[] }>('GET', search ? `${taskBase()}?search=${encodeURIComponent(search)}` : taskBase()),
   createTask: (body: { title: string; description?: string }) =>
-    call<{ task: any; runId?: string }>('POST', '/api/tasks', body),
+    call<{ task: any; runId?: string }>('POST', taskBase(), body),
   getTask: (code: string) =>
-    call<{ task: any; project: any; comments: any[]; runs: any[] }>('GET', `/api/tasks/${encodeURIComponent(code)}`),
+    call<{ task: any; project: any; comments: any[]; runs: any[] }>('GET', `${taskBase()}/${encodeURIComponent(code)}`),
   dispatch: (code: string, role: 'pm' | 'worker' | 'reviewer') =>
-    call<{ runId: string }>('POST', `/api/tasks/${encodeURIComponent(code)}/dispatch`, { role }),
+    call<{ runId: string }>('POST', `${taskBase()}/${encodeURIComponent(code)}/dispatch`, { role }),
   cancelRun: (code: string) =>
-    call<{ ok: boolean; runId: string }>('POST', `/api/tasks/${encodeURIComponent(code)}/cancel-run`),
+    call<{ ok: boolean; runId: string }>('POST', `${taskBase()}/${encodeURIComponent(code)}/cancel-run`),
   retryFromWorker: (code: string) =>
-    call<{ ok: boolean; runId?: string }>('POST', `/api/tasks/${encodeURIComponent(code)}/retry-from-worker`),
+    call<{ ok: boolean; runId?: string }>('POST', `${taskBase()}/${encodeURIComponent(code)}/retry-from-worker`),
   approve: (code: string) =>
-    call<any>('POST', `/api/tasks/${encodeURIComponent(code)}/transition`, {
+    call<any>('POST', `${taskBase()}/${encodeURIComponent(code)}/transition`, {
       to_status: 'done', to_assignee: 'human', by_role: 'human',
     }),
   reject: (code: string, reject_comment: string) =>
-    call<any>('POST', `/api/tasks/${encodeURIComponent(code)}/transition`, {
+    call<any>('POST', `${taskBase()}/${encodeURIComponent(code)}/transition`, {
       to_status: 'agent_working', to_assignee: 'worker', by_role: 'human', reject_comment,
     }),
   transition: (code: string, payload: { to_status: string; to_assignee: string; by_role: string; reject_comment?: string }) =>
-    call<any>('POST', `/api/tasks/${encodeURIComponent(code)}/transition`, payload),
-  taskCost: (code: string) => call<any>('GET', `/api/tasks/${encodeURIComponent(code)}/cost`),
+    call<any>('POST', `${taskBase()}/${encodeURIComponent(code)}/transition`, payload),
+  taskCost: (code: string) => call<any>('GET', `${taskBase()}/${encodeURIComponent(code)}/cost`),
   sessions: () => call<{ dir: string; dbs: Array<{
     hash: string; size: string; sizeBytes: number;
     sessions: Array<{
@@ -81,7 +101,7 @@ export const api = {
     error?: string;
   }>('GET', `/api/sessions/${encodeURIComponent(hash)}/events/${encodeURIComponent(sessionId)}`),
   deleteTask: (code: string) =>
-    call<{ ok: boolean; cancelled_runs: number }>('DELETE', `/api/tasks/${encodeURIComponent(code)}`),
+    call<{ ok: boolean; cancelled_runs: number }>('DELETE', `${taskBase()}/${encodeURIComponent(code)}`),
   projectCostsTotal: (code: string) =>
     call<any>('GET', `/api/projects/${encodeURIComponent(code)}/costs/total`),
   updateProject: (code: string, patch: Record<string, unknown> & { version: number }) =>

@@ -18,7 +18,7 @@ import { handlePrompts } from './src/api-prompts.mjs';
 import { handleMcp } from './src/api-mcp.mjs';
 import { startExecutor } from './src/executor.mjs';
 import { runningCount } from './src/repo.mjs';
-import { getActiveDb } from './src/project-registry.mjs';
+import { getActiveDb, listProjectDbs, getDb } from './src/project-registry.mjs';
 
 const SERVER_BOOT_ID = randomUUID();
 const UI_DIST = new URL('./ui/dist/', import.meta.url);
@@ -133,15 +133,22 @@ server.listen(args.port, '127.0.0.1', () => {
   startExecutor({ port, serverToken: token });
 });
 
-// Idle shutdown: no API hit 10min AND no running runs AND queue empty
+// Idle shutdown: no API hit 10min AND no running/queued runs across ANY project.
 setInterval(async () => {
   const idleFor = Date.now() - lastApiHitMs;
   if (idleFor < 10 * 60_000) return;
-  const active = await getActiveDb();
-  if (!active) return process.exit(0);
-  const running = runningCount(active.db);
-  const queued = active.db.prepare(`SELECT COUNT(*) AS n FROM agent_run WHERE status='queued'`).get().n;
-  if (running === 0 && queued === 0) {
+  const codes = listProjectDbs();
+  if (codes.length === 0) return process.exit(0);
+  let anyActive = false;
+  for (const code of codes) {
+    try {
+      const db = await getDb(code);
+      const running = runningCount(db);
+      const queued = db.prepare(`SELECT COUNT(*) AS n FROM agent_run WHERE status='queued'`).get().n;
+      if (running > 0 || queued > 0) { anyActive = true; break; }
+    } catch {}
+  }
+  if (!anyActive) {
     console.log('[server] idle shutdown');
     process.exit(0);
   }

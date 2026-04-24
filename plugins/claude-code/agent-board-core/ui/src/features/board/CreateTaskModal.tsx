@@ -29,7 +29,7 @@ export function CreateTaskModal({ onClose }: { onClose: () => void }) {
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} />
           </label>
           <div className="actions">
-            <button type="button" onClick={onClose}>Cancel</button>
+            <button type="button" onClick={onClose}>{t('common.cancel', 'Cancel')}</button>
             <button type="submit" disabled={!title.trim() || m.isPending}>
               {t('board.new_task')}
             </button>

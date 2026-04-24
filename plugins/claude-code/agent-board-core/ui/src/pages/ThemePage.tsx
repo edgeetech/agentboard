@@ -140,7 +140,7 @@ export function ThemePage() {
                         </span>
                       )}
                     </h4>
-                    <div className="muted">{o.tagline}</div>
+                    <div className="muted">{t(`theme.palette_${o.id}_tagline`, o.tagline)}</div>
                   </div>
                 </div>
                 <div className="theme-swatches">

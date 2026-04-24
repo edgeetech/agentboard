@@ -205,6 +205,76 @@ input:focus, textarea:focus, select:focus {
 .app-nav .nav-item:hover { color: var(--text); background: var(--surface-alt); }
 .app-nav .nav-item.active { color: var(--text); background: var(--bg-alt); }
 
+/* Sidebar project picker — replaces the static active-project card */
+.project-picker-card { position: relative; }
+.project-picker-trigger {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; margin-top: 0.35rem; padding: 0.5rem 0.6rem;
+  background: var(--bg-alt); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); color: var(--text); cursor: pointer;
+  text-align: left; font: inherit;
+}
+.project-picker-trigger:hover { background: var(--surface-alt); }
+.project-picker-main { min-width: 0; overflow: hidden; }
+.project-picker-main .name {
+  font-weight: 800; font-size: 13.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.project-picker-main .code { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.project-picker-caret { color: var(--muted); margin-left: 0.4rem; }
+.project-picker-menu {
+  /* Opens UP from the trigger — picker sits near the bottom of the sidebar,
+     so upward keeps the menu inside the viewport. Absolute positioning + a
+     fixed width = sidebar dimensions don't shift when the menu opens. */
+  position: absolute; left: 0; width: 100%;
+  bottom: calc(100% + 4px); top: auto;
+  padding: 0.3rem;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  z-index: 20; max-height: 320px; overflow: auto;
+  box-sizing: border-box;
+}
+.project-picker-item {
+  display: block; width: 100%; padding: 0.5rem 0.6rem;
+  background: transparent; border: 0; border-radius: var(--radius-sm);
+  color: var(--text); cursor: pointer; text-align: left; font: inherit;
+}
+.project-picker-item:hover { background: var(--surface-alt); }
+.project-picker-item.is-active { background: var(--bg-alt); }
+.project-picker-item .name {
+  font-weight: 800; font-size: 13.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.project-picker-item .code {
+  font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.project-picker-new { color: var(--muted); font-weight: 600; margin-top: 0.2rem; border-top: 1px dashed var(--line); border-radius: 0; }
+.project-picker-new:hover { color: var(--text); }
+.project-picker-empty {
+  display: block; width: 100%; margin-top: 0.35rem; padding: 0.5rem 0.6rem;
+  background: var(--bg-alt); border: 1px dashed var(--line);
+  border-radius: var(--radius-sm); color: var(--text-soft);
+  cursor: pointer; font: inherit;
+}
+.project-picker-empty:hover { color: var(--text); background: var(--surface-alt); }
+
+.project-not-found { max-width: 420px; margin: 3rem auto; }
+.project-not-found-list {
+  display: flex; flex-direction: column; gap: 0.4rem; margin-top: 1.25rem;
+}
+.project-not-found-item {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 0.6rem 0.8rem; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); color: var(--text);
+  cursor: pointer; font: inherit; text-align: left;
+}
+.project-not-found-item:hover { background: var(--surface-alt); }
+.project-not-found-item .name { font-weight: 700; }
+.project-not-found-item .code { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.project-not-found-new { color: var(--muted); justify-content: flex-start; border-style: dashed; }
+.project-not-found-new:hover { color: var(--text); }
+
 .theme-toggle {
   width: 64px; height: 32px;
   background: var(--bg-alt); border: 1px solid var(--line);

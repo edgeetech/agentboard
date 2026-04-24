@@ -6,6 +6,8 @@ import { api } from '../api';
 import { Logo } from './Logo';
 import { useTheme } from '../theme/ThemeProvider';
 import { LanguageSelector } from '../features/board/LanguageSelector';
+import { ProjectPicker } from './ProjectPicker';
+import { useCurrentProject } from '../hooks/useCurrentProjectCode';
 
 const SIDEBAR_KEY = 'agentboard.sidebar.collapsed';
 
@@ -35,19 +37,23 @@ export function AppShell() {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
   const alive = useQuery({ queryKey: ['alive'], queryFn: api.alive, refetchInterval: 5000 });
-  const active = useQuery({ queryKey: ['active-project'], queryFn: api.activeProject, enabled: alive.isSuccess });
+  // projects-list used inside useCurrentProject; warm its cache eagerly here.
+  useQuery({ queryKey: ['projects-list'], queryFn: api.listProjects, enabled: alive.isSuccess });
   const offline = alive.failureCount >= 3;
-  const project = active.data?.project;
+  // Effective "current project" — URL code > last-viewed localStorage > first listed.
+  const { project } = useCurrentProject();
+  const boardHref = project ? `/projects/${project.code}` : '/';
+  const projectHref = project ? `/projects/${project.code}/project` : '/';
 
   return (
     <div className={'app-shell' + (collapsed ? ' side-collapsed' : '')}>
       <nav className="app-nav">
-        <NavLink to="/" className="brand" aria-label="AgentBoard">
+        <NavLink to={boardHref} className="brand" aria-label="AgentBoard">
           <Logo size={28} />
           <span>AgentBoard</span>
         </NavLink>
         <div className="spacer" />
-        <NavLink to="/" end className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
+        <NavLink to={boardHref} end className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
           {t('nav.board', 'Board')}
         </NavLink>
         <NavLink to="/skills" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
@@ -56,7 +62,7 @@ export function AppShell() {
         <NavLink to="/roles" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
           {t('nav.roles', 'Roles')}
         </NavLink>
-        <NavLink to="/project" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
+        <NavLink to={projectHref} className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
           {t('nav.project', 'Project')}
         </NavLink>
         <ThemeToggle />
@@ -65,7 +71,7 @@ export function AppShell() {
 
       <aside className="app-side">
         <div className="section">{t('nav.workspace', 'Workspace')}</div>
-        <NavLink to="/" end title={t('nav.board', 'Board')}>
+        <NavLink to={boardHref} end title={t('nav.board', 'Board')}>
           <span className="icon" aria-hidden>▦</span>
           <span className="nav-label">{t('nav.board', 'Board')}</span>
         </NavLink>
@@ -82,7 +88,7 @@ export function AppShell() {
           <span className="nav-label">{t('nav.sessions', 'Sessions')}</span>
         </NavLink>
         <div className="section">{t('nav.manage', 'Manage')}</div>
-        <NavLink to="/project" title={t('nav.project', 'Project')}>
+        <NavLink to={projectHref} title={t('nav.project', 'Project')}>
           <span className="icon" aria-hidden>⌘</span>
           <span className="nav-label">{t('nav.project', 'Project')}</span>
         </NavLink>
@@ -90,13 +96,7 @@ export function AppShell() {
           <span className="icon" aria-hidden>◐</span>
           <span className="nav-label">{t('nav.theme', 'Theme')}</span>
         </NavLink>
-        {project && (
-          <div className="project-card">
-            <div className="label">{t('nav.active', 'Active project')}</div>
-            <div className="name">{project.name}</div>
-            <div className="code">{project.code} · {project.workflow_type}</div>
-          </div>
-        )}
+        <ProjectPicker />
 
         <button
           type="button"

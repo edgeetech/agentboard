@@ -1,5 +1,5 @@
 import { json, readJson, matchRoute } from './http-util.mjs';
-import { getActiveDb } from './project-registry.mjs';
+import { getActiveDb, getDb } from './project-registry.mjs';
 import {
   listTasks, getTask, getTaskByCode, createTask, transitionTask, retryFromWorker,
   listComments, listRuns, addComment, enqueueRun,
@@ -129,19 +129,48 @@ const TASK_ROUTES = [
   ['/api/tasks/:id/cost',              { GET: handleTaskCost }],
 ];
 
-export async function handleTasks(req, res, url) {
-  const active = await getActiveDb();
-  if (!active) return json(res, 400, { error: 'no active project' });
-  const { db } = active;
+/**
+ * Per-tab multi-project support: accept both legacy `/api/tasks/...` (uses the
+ * global active project) and project-scoped `/api/projects/:code/tasks/...`
+ * (explicit, per-tab). Project-scoped routes let the UI open multiple tabs
+ * on different projects without racing the active pointer.
+ */
+async function resolveScope(url) {
   const p = url.pathname;
+  const m = /^\/api\/projects\/([A-Za-z0-9]{2,7})(\/tasks(?:\/.*)?|\/tasks)?$/.exec(p);
+  if (m) {
+    const code = m[1];
+    const rest = m[2] || '';
+    if (!rest.startsWith('/tasks')) return { handled: false };
+    try {
+      const db = await getDb(code);
+      return { handled: true, active: { code, db }, db, taskPath: '/api' + rest };
+    } catch {
+      return { handled: true, notFound: true };
+    }
+  }
+  if (p === '/api/tasks' || p.startsWith('/api/tasks/')) {
+    const active = await getActiveDb();
+    if (!active) return { handled: true, noActive: true };
+    return { handled: true, active, db: active.db, taskPath: p };
+  }
+  return { handled: false };
+}
+
+export async function handleTasks(req, res, url) {
+  const scope = await resolveScope(url);
+  if (!scope.handled) return null;
+  if (scope.notFound) return json(res, 404, { error: 'no such project' });
+  if (scope.noActive) return json(res, 400, { error: 'no active project' });
+  const { active, db, taskPath } = scope;
   const m = req.method;
 
-  if (p === '/api/tasks' && m === 'GET') {
+  if (taskPath === '/api/tasks' && m === 'GET') {
     const search = url.searchParams.get('search') || '';
     return json(res, 200, { tasks: listTasks(db, { search }) });
   }
 
-  if (p === '/api/tasks' && m === 'POST') {
+  if (taskPath === '/api/tasks' && m === 'POST') {
     const body = await readJson(req);
     const title = (body?.title || '').trim();
     if (!title) return json(res, 400, { error: 'title required' });
@@ -150,7 +179,7 @@ export async function handleTasks(req, res, url) {
   }
 
   for (const [pattern, methodMap] of TASK_ROUTES) {
-    const mm = matchRoute(pattern, p);
+    const mm = matchRoute(pattern, taskPath);
     if (!mm) continue;
     const handler = methodMap[m];
     if (!handler) continue;

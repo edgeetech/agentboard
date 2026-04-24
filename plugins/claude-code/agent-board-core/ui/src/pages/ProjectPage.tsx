@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 import { api } from '../api';
 
 export function ProjectPage() {
   const { t } = useTranslation();
+  const { projectCode } = useParams<{ projectCode: string }>();
+  const projUpper = projectCode ? projectCode.toUpperCase() : null;
   const qc = useQueryClient();
-  const active = useQuery({ queryKey: ['active-project'], queryFn: api.activeProject });
-  const project = active.data?.project;
+  const list = useQuery({ queryKey: ['projects-list'], queryFn: api.listProjects });
+  const active = useQuery({
+    queryKey: ['active-project'],
+    queryFn: api.activeProject,
+    enabled: !projUpper,
+  });
+  const project = projUpper
+    ? (list.data?.projects.find((p: any) => p.code === projUpper) || null)
+    : active.data?.project;
 
   const [name, setName] = useState('');
   const [description, setDesc] = useState('');
@@ -39,12 +49,13 @@ export function ProjectPage() {
     onSuccess: () => {
       setSaved(t('common.saved'));
       qc.invalidateQueries({ queryKey: ['active-project'] });
+      qc.invalidateQueries({ queryKey: ['projects-list'] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
       setTimeout(() => setSaved(null), 2500);
     },
   });
 
-  if (active.isLoading) return <div className="center"><div className="spinner" /></div>;
+  if (list.isLoading || (!projUpper && active.isLoading)) return <div className="center"><div className="spinner" /></div>;
   if (!project) {
     return (
       <div className="empty-state">

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { api } from '../../api';
+import { api, getProjectCode } from '../../api';
 
 type Variant = 'drawer' | 'inline';
 
@@ -19,14 +19,15 @@ export function TaskDetailPanel({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectMsg, setRejectMsg] = useState('');
 
+  const projectCode = getProjectCode();
   const q = useQuery({
-    queryKey: ['task', taskCode],
+    queryKey: ['task', projectCode, taskCode],
     queryFn: () => api.getTask(taskCode),
     refetchInterval: 3000,
   });
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['task', taskCode] });
+    qc.invalidateQueries({ queryKey: ['task', projectCode, taskCode] });
     qc.invalidateQueries({ queryKey: ['tasks'] });
   };
   const dispatch = useMutation({
