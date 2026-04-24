@@ -118,13 +118,17 @@ After that, every `git commit` with code changes bumps `0.1.x` → `0.1.(x+1)`
 in both `plugin.json` and `marketplace.json`. Docs-only commits (README,
 CLAUDE.md, LICENSE, .gitignore, .githooks/, scripts/) are skipped.
 
-To upgrade an installed plugin after a new version is pushed:
+To check for and upgrade an installed plugin:
 
 ```
+/agentboard:update          # checks GitHub main + prints upgrade commands if newer
 /plugin marketplace update agent-board-local
 /plugin install agentboard@agent-board-local   # picks up new version
 /reload-plugins
+/agentboard:stop && /agentboard:open            # reload server with new code
 ```
+
+`/agentboard:doctor` also reports whether a newer version is available.
 
 `agent-board-core/ui/dist/` is committed — ships with the plugin so `/plugin install` is zero-build.
 
