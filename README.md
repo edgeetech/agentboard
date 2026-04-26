@@ -1,181 +1,229 @@
-# agentboard
+<div align="center">
 
-**Source:** https://github.com/edgeetech/agentboard
+# 🎛️ AgentBoard
 
-Local agent management portal as a Claude Code plugin. A kanban board where PM / Worker / Reviewer agents — spawned as headless `claude -p` subprocesses — move tasks through predefined workflows. Only the Human (Product Owner) approval step is manual.
+### Run AI agents like a kanban team — locally, with full cost + audit trails.
 
-One SQLite DB per project, one local web UI, zero cloud dependencies.
+[![Version](https://img.shields.io/badge/version-0.1.33-3b82f6?style=for-the-badge)](./plugins/claude-code/.claude-plugin/plugin.json)
+[![License](https://img.shields.io/badge/license-Elastic--2.0-f59e0b?style=for-the-badge)](./LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522-22c55e?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d946ef?style=for-the-badge)](https://docs.claude.com/en/docs/claude-code)
+[![Local-only](https://img.shields.io/badge/cloud-zero-ef4444?style=for-the-badge)]()
 
-## Install
+**🟦 PM** → **🟧 Worker** → **🟪 Reviewer** → **🟩 Human** — a real workflow, not a chat window.
 
-In any Claude Code session:
+</div>
 
-```
+---
+
+## 🚀 Quick start
+
+> [!IMPORTANT]
+> AgentBoard is a **Claude Code plugin**. Install from inside any Claude Code session — no `git clone`, no `npm install`.
+
+```bash
 /plugin marketplace add edgeetech/agentboard
 /plugin install agentboard@agent-board-local
 /reload-plugins
+/agentboard:open      # boots local server + opens UI in your browser
 ```
 
-Then in any Claude Code session:
+**Requires:** Node ≥ 22 *or* Bun ≥ 1.x · `claude` CLI ≥ 2.0.0 · `ANTHROPIC_API_KEY` env or active OAuth (`claude /login`) · Windows / macOS / Linux.
 
-```bash
-/agentboard:open     # boot server + open UI in browser
-/agentboard:doctor   # health checklist
-/agentboard:stop     # stop the local server
-```
+---
 
-No post-install build. Plugin ships the prebuilt UI bundle.
+<div align="center">
 
-### Requirements
+[![AgentBoard — kanban board + task detail](./docs/images/collage-hero.png)](./docs/images/collage-hero.png)
 
-- **Node ≥ 22** or **Bun ≥ 1.x** on PATH (server uses `node:sqlite`, built-in).
-- **`claude` CLI ≥ 2.0.0** on PATH with either `ANTHROPIC_API_KEY` env set or an active OAuth session (`claude /login`).
-- Windows, macOS, or Linux.
+<sub>The board on the left, a task detail with runs + cost + acceptance criteria on the right. <a href="./docs/images/collage-hero.png">Click to enlarge.</a></sub>
 
-## Workflows
+</div>
 
-Pick one per project at creation:
+---
 
-- **WF1** (default): `Todo → Agent Working → Agent Review → Human Approval → Done`
-- **WF2**: `Todo → Agent Working → Human Approval → Done` *(skip Reviewer)*
+## ⚡ Why AgentBoard?
 
-Flow is **autonomous**: task creation auto-dispatches PM; state transitions auto-chain Worker and (WF1) Reviewer. Human approval is the only manual gate.
+Multi-agent AI is powerful, but the day-to-day is messy:
 
-## Roles
+- 💸 No idea what each run **cost** until the bill arrives.
+- 🕵️ Can't see **why** an agent did what it did — logs scattered.
+- 🔁 "Just one more retry" turns into runaway loop.
+- ☁️ Only options are cloud SaaS dashboards that ship your prompts off-box.
 
-| Role | Does |
+**AgentBoard fixes that.** Local kanban board, one SQLite per project, real-time cost per run, hard ceiling on rework loops, human approval gate before anything ships.
+
+---
+
+## ✨ What's inside
+
+| | |
 |---|---|
-| **Project Manager** | Enriches the raw task into a tight brief + 3–7 acceptance criteria, hands off to Worker. Read-only over the repo. |
-| **Worker** | Edits files under `repo_path`. No commits, no branches — leaves working tree dirty for the human to review. |
-| **Reviewer** *(WF1)* | Checks work against AC, approves to Human or bounces back to Worker with `REWORK:` reason. |
-| **Product Owner** | You. Final approval / rejection in the UI. |
+| 🟦🟧🟪🟩 **Four roles, one flow** | PM enriches → Worker codes → Reviewer verifies → Human approves. Pick **WF1** (full loop) or **WF2** (skip Reviewer). |
+| 🕹️ **Auto *or* semi-auto mode** | **Auto** — agents drive transitions end-to-end. **Semi** — you drive status changes, agents only annotate (comments + ACs). Switch per project, any time. |
+| 🧾 **Acceptance Criteria, enforced** | PM writes 3–7 testable ACs. Reviewer must check them. Server rejects finishes that skip the audit. |
+| 💰 **Real-time cost per run** | Every run parses `stream-json` usage and stamps `cost_usd` from latest Opus / Sonnet / Haiku pricing. Project header shows all-time, 7d, 30d totals. |
+| 🔁 **Bounded rework loop** | Max 3 reviewer rejects per task. After that, task stalls with "Retry from Worker" button — no runaway agents. |
+| 🔒 **Local-only by design** | Binds `127.0.0.1`, DNS-rebind guard, Bearer + per-run rotated tokens, whitelisted child env. AWS / GitHub / SSH secrets in your shell are **not** passed to spawned agents. |
+| 🪝 **Step into any run** | Each run gets `--session-id`. One click copies `claude --resume <id>` so you can jump into the live transcript from your terminal. |
+| 🎨 **9 themes, light + dark** | AgentBoard, EdgeeTech, Primer, Monochrome, Neon, Warm Tones, Muted Pastels, Deep Jewel, Vibrant. |
 
-Rework loop caps at 3 iterations — after that the task stalls and surfaces a "Retry from Worker" button.
+---
 
-## Cost tracking
+## 🖼️ Product tour
 
-Every run parses its `stream-json` usage events and stamps `agent_run.cost_usd` using the hardcoded pricing table (`agent-board-core/src/pricing.mjs`). Task cards show cost chips; project header shows all-time / 7d / 30d totals. Unknown model → $0 with an "uncosted" flag (never silent wrong numbers). Pricing table carries a `PRICING_VERSION`; when Anthropic prices change, a v1.1 reprice skill will recompute historical runs.
+Nine screens in one image — board, task creation, run detail with cost + ACs, comment audit trail, roles, skills, themes, sessions index, session timeline.
 
-## Data location
+<div align="center">
 
-Outside the repo, never touched by plugin upgrades:
+[![Product tour: board, tasks, runs, comments, roles, skills, themes, sessions](./docs/images/collage-tour.png)](./docs/images/collage-tour.png)
+
+<sub><a href="./docs/images/collage-tour.png">Click to enlarge</a> — or browse individual screenshots in <a href="./docs/images/">docs/images/</a>.</sub>
+
+</div>
+
+---
+
+## 🧠 How it works
 
 ```
-~/.agentboard/             (%USERPROFILE%\.agentboard on Windows)
-  projects/<code>.db       one SQLite per project
-  logs/<run_id>.jsonl      headless Claude stream-json output
-  logs/<run_id>.err.log    captured stderr
-  run-configs/<id>.json    tmp MCP config per run (deleted on exit)
-  config.json              port, pid, token, server_id, active project
-  server.lock              single-instance file lock
+   Your Claude Code session
+            │  (stdio MCP — read-only board + approve/reject)
+            ▼
+   ┌─────────────────────────────────────────────┐
+   │  AgentBoard core server  (Node, 127.0.0.1)  │
+   │  • REST + JSON-RPC HTTP MCP                 │
+   │  • Per-project SQLite (WAL)                 │
+   │  • Executor: spawns headless `claude -p`    │
+   │  • Reaper: 15min heartbeat timeout          │
+   └─────────┬───────────────────────────────────┘
+             │
+   ┌─────────┴────────────┐
+   ▼                      ▼
+  PM agent           Worker agent       (and Reviewer in WF1)
+  └─ writes ACs      └─ edits files
+                       no commits, no branches
 ```
 
-## Security
+**State machine:**
 
-- Binds `127.0.0.1` only; DNS-rebinding blocked via `Host`-header guard (421 on mismatch).
-- 32-byte hex Bearer token in `~/.agentboard/config.json` (0600 on Unix, owner-only ACL on Windows via `os.userInfo().username`).
-- **Spawned agents receive a whitelisted env** — AWS / GitHub / SSH / cloud-SDK secrets in your shell are **not** passed to `claude -p` subprocesses. Only `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, and OS basics (`PATH`, `HOME`, `LANG`, Windows `APPDATA`/`LOCALAPPDATA`, etc.). See [`src/child-env.mjs`](./plugins/claude-code/agent-board-core/src/child-env.mjs).
-- `run_token` is issued to an agent **exactly once** at `claim_run`, to the process that wins the queued→running CAS. No re-issue on retry.
-- REST `/api/tasks/:id/transition` always attributes to `by_role='human'` — agent transitions go through the HTTP MCP endpoint.
-- UI HTML carries a per-request CSP nonce; inline scripts without the nonce are blocked. Token delivered via `Set-Cookie: ab_token=…; HttpOnly; SameSite=Strict` + inline script for fetch. `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` also set.
-- `/alive` is intentionally unauthenticated — returns only `{ok, server_id, plugin_version}` for the plugin's `ensure-server` probe. No token is ever reflected in any endpoint response.
-- **`~/.agentboard/logs/` contains full Claude stream-json transcripts** (prompts + tool I/O). Served via `/api/logs/:run_id` (Bearer-protected, ULID-gated). Treat the data dir as sensitive.
+```
+  todo ─▶ agent_working ─▶ agent_review ─▶ human_approval ─▶ done
+                            └─── rework loop, max 3 ────┘
+```
 
-v1.1 planned: per-run rate limiting on MCP mutations, stricter UTF-8 body validation.
+**Two workflows, picked per project at creation:**
 
-## Letting agents use your own plugins / MCPs
+- **WF1** — `Todo → Working → Review → Approval → Done` (full loop)
+- **WF2** — `Todo → Working → Approval → Done` (skip Reviewer)
 
-Spawned agents run with `--strict-mcp-config`, so only the per-run `abrun`
-HTTP MCP is loaded by default — your other plugins' MCP servers are
-filtered out. Two knobs exist to opt in:
+**Two dispatch modes, switchable any time:**
 
-1. **User MCPs from `~/.claude.json`** (Anthropic CLI's own config): enable
-   them in `~/.agentboard/config.json`:
+- 🤖 **Auto** *(default)* — agents claim runs, change status, hand off. You only step in at Human Approval.
+- 🕹️ **Semi** — you stay in the driver's seat. Agents are blocked from status/assignee changes; they may only add comments and acceptance criteria. Server returns `semi-automated mode: agents may not change status/assignee — add comments only; user drives transitions` if a run tries.
 
-   ```json
-   {
-     "inherit_user_mcps": true
-   }
-   ```
+---
 
-   Or scope to specific keys: `"inherit_user_mcps": ["mcp-atlassian"]`.
+## 🛠️ Slash commands
 
-2. **Skill tool** is now included in every role's allowlist, so agents can
-   invoke your installed skills (caveman, ctx-*, etc.) via the `Skill(name)`
-   tool. Caveman's `SessionStart` hook additionally fires automatically on
-   every spawned run, so any injected context (caveman mode, context-mode
-   priority instructions) reaches the agent by default.
+| Command | Does |
+|---|---|
+| `/agentboard:open` | Boots (or reuses) local server, opens UI in default browser. |
+| `/agentboard:stop` | SIGTERMs the server. Children in flight finish on their own. |
+| `/agentboard:doctor` | Health checklist: Node/Bun version, claude CLI, auth, data dir, DB schema, pricing freshness, available updates. |
+| `/agentboard:update` | Checks GitHub `main` for newer plugin version, prints upgrade commands. |
+| `/agentboard:delete-project` | Interactive: pick project → confirm → DB moved to `~/.agentboard/trash/` (manual restore possible). |
 
-Plugin-registered MCPs (e.g. `context-mode`) are not in `~/.claude.json`.
-To expose them to agents, either (a) mirror the server config under
-`mcpServers` in `~/.claude.json`, or (b) add the same shape to
-`~/.agentboard/mcps.json` (both are merged into the per-run mcp-config
-via `src/user-mcps.mjs`). Future work: scan plugin cache directly.
+---
 
-## Stepping into a running agent
+## 🔒 Security & privacy
 
-Each agent run is spawned with `--session-id <uuid>`. The task detail panel
-shows an "Open in CLI" button per run; it copies the exact command:
+- **127.0.0.1 only.** Server refuses any `Host` header that isn't `127.0.0.1:<port>` or `localhost:<port>` (DNS-rebind guard, returns 421).
+- **Bearer + per-run tokens.** 32-byte hex token in `~/.agentboard/config.json` (0600 on Unix, ACL'd on Windows). Each run gets a `run_token` issued exactly once at `claim_run`.
+- **Whitelisted child env.** Spawned agents receive only `PATH`, `HOME`, `USER`, `LANG`, `TZ`, Claude auth vars, and Windows OS basics. AWS, GitHub, SSH, GCP, cloud-SDK secrets dropped.
+- **CSP nonce + HttpOnly cookie** on the UI. No inline scripts without nonce.
+- **No telemetry.** Nothing leaves your machine. Logs at `~/.agentboard/logs/<run_id>.jsonl` are full Claude transcripts — treat data dir as sensitive.
+
+---
+
+## 📂 Where data lives
+
+Outside the repo, untouched by plugin upgrades:
+
+```
+~/.agentboard/                  (%USERPROFILE%\.agentboard on Windows)
+  projects/<code>.db            one SQLite per project (WAL)
+  logs/<run_id>.jsonl           headless Claude stream-json
+  logs/<run_id>.err.log         captured stderr
+  run-configs/<id>.json         tmp MCP config per run (deleted on exit)
+  trash/<code>-<timestamp>.db   deleted projects (manual restore possible)
+  config.json                   port, pid, token, server_id, active project
+  server.lock                   single-instance lock
+```
+
+---
+
+## 🧰 Tech stack
+
+| Layer | Stack |
+|---|---|
+| **Server** | Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). **Zero production deps.** |
+| **UI** | React 18 · Vite · TanStack Query · Zustand · @dnd-kit · react-i18next |
+| **MCP** | Two surfaces — `abrun` (HTTP, for spawned runs) and `agentboard` (stdio, for your interactive session). Names differ deliberately so `--strict-mcp-config` filters cleanly. |
+| **Pricing** | Opus 4.7 / Sonnet 4.6 / Haiku 4.5, versioned. Unknown model → `$0` + `uncosted` flag — never silently wrong numbers. |
+
+---
+
+## 🔌 Letting agents use your own MCPs / skills
+
+Spawned agents run with `--strict-mcp-config`, so only the per-run `abrun` HTTP MCP is loaded by default. Two opt-in knobs:
+
+1. **Inherit `~/.claude.json` MCPs** — set `"inherit_user_mcps": true` in `~/.agentboard/config.json` (or scope it: `["mcp-atlassian"]`).
+2. **Custom MCPs** — drop a `mcpServers` block in `~/.agentboard/mcps.json`, merged into the per-run config.
+
+The `Skill` tool is in every role's allowlist, so agents can invoke your installed skills (caveman, ctx-*, etc.) via `Skill(name)`.
+
+---
+
+## 🪝 Stepping into a running agent
+
+Each run is spawned with `--session-id <uuid>`. The task detail panel has an **Open in CLI** button per run that copies:
 
 ```
 claude --resume <session-id>
 ```
 
-Paste in a terminal at the project repo to jump into that Claude session.
-If the agent is still running, the button reads "Join in CLI" and warns
-that resume may fork the session — best to cancel the run first.
+Paste in a terminal at the project repo and you're inside the agent's session. If the run is still live, the button reads **Join in CLI** and warns you that resume may fork the session.
 
-## Development
+---
 
-Repo layout:
+## 🗺️ Roadmap
 
-```
-agentboard/
-  .claude-plugin/
-    marketplace.json                 Marketplace descriptor
-  plugins/claude-code/               Claude Code plugin (only dir published to users)
-    .claude-plugin/plugin.json       Manifest
-    skills/{open,stop,doctor}/       User-invoked slash commands
-    hooks/hooks.json                 SessionStart boot hook
-    bin/ensure-server.mjs            Boots / reuses local server
-    mcp/agentboard.mjs               Stdio MCP for user's Claude session
-    agent-board-core/                Vendored server (Node) + built UI
-      server.mjs, executor.mjs, src/, db/, prompts/, ui/dist/
-```
+- 🛡️ Per-run rate limiting on MCP mutations (v1.1)
+- ✅ Stricter UTF-8 body validation (v1.1)
+- 💱 `/agentboard reprice` skill — recompute historical run costs when Anthropic prices change
+- 🔍 Auto-discover plugin-registered MCPs (today, mirror them into `~/.claude.json` or `mcps.json`)
 
-Rebuild UI after changes:
+---
 
-```bash
-cd plugins/claude-code/agent-board-core/ui && npm install && npm run build
-```
+## 🤝 Contributing
 
-Once per clone, wire the git hooks (auto-bumps the plugin patch version on
-every code commit so marketplace users get a new version):
+Issues, PRs, feedback welcome at [github.com/edgeetech/agentboard](https://github.com/edgeetech/agentboard).
 
-```bash
-git config core.hooksPath .githooks
-```
+For internals — state machine rules, dispatch logic, sharp edges — see [CLAUDE.md](./CLAUDE.md).
 
-After that, every `git commit` with code changes bumps `0.1.x` → `0.1.(x+1)`
-in both `plugin.json` and `marketplace.json`. Docs-only commits (README,
-CLAUDE.md, LICENSE, .gitignore, .githooks/, scripts/) are skipped.
+---
 
-To check for and upgrade an installed plugin:
+## 📄 License
 
-```
-/agentboard:update          # checks GitHub main + prints upgrade commands if newer
-/plugin marketplace update agent-board-local
-/plugin install agentboard@agent-board-local   # picks up new version
-/reload-plugins
-/agentboard:stop && /agentboard:open            # reload server with new code
-```
+[Elastic License 2.0](./LICENSE). You may self-host and modify freely. You may **not** offer AgentBoard as a managed service to third parties.
 
-`/agentboard:doctor` also reports whether a newer version is available.
+---
 
-`agent-board-core/ui/dist/` is committed — ships with the plugin so `/plugin install` is zero-build.
+<div align="center">
 
-See [CLAUDE.md](./CLAUDE.md) for architecture internals, state machine rules, and sharp edges.
+Crafted at **EdgeeTech Limited** · [github.com/edgeetech/agentboard](https://github.com/edgeetech/agentboard)
 
-## License
+⭐ If AgentBoard helps you ship cleaner agent workflows, drop a star — helps others find it.
 
-[Elastic License 2.0 (ELv2)](./LICENSE). Same as [context-mode](https://github.com/mksglu/context-mode). You may self-host and modify; you may not offer agentboard as a managed service to third parties.
+</div>
