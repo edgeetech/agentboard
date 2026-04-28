@@ -943,14 +943,14 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.6rem 0.8rem;
+  padding: 0.4rem 0.6rem;
   background: var(--surface-alt);
   border: 2px solid var(--line);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
-  min-width: 90px;
-  height: 90px;
+  min-width: 60px;
+  height: 60px;
 }
 
 .agent-toggle-item:hover {
@@ -965,7 +965,7 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
 }
 
 .agent-toggle-item img {
-  height: 60px;
+  height: 40px;
   width: auto;
   max-width: 100%;
   display: block;
