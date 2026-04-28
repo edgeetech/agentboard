@@ -84,6 +84,9 @@ const SCHEMA_SQL = readFileSync(SCHEMA_SQL_PATH, 'utf8');
 // Idempotent migrations for existing DBs. Each runs inside a try/catch so
 // expected failures (table already dropped, column already exists) are silent.
 const MIGRATIONS = [
+  // Add agent_provider column to project table (for agent provider selection)
+  { sql: `ALTER TABLE project ADD COLUMN agent_provider TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot'))`,
+    why: 'add agent_provider column to support claude/github_copilot selection' },
   // task_attachment: create if not exists (existing DBs opened before schema bump).
   { sql: `CREATE TABLE IF NOT EXISTS task_attachment (
     id TEXT PRIMARY KEY,
