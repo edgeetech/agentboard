@@ -120,6 +120,9 @@ export class AgentRunner {
     let q;
     try {
       console.log('[agent-runner] about to call query()');
+      console.log('[agent-runner] prompt length:', prompt?.length);
+      console.log('[agent-runner] queryOptions keys:', Object.keys(queryOptions));
+      console.log('[agent-runner] queryOptions.mcpServers:', Object.keys(queryOptions.mcpServers || {}));
       q = query({ prompt, options: queryOptions });
       console.log('[agent-runner] query() returned');
     } catch (err) {
