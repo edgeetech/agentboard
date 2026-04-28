@@ -2,7 +2,7 @@
 // Launched by `/agent-board open` skill in the Claude Code plugin.
 
 import { createServer } from 'node:http';
-import { readFileSync, existsSync, statSync, createReadStream } from 'node:fs';
+import { readFileSync, existsSync, statSync, createReadStream, appendFileSync } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { ensureDirs } from './src/paths.mjs';
@@ -23,6 +23,12 @@ import { runningCount } from './src/repo.mjs';
 import { getActiveDb, listProjectDbs, getDb } from './src/project-registry.mjs';
 import { agentboardBus } from './src/event-bus.mjs';
 
+// Debug file logging for crash analysis
+const DEBUG_LOG = './debug-crash.log';
+function debugLog(msg) {
+  try { appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] ${msg}\n`); } catch {}
+}
+
 const SERVER_BOOT_ID = randomUUID();
 const UI_DIST = new URL('./ui/dist/', import.meta.url);
 const PLUGIN_VERSION = process.env.AGENTBOARD_PLUGIN_VERSION || '0.1.0';
@@ -31,10 +37,14 @@ const PLUGIN_VERSION = process.env.AGENTBOARD_PLUGIN_VERSION || '0.1.0';
 // The supervisor (external) can restart the server process.
 let serverHealthy = true;
 process.on('unhandledRejection', (reason) => {
-  console.error('[server] unhandledRejection:', reason?.stack || reason);
+  const msg = `[server] unhandledRejection: ${reason?.stack || reason}`;
+  console.error(msg);
+  debugLog(msg);
 });
 process.on('uncaughtException', (err) => {
-  console.error('[server] uncaughtException (exiting):', err?.stack || err);
+  const msg = `[server] uncaughtException (exiting): ${err?.stack || err}`;
+  console.error(msg);
+  debugLog(msg);
   serverHealthy = false;
   process.exit(1);
 });
@@ -154,8 +164,21 @@ server.listen(args.port, '127.0.0.1', () => {
   const port = server.address().port;
   writeConfig({ port, pid: process.pid });
   console.log(`READY http://127.0.0.1:${port}`);
-  startExecutor({ port, serverToken: token });
-  startTrackerPoller();
+  debugLog(`Server started on port ${port}`);
+  try {
+    startExecutor({ port, serverToken: token });
+    debugLog('Executor started');
+  } catch (e) {
+    debugLog(`Executor start failed: ${e?.message}`);
+    throw e;
+  }
+  try {
+    startTrackerPoller();
+    debugLog('TrackerPoller started');
+  } catch (e) {
+    debugLog(`TrackerPoller start failed: ${e?.message}`);
+    throw e;
+  }
 });
 
 // Idle shutdown: no API hit 10min AND no running/queued runs across ANY project.

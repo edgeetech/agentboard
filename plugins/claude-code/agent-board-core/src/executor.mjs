@@ -26,10 +26,16 @@ import { scheduleRetry } from './retry-manager.mjs';
 import { Supervisor } from './supervisor.mjs';
 import { buildRolePrompt } from './prompt-builder.mjs';
 
+// Debug file logging
+const DEBUG_LOG = './debug-crash.log';
+function executorDebugLog(msg) {
+  try { appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] [executor] ${msg}\n`); } catch {}
+}
+
 // Shared rate limiter across all runs in this process
 const rateLimiter = new RateLimitTracker();
 
-const REAPER_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_REAPER_TIMEOUT_MS || '900000', 10);
+const REAPER_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_REAPER_TIMEOUT_MS || '120000', 10);
 const REAPER_SWEEP_MS   = parseInt(process.env.AGENTBOARD_REAPER_SWEEP_MS   || '60000',  10);
 
 let started = false;
@@ -57,35 +63,69 @@ export function startExecutor({ port, serverToken }) {
 }
 
 async function reap() {
+  executorDebugLog('reap cycle start');
   for (const code of listProjectDbs()) {
     try {
+      executorDebugLog(`reaping project ${code}`);
       const db = await getDb(code);
+      executorDebugLog(`got db for ${code}`);
       const orphaned = reapOrphans(db, REAPER_TIMEOUT_MS);
-      if (orphaned.length) console.log('[reaper]', code, 'marked', orphaned.length, 'runs as failed');
-    } catch (e) { logErr(e); }
+      executorDebugLog(`reapOrphans returned ${orphaned.length} runs`);
+      if (orphaned.length) {
+        const msg = `[reaper] ${code} marked ${orphaned.length} runs as failed`;
+        console.log(msg);
+        executorDebugLog(msg);
+      }
+      executorDebugLog(`reap done for ${code}`);
+    } catch (e) { 
+      const errMsg = `reap error for project ${code}: ${e?.message}`;
+      executorDebugLog(errMsg);
+      console.error(errMsg, e?.stack);
+      logErr(e); 
+    }
   }
+  executorDebugLog('reap cycle complete');
 }
 
 async function drain({ port, serverToken }) {
-  for (const code of listProjectDbs()) {
+  executorDebugLog('drain cycle start');
+  const projects = listProjectDbs();
+  executorDebugLog(`examining ${projects.length} projects`);
+  for (const code of projects) {
     try {
       const db = await getDb(code);
       const project = getProject(db);
-      if (!project) continue;
+      if (!project) {
+        executorDebugLog(`project ${code} has no data`);
+        continue;
+      }
       const running = runningCount(db);
       const budget = project.max_parallel - running;
-      if (budget <= 0) continue;
+      executorDebugLog(`project ${code}: running=${running}, max=${project.max_parallel}, budget=${budget}`);
+      if (budget <= 0) {
+        executorDebugLog(`project ${code} at capacity`);
+        continue;
+      }
       const queued = listQueuedRunsForProject(db).slice(0, budget);
+      executorDebugLog(`project ${code} has ${queued.length} queued runs`);
       for (const q of queued) {
+        executorDebugLog(`claiming run ${q.id} from project ${code}`);
         // Fire-and-forget: each run is an independent async task so the drain loop
         // is never blocked waiting for an agent (which can take minutes).
-        tryClaimAndRun(db, project, q, { port, serverToken }).catch(logErr);
+        tryClaimAndRun(db, project, q, { port, serverToken }).catch(e => {
+          executorDebugLog(`run ${q.id} failed: ${e?.message}`);
+          logErr(e);
+        });
       }
-    } catch (e) { logErr(e); }
+    } catch (e) { 
+      executorDebugLog(`drain error for project ${code}: ${e?.message}`);
+      logErr(e); 
+    }
   }
 }
 
 async function tryClaimAndRun(db, project, run, { port, serverToken }) {
+  executorDebugLog(`tryClaimAndRun start for run ${run.id}`);
   // Pre-check repo_path exists
   try {
     if (!statSync(project.repo_path).isDirectory()) throw new Error('not a dir');
@@ -141,10 +181,15 @@ async function tryClaimAndRun(db, project, run, { port, serverToken }) {
   // Ensure per-task workspace directory exists and store path on task
   let workspacePath = project.repo_path; // fallback: use repo_path
   try {
+    executorDebugLog(`ensuring workspace for task ${task.id}`);
     workspacePath = await workspaceManager.ensureWorkspace(task.id, task.code);
+    executorDebugLog(`workspace created: ${workspacePath}`);
     db.prepare(`UPDATE task SET workspace_path=? WHERE id=?`).run(workspacePath, task.id);
+    executorDebugLog(`running beforeRun hook for task ${task.id}`);
     await workspaceManager.beforeRun(task.id, task.code);
+    executorDebugLog(`beforeRun hook completed for task ${task.id}`);
   } catch (e) {
+    executorDebugLog(`workspace setup failed for task ${task.id}: ${e?.message}`);
     console.warn('[executor] workspace setup failed (using repo_path):', e?.message);
   }
 
