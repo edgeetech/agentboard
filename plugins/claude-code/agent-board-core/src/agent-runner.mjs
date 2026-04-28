@@ -99,7 +99,8 @@ export class AgentRunner {
       pathToClaudeCodeExecutable: 'claude',  // Explicitly set the Claude CLI path
       ...(systemPrompt && { systemPrompt }),
       ...(allowedTools && { allowedTools: allowedTools.split(',').map(t => t.trim()) }),
-      ...(mcpServers && Object.keys(mcpServers).length > 0 && { mcpServers }),
+      // TODO: Temporarily disabling MCP servers to debug crash
+      // ...(mcpServers && Object.keys(mcpServers).length > 0 && { mcpServers }),
       ...(this.#sessionId && { resume: this.#sessionId }),
     };
 
