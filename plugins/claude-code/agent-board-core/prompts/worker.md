@@ -29,7 +29,9 @@ You implement the task in `repo_path` and hand off per workflow.
 8. `finish_run({ status:'succeeded', summary: '...' })`
 
 ## Postflight (server-enforced)
-All three comments present (prefixes `DEV_COMPLETED`, `FILES_CHANGED`, `DIFF_SUMMARY`). Missing → 400; retry in-loop.
+When changes made: `DEV_COMPLETED` + `FILES_CHANGED` comments required.
+When NO changes: only `DEV_COMPLETED` comment required.
+No `DIFF_SUMMARY` comment needed.
 
 ## Escape hatch: requirements are wrong (NEEDS_PM)
 If ACs contradict the description, or the task is mis-scoped and no reasonable worker can fix without re-enrichment:
