@@ -6,7 +6,7 @@ import { isoNow } from './time.mjs';
 import { getDb, listProjectDbs } from './project-registry.mjs';
 import { getProject, createTask } from './repo.mjs';
 import { createTracker } from './trackers/index.mjs';
-import { RateLimitTracker } from './rate-limiter.mjs';
+import { RateLimitTracker } from './rate-limit-tracker.mjs';
 
 const rateLimiter = new RateLimitTracker();
 let pollerStarted = false;

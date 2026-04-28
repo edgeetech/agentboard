@@ -29,7 +29,7 @@ program.command('status')
   .option('-u, --url <url>', 'Server URL', 'http://127.0.0.1:3000')
   .action(async (opts) => {
     try {
-      const res = await fetch(`${opts.url}/api/health`);
+      const res = await fetch(`${opts.url}/alive`);
       const data = await res.json();
       console.log('Server is running:', data);
     } catch {

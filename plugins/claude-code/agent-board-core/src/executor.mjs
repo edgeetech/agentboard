@@ -23,6 +23,8 @@ import { agentboardBus } from './event-bus.mjs';
 import { sessionLogger } from './session-logger.mjs';
 import { workspaceManager } from './workspace-manager.mjs';
 import { scheduleRetry } from './retry-manager.mjs';
+import { Supervisor } from './supervisor.mjs';
+import { buildRolePrompt } from './prompt-builder.mjs';
 
 // Shared rate limiter across all runs in this process
 const rateLimiter = new RateLimitTracker();
@@ -35,7 +37,21 @@ let started = false;
 export function startExecutor({ port, serverToken }) {
   if (started) return;
   started = true;
-  setInterval(() => drain({ port, serverToken }).catch(logErr), 1000).unref?.();
+
+  // Supervisor wraps the drain loop — if an unexpected exception escapes the
+  // inner try/catches, the supervisor restarts the loop instead of silently dying.
+  const drainSupervisor = new Supervisor({
+    maxRestarts: 5,
+    restartWindowMs: 60_000,
+    onCrash: (e, n) => console.error(`[executor] drain loop crashed (restart #${n}):`, e?.message),
+  });
+  drainSupervisor.start(async () => {
+    while (true) {
+      await drain({ port, serverToken }).catch(logErr);
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  });
+
   setInterval(() => reap().catch(logErr), REAPER_SWEEP_MS).unref?.();
   console.log('[executor] started (reaper timeout', REAPER_TIMEOUT_MS, 'ms)');
 }
@@ -100,7 +116,7 @@ async function tryClaimAndRun(db, project, run, { port, serverToken }) {
   };
 
   const comments = listComments(db, task.id);
-  const promptBody = renderPrompt(run.role, task, project, run.id, run_token, comments);
+  const promptBody = await buildRolePrompt(run.role, task, project, run.id, run_token, comments, task.prompt_template ?? null);
   const systemPrompt = loadRolePromptBody(run.role);
 
   const ok = claimRunRow(db, run.id, run_token, null, stdoutPath);
@@ -230,34 +246,6 @@ function buildSdkMcpServers(userMcps) {
 }
 
 // tail() unused in SDK path but kept for debug tooling
-
-function renderPrompt(role, task, project, runId, runToken, comments) {
-  const ac = safeParseAc(task.acceptance_criteria_json);
-  const recent = comments.slice(-10).map(c => `[${c.author_role}] ${c.body}`).join('\n');
-  return `You are the ${role.toUpperCase()} agent. Follow your system prompt exactly.
-
-run_id: ${runId}
-run_token: ${runToken}
-task_id: ${task.id}
-task_code: ${task.code}
-workflow_type: ${project.workflow_type}
-repo_path: ${project.repo_path}
-
-Title: ${task.title}
-
-Description:
-${task.description || '(empty — you are PM; enrich this)'}
-
-Acceptance criteria (${ac.length}):
-${ac.map((a, i) => `${i + 1}. [${a.checked ? 'x' : ' '}] ${a.text}`).join('\n') || '(none yet)'}
-
-Recent comments:
-${recent || '(none)'}
-
-Begin. Use mcp__abrun__* tools (list_queue, claim_run, get_task, update_task, add_comment, finish_run, add_heartbeat). Finish with finish_run.`;
-}
-
-function safeParseAc(s) { try { return JSON.parse(s || '[]'); } catch { return []; } }
 
 function loadRolePromptBody(role) {
   const url = new URL(`../prompts/${role}.md`, import.meta.url);

@@ -184,7 +184,7 @@ Outside the repo, untouched by plugin upgrades:
 
 | Layer | Stack |
 |---|---|
-| **Server** | Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). **Zero production deps.** |
+| **Server** | Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). Production deps: `@anthropic-ai/claude-agent-sdk` · `commander` · `liquidjs` · `pino`. |
 | **Agent runner** | `@anthropic-ai/claude-agent-sdk` — in-process, streaming, no subprocess required. |
 | **UI** | React 18 · Vite · TanStack Query · Zustand · @dnd-kit · react-i18next |
 | **MCP** | Two surfaces — `abrun` (HTTP, for spawned runs) and `agentboard` (stdio, for your interactive session). Names differ deliberately so `--strict-mcp-config` filters cleanly. |
