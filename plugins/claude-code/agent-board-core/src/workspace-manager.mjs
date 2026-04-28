@@ -179,6 +179,8 @@ export class WorkspaceManager {
           AGENTBOARD_WORKSPACE: wsPath,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached: false,  // On Windows, true would create orphan process; keep false and manage cleanup
+        windowsHide: true,  // Hide window on Windows
       });
 
       let stdout = '';
