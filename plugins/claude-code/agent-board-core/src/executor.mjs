@@ -174,9 +174,11 @@ async function tryClaimAndRun(db, project, run, { port, serverToken }) {
     projectPath: project.repo_path,
     display: `agentboard ${run.role} run — ${task.code}`,
   });
+  executorDebugLog(`registered with claude history for ${run.id}`);
 
   const abortController = new AbortController();
   const sessionLog = sessionLogger.createSessionLog(run.id);
+  executorDebugLog(`created session log and abort controller for ${run.id}`);
 
   // Ensure per-task workspace directory exists and store path on task
   let workspacePath = project.repo_path; // fallback: use repo_path
@@ -193,8 +195,11 @@ async function tryClaimAndRun(db, project, run, { port, serverToken }) {
     console.warn('[executor] workspace setup failed (using repo_path):', e?.message);
   }
 
+  executorDebugLog(`about to emit run.started for ${run.id}`);
   agentboardBus.emit('run.started', { runId: run.id, role: run.role, taskCode: task.code });
+  executorDebugLog(`run.started emitted for ${run.id}`);
 
+  executorDebugLog(`creating AgentRunner for ${run.id}`);
   const runner = new AgentRunner({
     runId: run.id,
     role: run.role,
@@ -219,9 +224,12 @@ async function tryClaimAndRun(db, project, run, { port, serverToken }) {
       }
     },
   });
+  executorDebugLog(`AgentRunner created for ${run.id}, about to call runner.run()`);
 
   try {
+    executorDebugLog(`calling runner.run() for ${run.id}`);
     const result = await runner.run();
+    executorDebugLog(`runner.run() returned for ${run.id} with status=${result?.status}`);
 
     const live = getRun(db, run.id);
     if (!live || live.status !== 'running') return; // already reaped
