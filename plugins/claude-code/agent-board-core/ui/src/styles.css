@@ -930,6 +930,47 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
   padding-top: 0.5rem; border-top: 1px solid var(--line);
 }
 
+/* ------- Agent provider toggle (icon-based selection) ------- */
+
+.agent-provider-toggle {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+.agent-toggle-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 0.8rem;
+  background: var(--surface-alt);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  min-width: 90px;
+  height: 90px;
+}
+
+.agent-toggle-item:hover {
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+
+.agent-toggle-item.active {
+  border-color: var(--primary);
+  background: var(--bg-alt);
+  box-shadow: 0 0 0 2px var(--primary) inset;
+}
+
+.agent-toggle-item img {
+  height: 60px;
+  width: auto;
+  max-width: 100%;
+  display: block;
+}
+
 /* ------- Skills / Roles pages (grid cards) ------- */
 
 .entity-grid {

@@ -131,33 +131,23 @@ export function ProjectPage() {
            <fieldset>
              <legend>{t('settings.agent_provider')}</legend>
              <small className="muted">{t('settings.agent_provider_hint')}</small>
-             <div className="radio-group">
-               <label>
-                 <input
-                   type="radio"
-                   name="agent_provider"
-                   value="claude"
-                   checked={agentProvider === 'claude'}
-                   onChange={() => setAgentProvider('claude')}
-                 />
-                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                   <AgentProviderIcon provider="claude" size="sm" />
-                   {t('settings.agent_provider_claude', 'Claude (Anthropic SDK)')}
-                 </span>
-               </label>
-               <label>
-                 <input
-                   type="radio"
-                   name="agent_provider"
-                   value="github_copilot"
-                   checked={agentProvider === 'github_copilot'}
-                   onChange={() => setAgentProvider('github_copilot')}
-                 />
-                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                   <AgentProviderIcon provider="github_copilot" size="sm" />
-                   {t('settings.agent_provider_github_copilot', 'GitHub CoPilot')}
-                 </span>
-               </label>
+             <div className="agent-provider-toggle">
+               <button
+                 type="button"
+                 className={`agent-toggle-item ${agentProvider === 'claude' ? 'active' : ''}`}
+                 onClick={() => setAgentProvider('claude')}
+                 title="Claude (Anthropic SDK)"
+               >
+                 <AgentProviderIcon provider="claude" size="lg" tooltip={false} />
+               </button>
+               <button
+                 type="button"
+                 className={`agent-toggle-item ${agentProvider === 'github_copilot' ? 'active' : ''}`}
+                 onClick={() => setAgentProvider('github_copilot')}
+                 title="GitHub Copilot"
+               >
+                 <AgentProviderIcon provider="github_copilot" size="lg" tooltip={false} />
+               </button>
              </div>
            </fieldset>
           <label className="inline-check">
