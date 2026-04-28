@@ -4,6 +4,7 @@
 import { ulid } from './ulid.mjs';
 import { isoNow } from './time.mjs';
 import { canTransition, allowedPrevStatuses } from './state-machine.mjs';
+import { PRICING_VERSION } from './pricing.mjs';
 
 /* ─── PROJECTS ─────────────────────────────────────────────────────────── */
 
@@ -83,7 +84,14 @@ export function createTask(db, { title, description = '', assignee_role = null }
                        created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, '[]', 'todo', ?, ?, ?)
     `).run(id, project.id, seq, code, title, description, assignee_role, now, now);
-    return { task: getTask(db, id) };
+    
+    // Enqueue run if assignee_role is set and agent_provider is claude
+    let runId = null;
+    if (assignee_role && project.agent_provider === 'claude') {
+      runId = enqueueRun(db, id, assignee_role);
+    }
+    
+    return { task: getTask(db, id), runId };
   });
   return tx();
 }
@@ -193,4 +201,75 @@ export function listComments(db, task_id) {
   return db.prepare(`SELECT * FROM comment WHERE task_id=? ORDER BY created_at ASC`).all(task_id);
 }
 
+/* ─── AGENT RUNS ────────────────────────────────────────────────── */
 
+export function enqueueRun(db, task_id, role) {
+  const id = ulid();
+  const now = isoNow();
+  db.prepare(`
+    INSERT INTO agent_run(id, task_id, role, status, queued_at)
+    VALUES (?, ?, ?, 'queued', ?)
+  `).run(id, task_id, role, now);
+  return id;
+}
+
+export function getRun(db, id) {
+  return db.prepare(`SELECT * FROM agent_run WHERE id=?`).get(id);
+}
+
+export function listQueuedRunsForProject(db) {
+  return db.prepare(`
+    SELECT r.* FROM agent_run r
+    INNER JOIN task t ON r.task_id = t.id
+    WHERE r.status = 'queued'
+    ORDER BY r.queued_at ASC
+  `).all();
+}
+
+export function runningCount(db) {
+  const row = db.prepare(`
+    SELECT COUNT(*) as cnt FROM agent_run WHERE status IN ('running')
+  `).get();
+  return row?.cnt ?? 0;
+}
+
+export function claimRun(db, run_id, run_token, pid, stdout_path) {
+  const now = isoNow();
+  const info = db.prepare(`
+    UPDATE agent_run
+    SET status='running', token=?, pid=?, logs_path=?, started_at=?, last_heartbeat_at=?
+    WHERE id=? AND status='queued'
+  `).run(run_token, pid, stdout_path, now, now, run_id);
+  return info.changes > 0;
+}
+
+export function setRunCost(db, run_id, model, inputTokens, outputTokens, cacheCreation, cacheRead, costUsd) {
+  db.prepare(`
+    UPDATE agent_run
+    SET model=?, input_tokens=?, output_tokens=?, cache_creation_tokens=?, cache_read_tokens=?, cost_usd=?, cost_version=?
+    WHERE id=?
+  `).run(model, inputTokens, outputTokens, cacheCreation, cacheRead, costUsd, PRICING_VERSION, run_id);
+}
+
+export function finishRun(db, run_id, status, summary, error) {
+  const now = isoNow();
+  db.prepare(`
+    UPDATE agent_run
+    SET status=?, summary=?, error=?, ended_at=?
+    WHERE id=?
+  `).run(status, summary ?? null, error ?? null, now, run_id);
+}
+
+export function reapOrphans(db, timeoutMs) {
+  const now = isoNow();
+  const cutoffTime = new Date(Date.now() - timeoutMs).toISOString();
+  const orphans = db.prepare(`
+    SELECT id FROM agent_run
+    WHERE status = 'running' AND last_heartbeat_at < ?
+  `).all(cutoffTime);
+  
+  for (const run of orphans) {
+    finishRun(db, run.id, 'failed', null, `orphaned: no heartbeat for ${timeoutMs}ms`);
+  }
+  return orphans;
+}

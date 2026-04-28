@@ -17,6 +17,7 @@ import { handleSessions } from './src/api-sessions.mjs';
 import { handlePrompts } from './src/api-prompts.mjs';
 import { handleMcp } from './src/api-mcp.mjs';
 import { getActiveDb } from './src/project-registry.mjs';
+import { startExecutor } from './src/executor.mjs';
 
 const SERVER_BOOT_ID = randomUUID();
 const UI_DIST = new URL('./ui/dist/', import.meta.url);
@@ -127,8 +128,7 @@ server.listen(args.port, '127.0.0.1', () => {
   const port = server.address().port;
   writeConfig({ port, pid: process.pid });
   console.log(`READY http://127.0.0.1:${port}`);
-  // Simplified: executor disabled (no agent spawn)
-  // startExecutor({ port, serverToken: token });
+  startExecutor({ port, serverToken: token });
 });
 
 // Idle shutdown: no API hit for 10 minutes → exit.
