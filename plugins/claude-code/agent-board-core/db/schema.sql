@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS project (
   workflow_type     TEXT NOT NULL CHECK (workflow_type IN ('WF1','WF2')),
   repo_path         TEXT NOT NULL,
   max_parallel      INTEGER NOT NULL DEFAULT 1 CHECK (max_parallel BETWEEN 1 AND 3),
+  agent_provider    TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot')),
   version           INTEGER NOT NULL DEFAULT 0,
   deleted_at        TEXT,
   created_at        TEXT NOT NULL,

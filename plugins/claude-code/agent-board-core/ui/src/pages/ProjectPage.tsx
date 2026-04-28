@@ -24,6 +24,7 @@ export function ProjectPage() {
   const [repoPath, setRepoPath] = useState('');
   const [maxPar, setMaxPar] = useState<number>(1);
   const [autoPm, setAutoPm] = useState<boolean>(false);
+  const [agentProvider, setAgentProvider] = useState<'claude' | 'github_copilot'>('claude');
   const [saved, setSaved] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export function ProjectPage() {
     setRepoPath(project.repo_path);
     setMaxPar(project.max_parallel);
     setAutoPm(!!project.auto_dispatch_pm);
+    setAgentProvider(project.agent_provider || 'claude');
   }, [project?.version]);
 
   const mut = useMutation({
@@ -44,6 +46,7 @@ export function ProjectPage() {
           repo_path: repoPath.trim(),
           max_parallel: Number(maxPar),
           auto_dispatch_pm: autoPm ? 1 : 0,
+          agent_provider: agentProvider,
         })
       : Promise.reject(new Error('no project')),
     onSuccess: () => {
@@ -70,7 +73,8 @@ export function ProjectPage() {
     description.trim() !== (project.description || '') ||
     repoPath.trim() !== project.repo_path ||
     Number(maxPar) !== project.max_parallel ||
-    (autoPm ? 1 : 0) !== project.auto_dispatch_pm;
+    (autoPm ? 1 : 0) !== project.auto_dispatch_pm ||
+    agentProvider !== (project.agent_provider || 'claude');
 
   return (
     <>
@@ -123,6 +127,32 @@ export function ProjectPage() {
             />
             <small className="muted">{t('settings.max_parallel_hint')}</small>
           </label>
+           <fieldset>
+             <legend>{t('settings.agent_provider')}</legend>
+             <small className="muted">{t('settings.agent_provider_hint')}</small>
+             <div className="radio-group">
+               <label>
+                 <input
+                   type="radio"
+                   name="agent_provider"
+                   value="claude"
+                   checked={agentProvider === 'claude'}
+                   onChange={() => setAgentProvider('claude')}
+                 />
+                 {t('settings.agent_provider_claude', 'Claude (Anthropic SDK)')}
+               </label>
+               <label>
+                 <input
+                   type="radio"
+                   name="agent_provider"
+                   value="github_copilot"
+                   checked={agentProvider === 'github_copilot'}
+                   onChange={() => setAgentProvider('github_copilot')}
+                 />
+                 {t('settings.agent_provider_github_copilot', 'GitHub CoPilot')}
+               </label>
+             </div>
+           </fieldset>
           <label className="inline-check">
             <input
               type="checkbox"

@@ -134,7 +134,11 @@ export async function handleTasks(req, res, url) {
     const body = await readJson(req);
     const title = (body?.title || '').trim();
     if (!title) return json(res, 400, { error: 'title required' });
-    const out = createTask(db, { title, description: body?.description ?? '' });
+    const out = createTask(db, { 
+      title, 
+      description: body?.description ?? '',
+      assignee_role: body?.assignee_role ?? null
+    });
     return json(res, 201, out);
   }
 

@@ -22,7 +22,7 @@ export function getProject(db) {
 }
 
 export function updateProject(db, patch, expectedVersion) {
-  const allowed = ['name', 'description', 'repo_path', 'max_parallel', 'deleted_at'];
+  const allowed = ['name', 'description', 'repo_path', 'max_parallel', 'agent_provider', 'deleted_at'];
   const sets = [];
   const args = [];
   for (const k of allowed) {
@@ -66,7 +66,7 @@ export function getTaskByCode(db, code) {
   return db.prepare(`SELECT * FROM task WHERE code=?`).get(code);
 }
 
-export function createTask(db, { title, description = '' }) {
+export function createTask(db, { title, description = '', assignee_role = null }) {
   const project = getProject(db);
   if (!project) throw new Error('no active project');
   const tx = db.transaction(() => {
@@ -81,9 +81,8 @@ export function createTask(db, { title, description = '' }) {
       INSERT INTO task(id, project_id, seq, code, title, description,
                        acceptance_criteria_json, status, assignee_role,
                        created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, '[]', 'todo', NULL, ?, ?)
-    `).run(id, project.id, seq, code, title, description, now, now);
-    // Simplified: no auto-dispatch on task creation
+      VALUES (?, ?, ?, ?, ?, ?, '[]', 'todo', ?, ?, ?)
+    `).run(id, project.id, seq, code, title, description, assignee_role, now, now);
     return { task: getTask(db, id) };
   });
   return tx();

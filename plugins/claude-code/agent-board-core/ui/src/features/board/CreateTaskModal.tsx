@@ -10,10 +10,11 @@ export function CreateTaskModal({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [filePaths, setFilePaths] = useState<string[]>([]);
+  const [assignee_role, setAssigneeRole] = useState<string | null>(null);
 
   const m = useMutation({
     mutationFn: async () => {
-      const { task } = await api.createTask({ title, description });
+      const { task } = await api.createTask({ title, description, assignee_role });
       const validPaths = filePaths.map(p => p.trim()).filter(Boolean);
       for (const fp of validPaths) {
         await api.addFilePath(task.code, fp);
@@ -37,6 +38,61 @@ export function CreateTaskModal({ onClose }: { onClose: () => void }) {
           <label>{t('task.description')}
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} />
           </label>
+          <fieldset>
+            <legend>{t('task.assignee', 'Assign to')}</legend>
+            <div className="radio-group">
+              <label>
+                <input
+                  type="radio"
+                  name="assignee"
+                  value=""
+                  checked={assignee_role === null}
+                  onChange={() => setAssigneeRole(null)}
+                />
+                {t('task.unassigned', 'Unassigned (no agent)')}
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="assignee"
+                  value="pm"
+                  checked={assignee_role === 'pm'}
+                  onChange={() => setAssigneeRole('pm')}
+                />
+                {t('task.assignee_pm', 'PM')}
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="assignee"
+                  value="worker"
+                  checked={assignee_role === 'worker'}
+                  onChange={() => setAssigneeRole('worker')}
+                />
+                {t('task.assignee_worker', 'Worker')}
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="assignee"
+                  value="reviewer"
+                  checked={assignee_role === 'reviewer'}
+                  onChange={() => setAssigneeRole('reviewer')}
+                />
+                {t('task.assignee_reviewer', 'Reviewer')}
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="assignee"
+                  value="human"
+                  checked={assignee_role === 'human'}
+                  onChange={() => setAssigneeRole('human')}
+                />
+                {t('task.assignee_po', 'PO')}
+              </label>
+            </div>
+          </fieldset>
           <label>{t('files.label', 'File paths')}</label>
           <FileDropZone paths={filePaths} onChange={setFilePaths} />
           <div className="actions">

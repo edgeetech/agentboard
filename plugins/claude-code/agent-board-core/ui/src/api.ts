@@ -47,10 +47,10 @@ export const api = {
     code: string; name: string; description?: string;
     workflow_type: 'WF1' | 'WF2'; repo_path: string;
   }) => call<{ project: any }>('POST', '/api/projects', body),
-  listTasks: (search?: string) => call<{ tasks: any[] }>('GET', search ? `${taskBase()}?search=${encodeURIComponent(search)}` : taskBase()),
-  createTask: (body: { title: string; description?: string }) =>
-    call<{ task: any }>('POST', taskBase(), body),
-  getTask: (code: string) =>
+   listTasks: (search?: string) => call<{ tasks: any[] }>('GET', search ? `${taskBase()}?search=${encodeURIComponent(search)}` : taskBase()),
+   createTask: (body: { title: string; description?: string; assignee_role?: string | null }) =>
+     call<{ task: any }>('POST', taskBase(), body),
+   getTask: (code: string) =>
     call<{ task: any; project: any; comments: any[]; file_paths: any[] }>('GET', `${taskBase()}/${encodeURIComponent(code)}`),
   addFilePath: (code: string, file_path: string, label?: string) =>
     call<{ file_path: any }>('POST', `${taskBase()}/${encodeURIComponent(code)}/file-paths`, { file_path, label }),
