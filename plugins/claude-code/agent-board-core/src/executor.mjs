@@ -90,6 +90,7 @@ async function reap() {
 async function drain({ port, serverToken }) {
   executorDebugLog('drain cycle start');
   const projects = listProjectDbs();
+  console.log('[drain] cycle: projects=', projects.length, ', querying for queued runs...');
   executorDebugLog(`examining ${projects.length} projects`);
   for (const code of projects) {
     try {
