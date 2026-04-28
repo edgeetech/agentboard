@@ -158,13 +158,11 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
 
   const child = spawn(bin, args, {
     cwd: workspacePath,
-    // windowsHide omitted intentionally: setting it adds CREATE_NO_WINDOW to the
-    // claude process, leaving it with no console to inherit. Its own tool sub-spawns
-    // (bash, cmd, node) then have no console to attach to and Windows creates new
-    // console windows for each — causing the visible flashing. Without this flag,
-    // claude inherits the server's console (already hidden or a background service
-    // window) and all descendant spawns share it — no new windows appear.
+    // detached intentionally omitted: on Windows it allocates a new console window
+    // even with windowsHide:true (undefined behavior per Node docs). child.unref()
+    // below is sufficient to let the server exit without waiting for the child.
     stdio: ['ignore', stdoutFd, stderrFd],
+    windowsHide: true,
     env: buildChildEnv({ AGENTBOARD_REPO_PATH: project.repo_path, AGENTBOARD_WORKSPACE: workspacePath }),
   });
 
