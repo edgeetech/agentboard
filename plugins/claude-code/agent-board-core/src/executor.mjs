@@ -237,15 +237,16 @@ async function tryClaimAndRun(db, project, run, { port, serverToken }) {
 
     if (result.status === 'completed') {
       // Record cost/usage from SDK result
-      if (result.usage) {
-        const { cost_usd, cost_version } = computeCost(result.model, result.usage);
+      if (result.usage || result.model) {
+        const usage = result.usage ?? { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 };
+        const { cost_usd, cost_version } = computeCost(result.model, usage);
         // Prefer SDK's totalCostUsd only when > 0 (it initialises to 0, so null/0 means unknown)
         const final = (result.totalCostUsd != null && result.totalCostUsd > 0)
           ? result.totalCostUsd
           : cost_usd;
         setRunCost(db, run.id, {
           model: result.model ?? null,
-          usage: result.usage,
+          usage,
           cost_usd: final,
           cost_version: result.model ? cost_version : 0,
         });
