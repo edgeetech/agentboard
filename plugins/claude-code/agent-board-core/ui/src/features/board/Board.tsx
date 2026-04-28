@@ -18,6 +18,7 @@ import { CreateTaskModal } from "./CreateTaskModal";
 import { TaskDetailPanel } from "./TaskDetailPanel";
 import { useDetailView } from "../../hooks/useDetailView";
 import { SearchIcon } from "../../components/SearchIcon";
+import { AgentProviderIcon } from "../../components/AgentProviderIcon";
 import { iconForStatus, WorkingDots } from "./ColumnIcons";
 
 type ViewMode = "board" | "list";

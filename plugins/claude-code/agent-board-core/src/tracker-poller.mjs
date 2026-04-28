@@ -17,7 +17,6 @@ export function startTrackerPoller() {
   // Stagger first poll by 5s to let server finish boot
   const staggerTimer = setTimeout(() => pollAll().catch(logErr), 5_000);
   staggerTimer.unref?.();
-  console.log('[tracker-poller] started');
 }
 
 async function pollAll() {
@@ -89,8 +88,6 @@ async function pollProject(db, projectCode, cfg) {
       console.error(`[tracker-poller] ${projectCode}: sync issue ${issue.identifier} failed:`, e.message);
     }
   }
-
-  console.log(`[tracker-poller] ${projectCode}: synced ${issues.length} issues`);
 }
 
 function syncIssue(db, project, cfg, issue, terminalStates) {
@@ -116,8 +113,6 @@ function syncIssue(db, project, cfg, issue, terminalStates) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(ulid(), project.id, task.id, cfg.kind, issue.id,
            issue.identifier, issue.title, issue.state, issue.url ?? null, now, now);
-
-    console.log(`[tracker-poller] created task for ${issue.identifier}`);
   } else {
     // Update sync state
     db.prepare(`UPDATE tracker_issue SET state=?, synced_at=? WHERE id=?`)

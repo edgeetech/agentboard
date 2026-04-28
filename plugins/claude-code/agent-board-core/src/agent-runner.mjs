@@ -103,12 +103,6 @@ export class AgentRunner {
       ...(this.#sessionId && { resume: this.#sessionId }),
     };
 
-    console.log('[agent-runner] queryOptions:', JSON.stringify({
-      cwd, maxTurns, permissionMode: 'acceptEdits',
-      systemPromptLen: systemPrompt?.length,
-      allowedTools, mcpServers: Object.keys(mcpServers), resume: !!this.#sessionId
-    }));
-
     /** @type {RunResult} */
     const result = { status: 'failed', sessionId: null, usage: null, model: null, totalCostUsd: null };
 
@@ -119,20 +113,13 @@ export class AgentRunner {
 
     let q;
     try {
-      console.log('[agent-runner] about to call query()');
-      console.log('[agent-runner] prompt length:', prompt?.length);
-      console.log('[agent-runner] queryOptions keys:', Object.keys(queryOptions));
-      console.log('[agent-runner] queryOptions.mcpServers:', Object.keys(queryOptions.mcpServers || {}));
       q = query({ prompt, options: queryOptions });
-      console.log('[agent-runner] query() returned');
     } catch (err) {
       throw new Error(`Failed to start Claude agent query: ${err?.message}`);
     }
 
     try {
-      console.log('[agent-runner] starting for-await loop on query generator');
       for await (const msg of q) {
-        console.log('[agent-runner] received message type:', msg?.type);
         if (msg?.type) {
           onEvent?.(msg.type, msg);
           sessionLog?.info({ type: msg.type, runId }, 'Agent event');
@@ -206,7 +193,6 @@ export class AgentRunner {
       throw new Error(`Agent stream error: ${streamErr?.message}`);
     }
 
-    console.log('[agent-runner] executeTurn completed successfully, returning result');
     result.usage = usage;
     return result;
   }

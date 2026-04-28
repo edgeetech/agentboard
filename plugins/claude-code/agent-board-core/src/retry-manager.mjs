@@ -50,7 +50,6 @@ export function scheduleRetry(db, { runId, taskId, role, attempt, error, config 
   }, delayMs);
   timer.unref?.();
 
-  console.log(`[retry-manager] scheduled attempt ${nextAttempt}/${maxAttempts} for task ${taskId} in ${delayMs}ms`);
   return { scheduled: true, delayMs, newRunId, nextAttempt };
 }
 
