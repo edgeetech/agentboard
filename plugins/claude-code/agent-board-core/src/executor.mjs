@@ -20,6 +20,12 @@ import {
 import { getActiveDb, getDb, listProjectDbs } from './project-registry.mjs';
 import { readConfig } from './config.mjs';
 import { isoNow } from './time.mjs';
+import { ulid } from './ulid.mjs';
+import { scheduleRetry } from './retry-manager.mjs';
+import { RateLimitTracker } from './rate-limiter.mjs';
+import { Workspace } from './workspace.mjs';
+
+const rateLimiter = new RateLimitTracker();
 
 const REAPER_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_REAPER_TIMEOUT_MS || '900000', 10);
 const REAPER_SWEEP_MS   = parseInt(process.env.AGENTBOARD_REAPER_SWEEP_MS   || '60000',  10);
@@ -76,6 +82,29 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
     return;
   }
 
+  // Set up per-task workspace if project has workspace_root configured
+  let workspacePath = project.repo_path; // default: use repo_path (current behavior)
+  let workspace = null;
+  if (project.workspace_root) {
+    workspace = new Workspace(project.workspace_root, {
+      afterCreate:   project.hooks_after_create ?? null,
+      beforeRun:     project.hooks_before_run ?? null,
+      afterRun:      project.hooks_after_run ?? null,
+      beforeRemove:  project.hooks_before_remove ?? null,
+      timeoutMs:     project.hooks_timeout_ms ?? 60_000,
+    });
+    try {
+      workspacePath = await workspace.ensureWorkspace(task.code, {
+        taskCode: task.code, taskId: task.id, repoPath: project.repo_path,
+      });
+      db.prepare(`UPDATE agent_run SET workspace_path=? WHERE id=?`).run(workspacePath, run.id);
+    } catch (e) {
+      logErr(e);
+      finishRun(db, run.id, 'failed', null, `workspace setup failed: ${e.message}`);
+      return;
+    }
+  }
+
   // Issue run_token for claim; child MCP calls use it
   const run_token = randomBytes(24).toString('hex');
   // Pre-assign Claude session id so the user can later `claude --resume <id>`
@@ -128,11 +157,13 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
   ];
 
   const child = spawn(bin, args, {
-    cwd: project.repo_path,
-    detached: true,
+    cwd: workspacePath,
+    // detached intentionally omitted: on Windows it allocates a new console window
+    // even with windowsHide:true (undefined behavior per Node docs). child.unref()
+    // below is sufficient to let the server exit without waiting for the child.
     stdio: ['ignore', stdoutFd, stderrFd],
     windowsHide: true,
-    env: buildChildEnv(),  // whitelist only — no AWS/GitHub/SSH creds leak
+    env: buildChildEnv({ AGENTBOARD_REPO_PATH: project.repo_path, AGENTBOARD_WORKSPACE: workspacePath }),
   });
 
   db.prepare(`UPDATE agent_run SET pid=?, claude_session_id=? WHERE id=?`)
@@ -145,14 +176,42 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
   });
   child.unref();
 
-  child.on('exit', (code) => {
+  child.on('exit', (exitCode) => {
     try { unlinkSync(runCfgPath); } catch {}
-    // Parse cost from log (best-effort)
     try { parseAndRecordCost(db, run.id, stdoutPath); } catch (e) { logErr(e); }
     const live = getRun(db, run.id);
     if (live && live.status === 'running') {
       const errTail = tail(stderrPath, 2048);
-      finishRun(db, run.id, 'failed', null, `exit ${code}${errTail ? `\n${errTail}` : ''}`);
+      const errMsg = `exit ${exitCode}${errTail ? `\n${errTail}` : ''}`;
+      try {
+        const cfg = readConfig();
+        const attempt = live.attempt ?? 1;
+        const retryResult = scheduleRetry(db, {
+          runId: run.id, taskId: run.task_id, role: run.role,
+          attempt, error: errMsg, config: cfg,
+        });
+        finishRun(db, run.id, 'failed', null, errMsg);
+        if (retryResult.scheduled) {
+          console.log(`[executor] run ${run.id} failed (attempt ${attempt}), retry in ${retryResult.delayMs}ms`);
+        } else {
+          console.log(`[executor] run ${run.id} failed permanently: ${retryResult.reason}`);
+          try {
+            db.prepare(`INSERT INTO comment(id, task_id, author_role, body, created_at) VALUES (?,?,'system',?,?)`)
+              .run(ulid(), run.task_id,
+                `SYSTEM: run permanently failed after ${attempt} attempt(s). ${retryResult.reason}`,
+                isoNow());
+          } catch {}
+        }
+      } catch (e) {
+        logErr(e);
+        // Fallback: mark failed without retry to avoid leaving run stuck in 'running'
+        try { finishRun(db, run.id, 'failed', null, errMsg); } catch {}
+      }
+    }
+    // Workspace afterRun hook (best-effort, async fire-and-forget)
+    if (workspace && live?.workspace_path) {
+      workspace.afterRun(task.code, { taskCode: task.code, taskId: task.id, repoPath: project.repo_path })
+        .catch(logErr);
     }
   });
 }

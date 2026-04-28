@@ -26,7 +26,7 @@ const CLAUDE = [
   'XDG_CONFIG_HOME',
 ];
 
-export function buildChildEnv(base = process.env) {
+export function buildChildEnv(extra = {}, base = process.env) {
   const keys = [
     ...UNIVERSAL,
     ...CLAUDE,
@@ -34,5 +34,5 @@ export function buildChildEnv(base = process.env) {
   ];
   const out = {};
   for (const k of keys) if (base[k] !== undefined) out[k] = base[k];
-  return out;
+  return { ...out, ...extra };
 }

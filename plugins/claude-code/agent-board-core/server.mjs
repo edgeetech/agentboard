@@ -15,8 +15,10 @@ import { handleCosts } from './src/api-costs.mjs';
 import { handleLogs } from './src/api-logs.mjs';
 import { handleSessions } from './src/api-sessions.mjs';
 import { handlePrompts } from './src/api-prompts.mjs';
+import { handleTracker } from './src/api-tracker.mjs';
 import { handleMcp } from './src/api-mcp.mjs';
 import { startExecutor } from './src/executor.mjs';
+import { startTrackerPoller } from './src/tracker-poller.mjs';
 import { runningCount } from './src/repo.mjs';
 import { getActiveDb, listProjectDbs, getDb } from './src/project-registry.mjs';
 
@@ -113,7 +115,7 @@ const server = createServer(async (req, res) => {
     if (mcp) return;
 
     // REST routers (first non-null handler wins)
-    const handlers = [handleProjects, handleTasks, handleCosts, handleLogs, handleSessions, handlePrompts];
+    const handlers = [handleProjects, handleTasks, handleCosts, handleLogs, handleSessions, handlePrompts, handleTracker];
     for (const h of handlers) {
       const done = await h(req, res, url);
       if (done || res.headersSent) return;
@@ -131,6 +133,7 @@ server.listen(args.port, '127.0.0.1', () => {
   writeConfig({ port, pid: process.pid });
   console.log(`READY http://127.0.0.1:${port}`);
   startExecutor({ port, serverToken: token });
+  startTrackerPoller();
 });
 
 // Idle shutdown: no API hit 10min AND no running/queued runs across ANY project.

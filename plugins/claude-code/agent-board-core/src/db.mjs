@@ -87,6 +87,22 @@ const SCHEMA_SQL = readFileSync(SCHEMA_SQL_PATH, 'utf8');
 const MIGRATIONS = [
   { sql: `ALTER TABLE agent_run ADD COLUMN claude_session_id TEXT`,
     why: 'store claude --session-id for resume' },
+  { sql: `ALTER TABLE agent_run ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1`,
+    why: 'track retry attempt number' },
+  { sql: `ALTER TABLE agent_run ADD COLUMN workspace_path TEXT`,
+    why: 'per-task workspace directory' },
+  { sql: `ALTER TABLE project ADD COLUMN workspace_root TEXT`,
+    why: 'base dir for per-task workspaces' },
+  { sql: `ALTER TABLE project ADD COLUMN hooks_after_create TEXT`,
+    why: 'shell command run after workspace creation' },
+  { sql: `ALTER TABLE project ADD COLUMN hooks_before_run TEXT`,
+    why: 'shell command run before agent spawn' },
+  { sql: `ALTER TABLE project ADD COLUMN hooks_after_run TEXT`,
+    why: 'shell command run after agent exits' },
+  { sql: `ALTER TABLE project ADD COLUMN hooks_before_remove TEXT`,
+    why: 'shell command run before workspace removal' },
+  { sql: `ALTER TABLE project ADD COLUMN hooks_timeout_ms INTEGER NOT NULL DEFAULT 60000`,
+    why: 'hook execution timeout' },
 ];
 
 function applyMigrations(db) {
