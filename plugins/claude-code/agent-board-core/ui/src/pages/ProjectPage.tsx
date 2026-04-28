@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { api } from '../api';
+import { AgentProviderIcon } from '../components/AgentProviderIcon';
 
 export function ProjectPage() {
   const { t } = useTranslation();
@@ -139,7 +140,10 @@ export function ProjectPage() {
                    checked={agentProvider === 'claude'}
                    onChange={() => setAgentProvider('claude')}
                  />
-                 {t('settings.agent_provider_claude', 'Claude (Anthropic SDK)')}
+                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                   <AgentProviderIcon provider="claude" size="sm" />
+                   {t('settings.agent_provider_claude', 'Claude (Anthropic SDK)')}
+                 </span>
                </label>
                <label>
                  <input
@@ -149,7 +153,10 @@ export function ProjectPage() {
                    checked={agentProvider === 'github_copilot'}
                    onChange={() => setAgentProvider('github_copilot')}
                  />
-                 {t('settings.agent_provider_github_copilot', 'GitHub CoPilot')}
+                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                   <AgentProviderIcon provider="github_copilot" size="sm" />
+                   {t('settings.agent_provider_github_copilot', 'GitHub CoPilot')}
+                 </span>
                </label>
              </div>
            </fieldset>
