@@ -16,9 +16,8 @@ import { handleLogs } from './src/api-logs.mjs';
 import { handleSessions } from './src/api-sessions.mjs';
 import { handlePrompts } from './src/api-prompts.mjs';
 import { handleMcp } from './src/api-mcp.mjs';
+import { getActiveDb } from './src/project-registry.mjs';
 import { startExecutor } from './src/executor.mjs';
-import { runningCount } from './src/repo.mjs';
-import { getActiveDb, listProjectDbs, getDb } from './src/project-registry.mjs';
 
 const SERVER_BOOT_ID = randomUUID();
 const UI_DIST = new URL('./ui/dist/', import.meta.url);
@@ -104,7 +103,6 @@ const server = createServer(async (req, res) => {
         plugin_version: PLUGIN_VERSION,
         uptime_ms: Date.now() - startedAt,
         active_project: active ? active.code : null,
-        running_runs: active ? runningCount(active.db) : 0,
       });
     }
 
@@ -133,25 +131,12 @@ server.listen(args.port, '127.0.0.1', () => {
   startExecutor({ port, serverToken: token });
 });
 
-// Idle shutdown: no API hit 10min AND no running/queued runs across ANY project.
+// Idle shutdown: no API hit for 10 minutes → exit.
 setInterval(async () => {
   const idleFor = Date.now() - lastApiHitMs;
   if (idleFor < 10 * 60_000) return;
-  const codes = listProjectDbs();
-  if (codes.length === 0) return process.exit(0);
-  let anyActive = false;
-  for (const code of codes) {
-    try {
-      const db = await getDb(code);
-      const running = runningCount(db);
-      const queued = db.prepare(`SELECT COUNT(*) AS n FROM agent_run WHERE status='queued'`).get().n;
-      if (running > 0 || queued > 0) { anyActive = true; break; }
-    } catch {}
-  }
-  if (!anyActive) {
-    console.log('[server] idle shutdown');
-    process.exit(0);
-  }
+  console.log('[server] idle shutdown');
+  process.exit(0);
 }, 30_000).unref?.();
 
 // ────────────── helpers ──────────────

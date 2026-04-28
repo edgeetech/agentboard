@@ -1,27 +1,16 @@
 import { json, readJson, matchRoute } from './http-util.mjs';
 import { getActiveDb, getDb } from './project-registry.mjs';
 import {
-  listTasks, getTask, getTaskByCode, createTask, transitionTask, retryFromWorker,
-  listComments, listRuns, addComment, enqueueRun,
-  finishRun, getProject,
+  listTasks, getTask, getTaskByCode, createTask, transitionTask,
+  listComments, listFilePaths, addFilePath, deleteFilePath, addComment, getProject,
 } from './repo.mjs';
 import { isoNow } from './time.mjs';
 
-const KILL_GRACE_MS = 5000;
 const MIN_REJECT_COMMENT = 10;
-const VALID_DISPATCH_ROLES = ['pm', 'worker', 'reviewer'];
-const RECENT_RUNS_LIMIT = 5;
 
 /** Resolve a task by either ULID id or project-scoped code. */
 function resolveTask(db, idOrCode) {
   return getTask(db, idOrCode) || getTaskByCode(db, idOrCode);
-}
-
-/** Best-effort kill: SIGTERM now, SIGKILL after grace. */
-function killProcess(pid, graceMs = KILL_GRACE_MS) {
-  if (!pid) return;
-  try { process.kill(pid, 'SIGTERM'); } catch {}
-  setTimeout(() => { try { process.kill(pid, 'SIGKILL'); } catch {} }, graceMs).unref?.();
 }
 
 // ─────────── handlers for /api/tasks/:id/* routes ───────────
@@ -31,7 +20,7 @@ async function handleGetTask(_req, res, _url, _active, task, db) {
     task,
     project: getProject(db),
     comments: listComments(db, task.id),
-    runs: listRuns(db, task.id, RECENT_RUNS_LIMIT),
+    file_paths: listFilePaths(db, task.id),
   });
 }
 
@@ -60,73 +49,44 @@ async function handleTransition(req, res, _url, active, task, db) {
   return json(res, 200, out);
 }
 
-async function handleDispatch(req, res, _url, _active, task, db) {
-  const body = await readJson(req);
-  const role = body?.role;
-  if (!VALID_DISPATCH_ROLES.includes(role)) {
-    return json(res, 400, { error: 'role must be pm|worker|reviewer' });
-  }
-  const dup = db.prepare(`
-    SELECT 1 FROM agent_run WHERE task_id=? AND role=? AND status IN ('queued','running') LIMIT 1
-  `).get(task.id, role);
-  if (dup) return json(res, 409, { error: 'run already queued/running for this role' });
-  const runId = enqueueRun(db, task.id, role);
-  return json(res, 201, { runId });
+async function handleDispatch(_req, res) {
+  return json(res, 410, { error: 'agent dispatch disabled in simplified mode' });
 }
 
-async function handleCancelRun(_req, res, _url, _active, task, db) {
-  const running = db.prepare(`
-    SELECT * FROM agent_run WHERE task_id=? AND status='running' ORDER BY started_at DESC LIMIT 1
-  `).get(task.id);
-  if (!running) return json(res, 404, { error: 'no running run' });
-  finishRun(db, running.id, 'cancelled', 'cancelled by user', null);
-  killProcess(running.pid);
-  return json(res, 200, { ok: true, runId: running.id });
-}
-
-async function handleRetryFromWorker(_req, res, _url, _active, task, db) {
-  const out = retryFromWorker(db, task.id);
-  if (!out.ok) return json(res, out.status || 400, out);
-  return json(res, 200, out);
+async function handleRetryFromWorker(_req, res) {
+  return json(res, 410, { error: 'agent dispatch disabled in simplified mode' });
 }
 
 async function handleDeleteTask(_req, res, _url, _active, task, db) {
-  const running = db.prepare(`SELECT * FROM agent_run WHERE task_id=? AND status='running'`).all(task.id);
-  for (const r of running) {
-    finishRun(db, r.id, 'cancelled', 'task deleted', null);
-    killProcess(r.pid);
-  }
-  db.prepare(`
-    UPDATE agent_run SET status='cancelled', error='task deleted', ended_at=?
-    WHERE task_id=? AND status='queued'
-  `).run(isoNow(), task.id);
   db.prepare(`
     UPDATE task SET deleted_at=?, version=version+1, updated_at=? WHERE id=?
   `).run(isoNow(), isoNow(), task.id);
-  return json(res, 200, { ok: true, cancelled_runs: running.length });
+  return json(res, 200, { ok: true });
 }
 
-async function handleTaskCost(_req, res, _url, _active, task, db) {
-  const row = db.prepare(`
-    SELECT SUM(input_tokens)AS input, SUM(output_tokens)AS output,
-           SUM(cache_creation_tokens)AS cache_creation, SUM(cache_read_tokens)AS cache_read,
-           SUM(cost_usd)AS cost_usd, COUNT(*)AS run_count
-    FROM agent_run WHERE task_id=?
-  `).get(task.id);
-  const by_role = db.prepare(`
-    SELECT role, SUM(cost_usd) AS cost_usd FROM agent_run WHERE task_id=? GROUP BY role
-  `).all(task.id);
-  return json(res, 200, { ...row, by_role });
+async function handleAddFilePath(req, res, _url, _active, task, db) {
+  const body = await readJson(req);
+  const file_path = (body?.file_path || '').trim();
+  if (!file_path) return json(res, 400, { error: 'file_path required' });
+  const fp = addFilePath(db, task.id, file_path, body?.label ?? null);
+  return json(res, 201, { file_path: fp });
+}
+
+async function handleDeleteFilePath(req, res, url, _active, task, db) {
+  const fpId = url.pathname.split('/').pop();
+  const deleted = deleteFilePath(db, fpId);
+  if (!deleted) return json(res, 404, { error: 'not found' });
+  return json(res, 200, { ok: true });
 }
 
 // route pattern → { method: handler }
 const TASK_ROUTES = [
-  ['/api/tasks/:id',                   { GET: handleGetTask, DELETE: handleDeleteTask }],
-  ['/api/tasks/:id/transition',        { POST: handleTransition }],
-  ['/api/tasks/:id/dispatch',          { POST: handleDispatch }],
-  ['/api/tasks/:id/cancel-run',        { POST: handleCancelRun }],
-  ['/api/tasks/:id/retry-from-worker', { POST: handleRetryFromWorker }],
-  ['/api/tasks/:id/cost',              { GET: handleTaskCost }],
+  ['/api/tasks/:id',                          { GET: handleGetTask, DELETE: handleDeleteTask }],
+  ['/api/tasks/:id/transition',               { POST: handleTransition }],
+  ['/api/tasks/:id/dispatch',                 { POST: handleDispatch }],
+  ['/api/tasks/:id/retry-from-worker',        { POST: handleRetryFromWorker }],
+  ['/api/tasks/:id/file-paths',               { POST: handleAddFilePath }],
+  ['/api/tasks/:id/file-paths/:fpId',         { DELETE: handleDeleteFilePath }],
 ];
 
 /**
@@ -174,7 +134,11 @@ export async function handleTasks(req, res, url) {
     const body = await readJson(req);
     const title = (body?.title || '').trim();
     if (!title) return json(res, 400, { error: 'title required' });
-    const out = createTask(db, { title, description: body?.description ?? '' });
+    const out = createTask(db, { 
+      title, 
+      description: body?.description ?? '',
+      assignee_role: body?.assignee_role ?? null
+    });
     return json(res, 201, out);
   }
 

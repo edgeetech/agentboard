@@ -47,17 +47,15 @@ export const api = {
     code: string; name: string; description?: string;
     workflow_type: 'WF1' | 'WF2'; repo_path: string;
   }) => call<{ project: any }>('POST', '/api/projects', body),
-  listTasks: (search?: string) => call<{ tasks: any[] }>('GET', search ? `${taskBase()}?search=${encodeURIComponent(search)}` : taskBase()),
-  createTask: (body: { title: string; description?: string }) =>
-    call<{ task: any; runId?: string }>('POST', taskBase(), body),
-  getTask: (code: string) =>
-    call<{ task: any; project: any; comments: any[]; runs: any[] }>('GET', `${taskBase()}/${encodeURIComponent(code)}`),
-  dispatch: (code: string, role: 'pm' | 'worker' | 'reviewer') =>
-    call<{ runId: string }>('POST', `${taskBase()}/${encodeURIComponent(code)}/dispatch`, { role }),
-  cancelRun: (code: string) =>
-    call<{ ok: boolean; runId: string }>('POST', `${taskBase()}/${encodeURIComponent(code)}/cancel-run`),
-  retryFromWorker: (code: string) =>
-    call<{ ok: boolean; runId?: string }>('POST', `${taskBase()}/${encodeURIComponent(code)}/retry-from-worker`),
+   listTasks: (search?: string) => call<{ tasks: any[] }>('GET', search ? `${taskBase()}?search=${encodeURIComponent(search)}` : taskBase()),
+   createTask: (body: { title: string; description?: string; assignee_role?: string | null }) =>
+     call<{ task: any }>('POST', taskBase(), body),
+   getTask: (code: string) =>
+    call<{ task: any; project: any; comments: any[]; file_paths: any[] }>('GET', `${taskBase()}/${encodeURIComponent(code)}`),
+  addFilePath: (code: string, file_path: string, label?: string) =>
+    call<{ file_path: any }>('POST', `${taskBase()}/${encodeURIComponent(code)}/file-paths`, { file_path, label }),
+  deleteFilePath: (code: string, fpId: string) =>
+    call<{ ok: boolean }>('DELETE', `${taskBase()}/${encodeURIComponent(code)}/file-paths/${encodeURIComponent(fpId)}`),
   approve: (code: string) =>
     call<any>('POST', `${taskBase()}/${encodeURIComponent(code)}/transition`, {
       to_status: 'done', to_assignee: 'human', by_role: 'human',
@@ -68,7 +66,6 @@ export const api = {
     }),
   transition: (code: string, payload: { to_status: string; to_assignee: string; by_role: string; reject_comment?: string }) =>
     call<any>('POST', `${taskBase()}/${encodeURIComponent(code)}/transition`, payload),
-  taskCost: (code: string) => call<any>('GET', `${taskBase()}/${encodeURIComponent(code)}/cost`),
   sessions: () => call<{ dir: string; dbs: Array<{
     hash: string; size: string; sizeBytes: number;
     sessions: Array<{
@@ -101,11 +98,11 @@ export const api = {
     error?: string;
   }>('GET', `/api/sessions/${encodeURIComponent(hash)}/events/${encodeURIComponent(sessionId)}`),
   deleteTask: (code: string) =>
-    call<{ ok: boolean; cancelled_runs: number }>('DELETE', `${taskBase()}/${encodeURIComponent(code)}`),
+    call<{ ok: boolean }>('DELETE', `${taskBase()}/${encodeURIComponent(code)}`),
   projectCostsTotal: (code: string) =>
     call<any>('GET', `/api/projects/${encodeURIComponent(code)}/costs/total`),
   updateProject: (code: string, patch: Record<string, unknown> & { version: number }) =>
     call<{ ok: boolean; project: any }>('PATCH', `/api/projects/${encodeURIComponent(code)}`, patch),
   deleteProject: (code: string) =>
-    call<{ ok: boolean; cancelled_runs: number; trashed_path: string }>('DELETE', `/api/projects/${encodeURIComponent(code)}`),
+    call<{ ok: boolean; trashed_path: string }>('DELETE', `/api/projects/${encodeURIComponent(code)}`),
 };

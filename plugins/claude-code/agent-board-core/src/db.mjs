@@ -81,12 +81,54 @@ function wrapNode(db) {
 
 const SCHEMA_SQL = readFileSync(SCHEMA_SQL_PATH, 'utf8');
 
-// Lightweight migrations for existing DBs. Each entry: (sql, why). Errors are
-// swallowed — the expected failure mode is "column already exists" on an
-// already-migrated DB, which is fine.
+// Idempotent migrations for existing DBs. Each runs inside a try/catch so
+// expected failures (table already dropped, column already exists) are silent.
 const MIGRATIONS = [
-  { sql: `ALTER TABLE agent_run ADD COLUMN claude_session_id TEXT`,
-    why: 'store claude --session-id for resume' },
+  // Add agent_provider column to project table (for agent provider selection)
+  { sql: `ALTER TABLE project ADD COLUMN agent_provider TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot'))`,
+    why: 'add agent_provider column to support claude/github_copilot selection' },
+  // task_attachment: create if not exists (existing DBs opened before schema bump).
+  { sql: `CREATE TABLE IF NOT EXISTS task_attachment (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES task(id),
+    file_path TEXT NOT NULL,
+    label TEXT,
+    created_at TEXT NOT NULL
+  )`, why: 'add task_attachment table for file path attachments' },
+  { sql: `CREATE INDEX IF NOT EXISTS idx_attachment_task ON task_attachment(task_id, created_at)`,
+    why: 'index for attachment lookups' },
+  // Ensure agent_run table and indices exist (re-enabled agent spawning system)
+  { sql: `CREATE TABLE IF NOT EXISTS agent_run (
+    id                     TEXT PRIMARY KEY,
+    task_id                TEXT NOT NULL REFERENCES task(id),
+    role                   TEXT NOT NULL CHECK (role IN ('pm','worker','reviewer')),
+    status                 TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','failed','blocked','cancelled')),
+    token                  TEXT,
+    pid                    INTEGER,
+    claude_session_id      TEXT,
+    error                  TEXT,
+    logs_path              TEXT,
+    summary                TEXT,
+    model                  TEXT,
+    input_tokens           INTEGER NOT NULL DEFAULT 0,
+    output_tokens          INTEGER NOT NULL DEFAULT 0,
+    cache_creation_tokens  INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens      INTEGER NOT NULL DEFAULT 0,
+    cost_usd               REAL NOT NULL DEFAULT 0,
+    cost_version           INTEGER NOT NULL DEFAULT 0,
+    attempt                INTEGER NOT NULL DEFAULT 1,
+    last_heartbeat_at      TEXT,
+    queued_at              TEXT NOT NULL,
+    started_at             TEXT,
+    ended_at               TEXT,
+    prompt_template        TEXT
+  )`, why: 'add agent_run table for agent execution queue' },
+  { sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_running ON agent_run(status, last_heartbeat_at)`,
+    why: 'index for finding running runs' },
+  { sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_task_queued ON agent_run(task_id, queued_at DESC)`,
+    why: 'index for task run history' },
+  { sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_cost ON agent_run(task_id, ended_at) WHERE status IN ('succeeded','failed','blocked','cancelled')`,
+    why: 'index for cost calculations' },
 ];
 
 function applyMigrations(db) {
