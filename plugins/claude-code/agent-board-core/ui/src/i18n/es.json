@@ -34,6 +34,7 @@
   "nav": {
     "board": "Tablero",
     "skills": "Habilidades",
+    "personas": "Personas",
     "roles": "Roles",
     "sessions": "Sesiones",
     "project": "Proyecto",
@@ -62,6 +63,10 @@
     "workflow_locked": "Inmutable",
     "repo_path": "Ruta del repositorio",
     "repo_hint": "Ruta absoluta. Worker edita archivos bajo este directorio.",
+    "agent_provider": "Proveedor de agentes",
+    "agent_provider_hint": "Elige qué motor usar para ejecutar agentes",
+    "agent_provider_claude": "Claude (SDK de Anthropic)",
+    "agent_provider_github_copilot": "GitHub CoPilot",
     "auto_dispatch_pm": "Despachar PM automáticamente al crear tarea",
     "max_parallel": "Ejecuciones paralelas máx.",
     "max_parallel_hint": "1–3. Ejecuciones concurrentes de agentes para este proyecto.",
@@ -98,6 +103,12 @@
   "task": {
     "title": "Título",
     "description": "Descripción",
+    "assignee": "Asignar a",
+    "unassigned": "Sin asignar (sin agente)",
+    "assignee_pm": "PM",
+    "assignee_worker": "Desarrollador",
+    "assignee_reviewer": "Revisor",
+    "assignee_po": "Propietario del Producto",
     "ac": "Criterios de aceptación",
     "comments": "Comentarios",
     "runs": "Ejecuciones (últimas 5)",
@@ -135,6 +146,20 @@
     "description": "Descripción",
     "tags": "Etiquetas",
     "tags_hint": "Separadas por coma — ej. reviewer, pytest, default."
+  },
+  "personas": {
+    "title": "Personas",
+    "subtitle": "Caracteres de agentes que trabajan en tareas.",
+    "search": "Buscar personas…",
+    "new": "Nueva persona",
+    "empty_title": "Sin coincidencias",
+    "empty_body": "Prueba con otro término.",
+    "detail_subtitle": "Edita este carácter de agente y las habilidades que puede utilizar.",
+    "name": "Nombre",
+    "emblem": "Emblema",
+    "description": "Descripción",
+    "skills": "Habilidades",
+    "skills_hint": "Haz clic para añadir/eliminar. Aparece en la tarjeta de personas e impacta en el envío."
   },
   "roles": {
     "title": "Roles",
