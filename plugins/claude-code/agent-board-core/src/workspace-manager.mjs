@@ -133,11 +133,18 @@ export class WorkspaceManager {
       let cur = this.#rootDir;
       for (const seg of segments) {
         cur = join(cur, seg);
-        if (!existsSync(cur)) break;
-        if (lstatSync(cur).isSymbolicLink()) throw new Error(`Symlink in path: ${cur}`);
+        try {
+          if (!existsSync(cur)) break;
+          if (lstatSync(cur).isSymbolicLink()) throw new Error(`Symlink in path: ${cur}`);
+        } catch (e) {
+          // Only ignore ENOENT while traversing; rethrow other errors (permissions, IO, etc.)
+          if (e?.code === 'ENOENT') break;
+          throw e;
+        }
       }
     } catch (e) {
-      if (e.message?.startsWith('Symlink') || e.message?.startsWith('Path')) throw e;
+      if (e?.message?.startsWith('Symlink') || e?.message?.startsWith('Path')) throw e;
+      throw e;
     }
   }
 

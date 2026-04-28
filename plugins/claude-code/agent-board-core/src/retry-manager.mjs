@@ -28,7 +28,7 @@ export function scheduleRetry(db, { runId, taskId, role, attempt, error, config 
   }
 
   const nextAttempt = attempt + 1;
-  const delayMs = computeBackoffMs(attempt, maxBackoffMs); // backoff based on current attempt, not next
+  const delayMs = computeBackoffMs(attempt, maxBackoffMs);
 
   const stateId = ulid();
   db.prepare(`
@@ -38,7 +38,7 @@ export function scheduleRetry(db, { runId, taskId, role, attempt, error, config 
         new Date(Date.now() + delayMs).toISOString(), delayMs, error ?? null, isoNow());
 
   const newRunId = ulid();
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     try {
       db.prepare(`
         INSERT INTO agent_run(id, task_id, role, status, attempt, queued_at)
@@ -48,6 +48,7 @@ export function scheduleRetry(db, { runId, taskId, role, attempt, error, config 
       console.error('[retry-manager] re-enqueue failed:', e?.message || e);
     }
   }, delayMs);
+  timer.unref?.();
 
   console.log(`[retry-manager] scheduled attempt ${nextAttempt}/${maxAttempts} for task ${taskId} in ${delayMs}ms`);
   return { scheduled: true, delayMs, newRunId, nextAttempt };

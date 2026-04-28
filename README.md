@@ -146,7 +146,7 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
 - **Bearer + per-run tokens.** 32-byte hex token in `~/.agentboard/config.json` (0600 on Unix, ACL'd on Windows). Each run gets a `run_token` issued exactly once at `claim_run`.
 - **Whitelisted child env.** Spawned agents receive only `PATH`, `HOME`, `USER`, `LANG`, `TZ`, Claude auth vars, and Windows OS basics. AWS, GitHub, SSH, GCP, cloud-SDK secrets dropped.
 - **CSP nonce + HttpOnly cookie** on the UI. No inline scripts without nonce.
-- **No telemetry.** Nothing leaves your machine. Logs at `~/.agentboard/logs/<run_id>.jsonl` are full Claude transcripts — treat data dir as sensitive.
+- **No telemetry.** Nothing leaves your machine. Logs at `~/.agentboard/logs/<run_id>.ndjson` are full Claude transcripts — treat data dir as sensitive.
 
 ---
 
@@ -157,7 +157,7 @@ Outside the repo, untouched by plugin upgrades:
 ```
 ~/.agentboard/                  (%USERPROFILE%\.agentboard on Windows)
   projects/<code>.db            one SQLite per project (WAL, schema v3)
-  logs/<run_id>.jsonl           Claude SDK structured events
+  logs/<run_id>.ndjson           Claude SDK structured events
   logs/<run_id>.err.log         captured stderr
   run-configs/<id>.json         tmp MCP config per run (deleted on exit)
   trash/<code>-<timestamp>.db   deleted projects (manual restore possible)

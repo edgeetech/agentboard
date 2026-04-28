@@ -15,7 +15,8 @@ export function startTrackerPoller() {
   if (pollerStarted) return;
   pollerStarted = true;
   // Stagger first poll by 5s to let server finish boot
-  setTimeout(() => pollAll().catch(logErr), 5_000);
+  const staggerTimer = setTimeout(() => pollAll().catch(logErr), 5_000);
+  staggerTimer.unref?.();
   console.log('[tracker-poller] started');
 }
 
@@ -35,7 +36,7 @@ function scheduleProjectPoll(db, projectCode) {
   const cfg = getTrackerConfig(db);
   if (!cfg || !cfg.enabled) return;
 
-  setTimeout(async () => {
+  const timer = setTimeout(async () => {
     try {
       const currentCfg = getTrackerConfig(db);
       if (!currentCfg || !currentCfg.enabled) return;
@@ -50,6 +51,7 @@ function scheduleProjectPoll(db, projectCode) {
       scheduleProjectPoll(db, projectCode);
     }
   }, cfg.poll_interval_ms);
+  timer.unref?.();
 }
 
 async function pollProject(db, projectCode, cfg) {

@@ -27,12 +27,16 @@ const SERVER_BOOT_ID = randomUUID();
 const UI_DIST = new URL('./ui/dist/', import.meta.url);
 const PLUGIN_VERSION = process.env.AGENTBOARD_PLUGIN_VERSION || '0.1.0';
 
-// Crash guards — log but never exit. The server must outlive any single bad request.
+// Crash guards — exit on uncaughtException to avoid leaving the process in a corrupted state.
+// The supervisor (external) can restart the server process.
+let serverHealthy = true;
 process.on('unhandledRejection', (reason) => {
   console.error('[server] unhandledRejection:', reason?.stack || reason);
 });
 process.on('uncaughtException', (err) => {
-  console.error('[server] uncaughtException:', err?.stack || err);
+  console.error('[server] uncaughtException (exiting):', err?.stack || err);
+  serverHealthy = false;
+  process.exit(1);
 });
 
 const startedAt = Date.now();

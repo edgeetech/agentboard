@@ -21,18 +21,14 @@ describe('WorkspaceManager – path safety', () => {
     roots.length = 0;
   });
 
-  it('rejects a path that escapes the root via ..', () => {
+  it('rejects a path that escapes the root via ..', async () => {
     const root = makeTempRoot();
     roots.push(root);
     const wm = new WorkspaceManager(root);
     // sanitize() preserves dots so '..' stays '..'; directory separators are stripped.
     // The traversal guard in #validatePathSafety (not sanitize) is what rejects escaped paths.
-    // Verify sanitize strips dangerous separators
-    expect(WorkspaceManager.sanitize('../escape')).not.toContain('/');
-    expect(WorkspaceManager.sanitize('..\\escape')).not.toContain('\\');
-    // Verify the resulting workspace path is still inside root
-    const wsPath = wm.getPath('..\\..\\escape');
-    expect(wsPath.startsWith(root)).toBe(true);
+    // Verify that ensureWorkspace actually rejects when a path tries to escape root
+    await expect(wm.ensureWorkspace('..')).rejects.toThrow(/escapes workspace root/);
   });
 
   it('workspace path is always inside rootDir', async () => {

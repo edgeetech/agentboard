@@ -27,6 +27,15 @@ export function createTracker(config) {
   }
 }
 
-function safeParseJson(s, fallback) {
-  try { return JSON.parse(s); } catch { return fallback; }
+function safeParseJson(s, fallback = []) {
+  try {
+    const parsed = JSON.parse(s);
+    // Ensure parsed value is an array; if not, use fallback
+    if (Array.isArray(parsed)) {
+      return parsed.map((value) => String(value));
+    }
+    return fallback;
+  } catch {
+    return fallback;
+  }
 }
