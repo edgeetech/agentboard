@@ -13,5 +13,7 @@
   "engines": {
     "node": ">=22"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.121"
+  }
 }

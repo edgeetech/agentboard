@@ -1,29 +1,28 @@
-// Executor: drains queued runs, spawns headless `claude -p`, parses
-// stream-json for cost, reaps orphans.
+// Executor: drains queued runs, executes via Claude Agent SDK query(), reaps orphans.
 
-import { spawn } from 'node:child_process';
-import { openSync, writeFileSync, appendFileSync, unlinkSync, readFileSync, readSync, closeSync, statSync } from 'node:fs';
+import { readFileSync, appendFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { logsDir, logPath, logErrPath, runConfigDir } from './paths.mjs';
-import { restrictPerms } from './config.mjs';
+import { logPath } from './paths.mjs';
 import { allowlistFor } from './tool-allowlist.mjs';
-import { buildChildEnv } from './child-env.mjs';
 import { inheritedUserMcpServers } from './user-mcps.mjs';
-import { computeCost, PRICING_VERSION } from './pricing.mjs';
+import { computeCost } from './pricing.mjs';
 import {
   listQueuedRunsForProject, runningCount, getRun, setRunCost,
   finishRun, getProject, getTask, listComments, reapOrphans,
   claimRun as claimRunRow,
 } from './repo.mjs';
-import { getActiveDb, getDb, listProjectDbs } from './project-registry.mjs';
+import { getDb, listProjectDbs } from './project-registry.mjs';
 import { readConfig } from './config.mjs';
 import { isoNow } from './time.mjs';
 import { ulid } from './ulid.mjs';
 import { scheduleRetry } from './retry-manager.mjs';
+import { AgentRunner } from './agent-runner.mjs';
 import { RateLimitTracker } from './rate-limiter.mjs';
-import { Workspace } from './workspace.mjs';
+import { agentboardBus } from './event-bus.mjs';
+import { sessionLogger } from './session-logger.mjs';
+import { workspaceManager } from './workspace-manager.mjs';
 
 const rateLimiter = new RateLimitTracker();
 
@@ -61,14 +60,14 @@ async function drain({ port, serverToken }) {
       if (budget <= 0) continue;
       const queued = listQueuedRunsForProject(db).slice(0, budget);
       for (const q of queued) {
-        await tryClaimAndSpawn(db, project, q, { port, serverToken });
+        // Fire-and-forget: each run is an independent async task so drain never blocks
+        tryClaimAndRun(db, project, q, { port, serverToken }).catch(logErr);
       }
     } catch (e) { logErr(e); }
   }
 }
 
-async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
-  // Pre-check repo_path exists
+async function tryClaimAndRun(db, project, run, { port, serverToken }) {
   try {
     if (!statSync(project.repo_path).isDirectory()) throw new Error('not a dir');
   } catch {
@@ -82,53 +81,19 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
     return;
   }
 
-  // Set up per-task workspace if project has workspace_root configured
-  let workspacePath = project.repo_path; // default: use repo_path (current behavior)
-  let workspace = null;
-  if (project.workspace_root) {
-    workspace = new Workspace(project.workspace_root, {
-      afterCreate:   project.hooks_after_create ?? null,
-      beforeRun:     project.hooks_before_run ?? null,
-      afterRun:      project.hooks_after_run ?? null,
-      beforeRemove:  project.hooks_before_remove ?? null,
-      timeoutMs:     project.hooks_timeout_ms ?? 60_000,
-    });
-    try {
-      workspacePath = await workspace.ensureWorkspace(task.code, {
-        taskCode: task.code, taskId: task.id, repoPath: project.repo_path,
-      });
-      db.prepare(`UPDATE agent_run SET workspace_path=? WHERE id=?`).run(workspacePath, run.id);
-    } catch (e) {
-      logErr(e);
-      finishRun(db, run.id, 'failed', null, `workspace setup failed: ${e.message}`);
-      return;
-    }
-  }
-
-  // Issue run_token for claim; child MCP calls use it
   const run_token = randomBytes(24).toString('hex');
-  // Pre-assign Claude session id so the user can later `claude --resume <id>`
-  // to jump into this exact session from a terminal.
   const claude_session_id = randomUUID();
   const stdoutPath = logPath(run.id);
-  const stderrPath = logErrPath(run.id);
-  const stdoutFd = openSync(stdoutPath, 'w', 0o600);
-  const stderrFd = openSync(stderrPath, 'w', 0o600);
 
-  // Write per-run MCP config
-  const runCfgPath = join(runConfigDir(), `${run.id}.json`);
-  const mcpCfg = {
-    mcpServers: {
-      ...inheritedUserMcpServers(),
-      'abrun': {
-        type: 'http',
-        url: `http://127.0.0.1:${port}/mcp`,
-        headers: { Authorization: `Bearer ${serverToken}` },
-      },
+  // Build SDK-style MCP servers object (abrun HTTP MCP + any user MCPs)
+  const mcpServers = {
+    ...buildSdkMcpServers(inheritedUserMcpServers()),
+    'abrun': {
+      type: 'http',
+      url: `http://127.0.0.1:${port}/mcp`,
+      headers: { Authorization: `Bearer ${serverToken}` },
     },
   };
-  writeFileSync(runCfgPath, JSON.stringify(mcpCfg));
-  restrictPerms(runCfgPath);
 
   const comments = listComments(db, task.id);
   const promptBody = renderPrompt(run.role, task, project, run.id, run_token, comments);
@@ -140,117 +105,111 @@ async function tryClaimAndSpawn(db, project, run, { port, serverToken }) {
     return;
   }
 
-  const cfg = readConfig();
-  const bin = cfg.claude_bin || 'claude';
-  const args = [
-    '-p', promptBody,
-    // NOTE: intentionally NOT using --bare (would disable OAuth/keychain auth).
-    '--strict-mcp-config',             // only our abrun HTTP MCP, ignore user config + plugin MCPs
-    '--session-id', claude_session_id, // lets human resume via `claude --resume <id>`
-    '--append-system-prompt', systemPrompt,
-    '--mcp-config', runCfgPath,
-    '--allowedTools', allowlistFor(run.role),
-    '--permission-mode', 'acceptEdits',
-    '--output-format', 'stream-json',
-    '--verbose',
-    '--max-turns', '60',
-  ];
-
-  const child = spawn(bin, args, {
-    cwd: workspacePath,
-    // windowsHide intentionally omitted: the server is started without CREATE_NO_WINDOW
-    // (see ensure-server.mjs) so it inherits the caller's console. claude inherits that
-    // same console here, and its own tool sub-spawns (bash/cmd/node) inherit it too —
-    // no new console windows are created and flashing stops.
-    stdio: ['ignore', stdoutFd, stderrFd],
-    env: buildChildEnv({ AGENTBOARD_REPO_PATH: project.repo_path, AGENTBOARD_WORKSPACE: workspacePath }),
-  });
-
-  db.prepare(`UPDATE agent_run SET pid=?, claude_session_id=? WHERE id=?`)
-    .run(child.pid, claude_session_id, run.id);
+  db.prepare(`UPDATE agent_run SET claude_session_id=? WHERE id=?`)
+    .run(claude_session_id, run.id);
 
   registerWithClaudeHistory({
     sessionId: claude_session_id,
     projectPath: project.repo_path,
     display: `agentboard ${run.role} run — ${task.code}`,
   });
-  child.unref();
 
-  child.on('exit', (exitCode) => {
-    try { unlinkSync(runCfgPath); } catch {}
-    try { parseAndRecordCost(db, run.id, stdoutPath); } catch (e) { logErr(e); }
+  const abortController = new AbortController();
+  const sessionLog = sessionLogger.createSessionLog(run.id);
+
+  // Ensure per-task workspace directory
+  let workspacePath = project.repo_path;
+  try {
+    workspacePath = await workspaceManager.ensureWorkspace(task.id, task.code);
+    db.prepare(`UPDATE agent_run SET workspace_path=? WHERE id=?`).run(workspacePath, run.id);
+    await workspaceManager.beforeRun(task.id, task.code);
+  } catch (e) {
+    console.warn('[executor] workspace setup failed (using repo_path):', e?.message);
+  }
+
+  agentboardBus.emit('run.started', { runId: run.id, role: run.role, taskCode: task.code });
+
+  const runner = new AgentRunner({
+    runId: run.id,
+    role: run.role,
+    prompt: promptBody,
+    systemPrompt,
+    cwd: project.repo_path,
+    maxTurns: 60,
+    allowedTools: allowlistFor(run.role),
+    mcpServers,
+    abortController,
+    rateLimiter,
+    sessionLog,
+    onEvent: (eventName, detail) => {
+      if (eventName === 'system' && detail?.subtype === 'init' && detail?.session_id) {
+        db.prepare(`UPDATE agent_run SET claude_session_id=? WHERE id=?`)
+          .run(detail.session_id, run.id);
+      }
+      if (eventName === 'run.rate-limited') {
+        agentboardBus.emit('run.rate-limited', detail);
+      }
+    },
+  });
+
+  try {
+    const result = await runner.run();
+
+    const live = getRun(db, run.id);
+    if (!live || live.status !== 'running') return; // already reaped
+
+    if (result.status === 'completed') {
+      if (result.usage) {
+        const { cost_usd, cost_version } = computeCost(result.model, result.usage);
+        const final = result.totalCostUsd != null ? result.totalCostUsd : cost_usd;
+        setRunCost(db, run.id, {
+          model: result.model ?? null,
+          usage: result.usage,
+          cost_usd: final,
+          cost_version: result.model ? cost_version : 0,
+        });
+      }
+      finishRun(db, run.id, 'succeeded', null, null);
+      agentboardBus.emit('run.completed', { runId: run.id, role: run.role, taskCode: task.code });
+    } else {
+      const errMsg = result.error ?? 'unknown error';
+      const cfg = readConfig();
+      const attempt = live.attempt ?? 1;
+      const retryResult = scheduleRetry(db, {
+        runId: run.id, taskId: run.task_id, role: run.role,
+        attempt, error: errMsg, config: cfg,
+      });
+      finishRun(db, run.id, 'failed', null, errMsg);
+      if (retryResult.scheduled) {
+        console.log(`[executor] run ${run.id} failed (attempt ${attempt}), retry in ${retryResult.delayMs}ms`);
+      } else {
+        console.log(`[executor] run ${run.id} failed permanently: ${retryResult.reason}`);
+        try {
+          db.prepare(`INSERT INTO comment(id, task_id, author_role, body, created_at) VALUES (?,?,'system',?,?)`)
+            .run(ulid(), run.task_id,
+              `SYSTEM: run permanently failed after ${attempt} attempt(s). ${retryResult.reason}`,
+              isoNow());
+        } catch {}
+      }
+      agentboardBus.emit('run.failed', { runId: run.id, error: errMsg });
+    }
+  } catch (e) {
+    logErr(e);
     const live = getRun(db, run.id);
     if (live && live.status === 'running') {
-      const errTail = tail(stderrPath, 2048);
-      const errMsg = `exit ${exitCode}${errTail ? `\n${errTail}` : ''}`;
-      try {
-        const cfg = readConfig();
-        const attempt = live.attempt ?? 1;
-        const retryResult = scheduleRetry(db, {
-          runId: run.id, taskId: run.task_id, role: run.role,
-          attempt, error: errMsg, config: cfg,
-        });
-        finishRun(db, run.id, 'failed', null, errMsg);
-        if (retryResult.scheduled) {
-          console.log(`[executor] run ${run.id} failed (attempt ${attempt}), retry in ${retryResult.delayMs}ms`);
-        } else {
-          console.log(`[executor] run ${run.id} failed permanently: ${retryResult.reason}`);
-          try {
-            db.prepare(`INSERT INTO comment(id, task_id, author_role, body, created_at) VALUES (?,?,'system',?,?)`)
-              .run(ulid(), run.task_id,
-                `SYSTEM: run permanently failed after ${attempt} attempt(s). ${retryResult.reason}`,
-                isoNow());
-          } catch {}
-        }
-      } catch (e) {
-        logErr(e);
-        // Fallback: mark failed without retry to avoid leaving run stuck in 'running'
-        try { finishRun(db, run.id, 'failed', null, errMsg); } catch {}
-      }
+      finishRun(db, run.id, 'failed', null, e?.message ?? String(e));
+      agentboardBus.emit('run.failed', { runId: run.id, error: e?.message });
     }
-    // Workspace afterRun hook (best-effort, async fire-and-forget)
-    if (workspace && live?.workspace_path) {
-      workspace.afterRun(task.code, { taskCode: task.code, taskId: task.id, repoPath: project.repo_path })
-        .catch(logErr);
-    }
-  });
-}
-
-function tail(path, bytes) {
-  try {
-    const st = statSync(path);
-    const start = Math.max(0, st.size - bytes);
-    const buf = Buffer.alloc(st.size - start);
-    const fd = openSync(path, 'r');
-    readSync(fd, buf, 0, buf.length, start);
-    closeSync(fd);
-    return buf.toString('utf8');
-  } catch { return ''; }
-}
-
-function parseAndRecordCost(db, runId, logFile) {
-  let lines;
-  try { lines = readFileSync(logFile, 'utf8').split(/\r?\n/).filter(Boolean); }
-  catch { return; }
-  let model = null;
-  const usage = { input_tokens: 0, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0 };
-  let cliTotal = null;
-  for (const line of lines) {
-    let ev;
-    try { ev = JSON.parse(line); } catch { continue; }
-    if (ev.type === 'system' && ev.subtype === 'init' && ev.model) model = ev.model;
-    if (ev.type === 'message' && ev.message && ev.message.usage) {
-      const u = ev.message.usage;
-      usage.input_tokens          += u.input_tokens          || 0;
-      usage.output_tokens         += u.output_tokens         || 0;
-      usage.cache_creation_tokens += u.cache_creation_input_tokens || u.cache_creation_tokens || 0;
-      usage.cache_read_tokens     += u.cache_read_input_tokens     || u.cache_read_tokens     || 0;
-    }
-    if (ev.type === 'result' && typeof ev.total_cost_usd === 'number') cliTotal = ev.total_cost_usd;
+  } finally {
+    sessionLogger.closeSessionLog(run.id);
+    try { await workspaceManager.afterRun(task.id, task.code); } catch {}
   }
-  const { cost_usd, cost_version } = computeCost(model, usage);
-  const final = cliTotal != null ? cliTotal : cost_usd;
-  setRunCost(db, runId, { model, usage, cost_usd: final, cost_version: model ? cost_version : 0 });
+}
+
+function buildSdkMcpServers(userMcps) {
+  const out = {};
+  for (const [name, cfg] of Object.entries(userMcps ?? {})) out[name] = cfg;
+  return out;
 }
 
 function renderPrompt(role, task, project, runId, runToken, comments) {
@@ -290,19 +249,10 @@ function logErr(e) { console.error('[executor]', e?.stack || e); }
 
 /**
  * Register this run's session in Claude's interactive history index
- * (`~/.claude/history.jsonl`). Headless `-p` mode saves the session JSONL
- * but does NOT write a history entry, so `claude --resume <id>` reports
- * "No conversation found". Writing one line here makes the session
- * appear in the `/resume` picker and work with `--resume`.
- *
- * Best-effort: any error (file missing, permissions, etc.) is logged and
- * swallowed — the agent run itself already succeeded by this point.
+ * (`~/.claude/history.jsonl`) so `claude --resume <id>` finds the session.
  */
 function registerWithClaudeHistory({ sessionId, projectPath, display }) {
   try {
-    // Claude stores project paths with OS-native separators. Normalize forward
-    // slashes back to backslashes on Windows so the picker groups this session
-    // under the right project.
     const osPath = process.platform === 'win32'
       ? projectPath.replace(/\//g, '\\')
       : projectPath;

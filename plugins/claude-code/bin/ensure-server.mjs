@@ -65,12 +65,7 @@ async function spawnServer() {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, AGENTBOARD_PLUGIN_VERSION: PLUGIN_VERSION },
-    // windowsHide intentionally omitted: with CREATE_NO_WINDOW the server has no
-    // console, so claude sub-processes and their tool spawns (bash/cmd/node) cannot
-    // inherit one and Windows creates a new console per spawn → flashing.
-    // Without this flag the server inherits the caller's console; everything
-    // downstream shares it quietly. CREATE_NEW_PROCESS_GROUP (from detached:true)
-    // still isolates the server from Ctrl+C in the parent terminal.
+    windowsHide: true,
     cwd: CORE_ROOT,
   });
   child.unref();
