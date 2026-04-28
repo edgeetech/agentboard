@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api, getProjectCode } from '../../api';
+import { FileDropZone } from './FileDropZone';
 
 type Variant = 'drawer' | 'inline';
 
 export function TaskDetailPanel({
-  taskCode, workflow, variant = 'drawer', onClose, onSwapVariant,
+  taskCode, workflow: _workflow, variant = 'drawer', onClose, onSwapVariant,
 }: {
   taskCode: string;
   workflow: 'WF1' | 'WF2';
@@ -18,6 +19,8 @@ export function TaskDetailPanel({
   const qc = useQueryClient();
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectMsg, setRejectMsg] = useState('');
+  const [rejectFilePaths, setRejectFilePaths] = useState<string[]>([]);
+  const [tab, setTab] = useState<'files' | 'comments'>('files');
 
   const projectCode = getProjectCode();
   const q = useQuery({
@@ -30,17 +33,31 @@ export function TaskDetailPanel({
     qc.invalidateQueries({ queryKey: ['task', projectCode, taskCode] });
     qc.invalidateQueries({ queryKey: ['tasks'] });
   };
-  const dispatch = useMutation({
-    mutationFn: (role: 'pm' | 'worker' | 'reviewer') => api.dispatch(taskCode, role),
-    onSuccess: invalidate,
-  });
-  const cancel = useMutation({ mutationFn: () => api.cancelRun(taskCode), onSuccess: invalidate });
+
   const approve = useMutation({ mutationFn: () => api.approve(taskCode), onSuccess: invalidate });
   const reject = useMutation({
-    mutationFn: () => api.reject(taskCode, rejectMsg),
-    onSuccess: () => { invalidate(); setRejectOpen(false); setRejectMsg(''); },
+    mutationFn: async () => {
+      await api.reject(taskCode, rejectMsg);
+      const validPaths = rejectFilePaths.map(p => p.trim()).filter(Boolean);
+      for (const fp of validPaths) {
+        await api.addFilePath(taskCode, fp);
+      }
+    },
+    onSuccess: () => {
+      invalidate();
+      setRejectOpen(false);
+      setRejectMsg('');
+      setRejectFilePaths([]);
+    },
   });
-  const retry = useMutation({ mutationFn: () => api.retryFromWorker(taskCode), onSuccess: invalidate });
+  const addFilePath = useMutation({
+    mutationFn: (fp: string) => api.addFilePath(taskCode, fp),
+    onSuccess: invalidate,
+  });
+  const deleteFilePath = useMutation({
+    mutationFn: (fpId: string) => api.deleteFilePath(taskCode, fpId),
+    onSuccess: invalidate,
+  });
   const del = useMutation({
     mutationFn: () => api.deleteTask(taskCode),
     onSuccess: () => { invalidate(); onClose?.(); },
@@ -49,14 +66,11 @@ export function TaskDetailPanel({
   const Wrapper = variant === 'drawer' ? 'aside' : 'div';
   const wrapperClass = variant === 'drawer' ? 'detail-panel' : 'detail-inline';
 
-  const [tab, setTab] = useState<'runs' | 'comments'>('runs');
-
   if (q.isLoading || !q.data) {
     return <Wrapper className={wrapperClass}><div className="center"><div className="spinner" /></div></Wrapper>;
   }
-  const { task, project, comments, runs } = q.data;
+  const { task, project, comments, file_paths } = q.data;
   const ac = safeParseAc(task.acceptance_criteria_json);
-  const hasRunningRun = runs.some((r: any) => r.status === 'running' || r.status === 'queued');
   const projectLabel = project?.name || project?.code || '—';
 
   return (
@@ -114,18 +128,18 @@ export function TaskDetailPanel({
             {ac.map((a: any) => (
               <li key={a.id}><input type="checkbox" checked={a.checked} readOnly /> {a.text}</li>
             ))}
-            {ac.length === 0 && <li className="muted">(none yet — PM will populate)</li>}
+            {ac.length === 0 && <li className="muted">(none)</li>}
           </ul>
         </section>
 
         <div className="detail-tabs" role="tablist">
           <button
             role="tab"
-            aria-selected={tab === 'runs'}
-            className={`tab${tab === 'runs' ? ' active' : ''}`}
-            onClick={() => setTab('runs')}
+            aria-selected={tab === 'files'}
+            className={`tab${tab === 'files' ? ' active' : ''}`}
+            onClick={() => setTab('files')}
           >
-            {t('task.runs')} <span className="count">{runs.length}</span>
+            {t('task.files', 'Files')} <span className="count">{file_paths?.length ?? 0}</span>
           </button>
           <button
             role="tab"
@@ -137,22 +151,28 @@ export function TaskDetailPanel({
           </button>
         </div>
 
-        {tab === 'runs' && (
-          <section role="tabpanel">
-            <ul className="run-list">
-              {runs.map((r: any) => (
-                <li key={r.id} className={`run run-${r.status}`}>
-                  <span className="run-role">{t(`role.${r.role}`)}</span>
-                  <span className="run-status">{r.status}</span>
-                  {r.cost_usd != null && <span className="run-cost">${r.cost_usd.toFixed(4)}</span>}
-                  {r.error && <span className="err inline">{String(r.error).slice(0, 80)}</span>}
-                  <a href={`/api/logs/${r.id}`} target="_blank" rel="noreferrer">log</a>
-                  <CopyContextButton task={task} project={project} comments={comments} />
-
-                </li>
-              ))}
-              {runs.length === 0 && <li className="muted">(no runs yet)</li>}
-            </ul>
+        {tab === 'files' && (
+          <section role="tabpanel" className="files-tab">
+            {(file_paths ?? []).length > 0 && (
+              <ul className="file-path-list saved">
+                {(file_paths ?? []).map((fp: any) => (
+                  <li key={fp.id} className="file-path-entry saved">
+                    <span className="file-path-icon">📄</span>
+                    <span className="file-path-text" title={fp.file_path}>{fp.file_path}</span>
+                    <button
+                      type="button"
+                      className="icon-btn danger-hover"
+                      onClick={() => deleteFilePath.mutate(fp.id)}
+                      title={t('common.remove', 'Remove')}
+                      aria-label={t('common.remove', 'Remove')}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <AddFilePathRow onAdd={fp => addFilePath.mutate(fp)} />
           </section>
         )}
 
@@ -173,27 +193,13 @@ export function TaskDetailPanel({
 
       <footer className="detail-foot">
         <div className="actions">
-          {task.status === 'todo' && !hasRunningRun && (
-            <button onClick={() => dispatch.mutate('pm')}>{t('task.run_pm')}</button>
-          )}
-          {task.status === 'agent_working' && task.assignee_role === 'worker' && !hasRunningRun && (
-            <button onClick={() => dispatch.mutate('worker')}>{t('task.run_worker')}</button>
-          )}
-          {task.status === 'agent_review' && !hasRunningRun && workflow === 'WF1' && (
-            <button onClick={() => dispatch.mutate('reviewer')}>{t('task.run_reviewer')}</button>
-          )}
-          {hasRunningRun && (
-            <button onClick={() => cancel.mutate()}>{t('task.cancel_run')}</button>
-          )}
           {task.status === 'human_approval' && (
             <>
               <button className="primary" onClick={() => approve.mutate()}>{t('task.approve')}</button>
               <button onClick={() => setRejectOpen(true)}>{t('task.reject')}</button>
             </>
           )}
-          {task.rework_count > 3 && (
-            <button className="warn" onClick={() => retry.mutate()}>{t('task.retry_from_worker')}</button>
-          )}
+          <CopyContextButton task={task} project={project} comments={comments} />
           <button
             className="danger"
             style={{ marginLeft: 'auto' }}
@@ -217,13 +223,17 @@ export function TaskDetailPanel({
               rows={4}
               autoFocus
             />
+            <label style={{ marginTop: '0.75rem', display: 'block' }}>
+              {t('files.label', 'File paths')}
+            </label>
+            <FileDropZone paths={rejectFilePaths} onChange={setRejectFilePaths} />
             <div className="actions">
               <button className="ghost" onClick={() => setRejectOpen(false)}>
                 {t('common.cancel')}
               </button>
               <button
                 className="danger"
-                disabled={rejectMsg.trim().length < 10}
+                disabled={rejectMsg.trim().length < 10 || reject.isPending}
                 onClick={() => reject.mutate()}
               >
                 {t('task.reject')}
@@ -233,6 +243,28 @@ export function TaskDetailPanel({
         </div>
       )}
     </Wrapper>
+  );
+}
+
+function AddFilePathRow({ onAdd }: { onAdd: (fp: string) => void }) {
+  const { t } = useTranslation();
+  const [drafts, setDrafts] = useState<string[]>([]);
+
+  function commit() {
+    const valid = drafts.map(p => p.trim()).filter(Boolean);
+    valid.forEach(fp => onAdd(fp));
+    setDrafts([]);
+  }
+
+  return (
+    <div className="add-file-path-row">
+      <FileDropZone paths={drafts} onChange={setDrafts} />
+      {drafts.length > 0 && (
+        <button type="button" className="primary" onClick={commit} style={{ marginTop: '0.5rem' }}>
+          {t('files.save_paths', 'Save paths')}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -264,12 +296,6 @@ function RoleAvatar({ role, label }: { role: string; label: string }) {
   );
 }
 
-/**
- * Copies a markdown-formatted context block to the clipboard so the user can
- * paste it into a fresh interactive `claude` session in the repo and pick up
- * where the agent left off. Headless `claude -p` sessions aren't reliably
- * resumable via `--resume`, so we hand the user the raw context instead.
- */
 function CopyContextButton({
   task, project, comments,
 }: { task: any; project: any; comments: any[] }) {
@@ -300,7 +326,7 @@ function CopyContextButton({
       recent,
       ``,
       `---`,
-      `Please continue work on this task from here. Update the agentboard MCP if available; otherwise respond with progress.`,
+      `Please continue work on this task from here.`,
     ].join('\n');
   }
 
@@ -314,9 +340,9 @@ function CopyContextButton({
   return (
     <button
       type="button"
-      className="linkish run-resume"
+      className="linkish"
       onClick={copy}
-      title={t('task.copy_context_hint', 'Copies task context as markdown — paste into a fresh `claude` session in the repo to jump in.')}
+      title={t('task.copy_context_hint', 'Copies task context as markdown — paste into a fresh `claude` session.')}
     >
       {copied ? t('common.copied', 'Copied') : `⏎ ${t('task.copy_context', 'Copy context')}`}
     </button>

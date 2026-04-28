@@ -433,6 +433,45 @@ input:focus, textarea:focus, select:focus {
 .view-toggle button.active { background: var(--primary); color: var(--on-primary); }
 .view-toggle button + button { border-left: 1px solid var(--line); }
 
+/* ------- Task List View ------- */
+
+.task-list-wrap { overflow-x: auto; }
+.task-list-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px; color: var(--text);
+}
+.task-list-table th {
+  text-align: left; padding: 0.45rem 0.75rem;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted);
+  border-bottom: 2px solid var(--line);
+  white-space: nowrap;
+}
+.task-list-table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.task-list-table tbody tr:hover td { background: var(--surface); }
+.task-list-table tbody tr.row-attention td { background: var(--accent-soft); }
+.task-list-table tbody tr.row-attention:hover td { filter: brightness(0.97); }
+.task-list-table .col-code { width: 6rem; white-space: nowrap; }
+.task-list-table .task-code { font-family: var(--mono); font-size: 12px; color: var(--muted); font-weight: 700; }
+.task-list-table .col-title { min-width: 0; max-width: 360px; }
+.task-title-cell {
+  display: block; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis;
+  max-width: 360px;
+}
+.task-list-table .col-status { white-space: nowrap; }
+.task-list-table .col-assignee { white-space: nowrap; }
+.task-list-table .col-cost { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 12px; }
+.task-cost-cell { font-family: var(--mono); }
+.task-list-table .col-actions { width: 5rem; }
+.task-list-actions { display: flex; align-items: center; gap: 0.3rem; }
+button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--danger); }
+.task-list-empty { padding: 2rem; text-align: center; font-size: 14px; }
+
 /* ------- Board ------- */
 
 .columns {
@@ -2244,3 +2283,56 @@ button.linkish:hover {
   color: var(--text);
   border-color: color-mix(in srgb, var(--text) 30%, var(--line-strong));
 }
+
+/* ── File path drop zone ─────────────────────────────────────── */
+.file-drop-zone-wrap { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.file-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 2px dashed var(--line, #ccc);
+  border-radius: var(--radius, 6px);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  text-align: center;
+  user-select: none;
+}
+.file-drop-zone:hover { border-color: var(--accent, #5c6bc0); background: var(--accent-soft, rgba(92,107,192,.06)); }
+.file-drop-zone.drag-over { border-color: var(--accent, #5c6bc0); background: var(--accent-soft, rgba(92,107,192,.1)); }
+.file-drop-icon { font-size: 1.4rem; line-height: 1; }
+.file-drop-label { font-size: 0.82rem; font-weight: 500; color: var(--fg, #333); }
+.file-drop-sub { font-size: 0.74rem; color: var(--muted, #888); }
+
+.file-path-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.file-path-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--surface2, #f5f5f5);
+  border-radius: var(--radius, 6px);
+  padding: 0.25rem 0.4rem;
+}
+.file-path-entry input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+  color: var(--fg, #333);
+  min-width: 0;
+}
+.file-path-entry input:focus { background: var(--input-bg, #fff); border-radius: 3px; }
+.file-path-icon { flex-shrink: 0; font-size: 0.9rem; }
+.file-path-text { flex: 1; font-family: var(--mono, monospace); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-path-entry.saved { background: var(--surface2, #f5f5f5); }
+
+.file-add-btn { font-size: 0.8rem; align-self: flex-start; padding: 0.2rem 0.5rem; }
+.danger-hover:hover { color: var(--danger, #e53935); }
+
+.files-tab { display: flex; flex-direction: column; gap: 0.75rem; padding-top: 0.5rem; }
+.add-file-path-row { display: flex; flex-direction: column; gap: 0.4rem; }

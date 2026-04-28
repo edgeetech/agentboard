@@ -2,7 +2,7 @@
 // Launched by `/agent-board open` skill in the Claude Code plugin.
 
 import { createServer } from 'node:http';
-import { readFileSync, existsSync, statSync, createReadStream, appendFileSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, createReadStream } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { ensureDirs } from './src/paths.mjs';
@@ -15,39 +15,12 @@ import { handleCosts } from './src/api-costs.mjs';
 import { handleLogs } from './src/api-logs.mjs';
 import { handleSessions } from './src/api-sessions.mjs';
 import { handlePrompts } from './src/api-prompts.mjs';
-import { handleTracker } from './src/api-tracker.mjs';
 import { handleMcp } from './src/api-mcp.mjs';
-import { startExecutor } from './src/executor.mjs';
-import { startTrackerPoller } from './src/tracker-poller.mjs';
-import { runningCount } from './src/repo.mjs';
-import { getActiveDb, listProjectDbs, getDb } from './src/project-registry.mjs';
-import { agentboardBus } from './src/event-bus.mjs';
-
-// Debug file logging for crash analysis
-const DEBUG_LOG = './debug-crash.log';
-function debugLog(msg) {
-  try { appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] ${msg}\n`); } catch {}
-}
+import { getActiveDb } from './src/project-registry.mjs';
 
 const SERVER_BOOT_ID = randomUUID();
 const UI_DIST = new URL('./ui/dist/', import.meta.url);
 const PLUGIN_VERSION = process.env.AGENTBOARD_PLUGIN_VERSION || '0.1.0';
-
-// Crash guards — exit on uncaughtException to avoid leaving the process in a corrupted state.
-// The supervisor (external) can restart the server process.
-let serverHealthy = true;
-process.on('unhandledRejection', (reason) => {
-  const msg = `[server] unhandledRejection: ${reason?.stack || reason}`;
-  console.error(msg);
-  debugLog(msg);
-});
-process.on('uncaughtException', (err) => {
-  const msg = `[server] uncaughtException (exiting): ${err?.stack || err}`;
-  console.error(msg);
-  debugLog(msg);
-  serverHealthy = false;
-  process.exit(1);
-});
 
 const startedAt = Date.now();
 let lastApiHitMs = Date.now();
@@ -90,10 +63,6 @@ const server = createServer(async (req, res) => {
       });
     }
 
-    if (p === '/api/health') {
-      return json(res, 200, { status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
-    }
-
     // UI: /index.html injects token (needs no Bearer — delivery channel itself)
     if (p === '/' || p === '/index.html') {
       return serveIndex(res, token, port);
@@ -133,13 +102,7 @@ const server = createServer(async (req, res) => {
         plugin_version: PLUGIN_VERSION,
         uptime_ms: Date.now() - startedAt,
         active_project: active ? active.code : null,
-        running_runs: active ? runningCount(active.db) : 0,
       });
-    }
-
-    // SSE stream for live run events
-    if (p === '/api/events' && req.method === 'GET') {
-      return handleSseEvents(req, res);
     }
 
     // MCP endpoint (used by spawned headless runs)
@@ -147,7 +110,7 @@ const server = createServer(async (req, res) => {
     if (mcp) return;
 
     // REST routers (first non-null handler wins)
-    const handlers = [handleProjects, handleTasks, handleCosts, handleLogs, handleSessions, handlePrompts, handleTracker];
+    const handlers = [handleProjects, handleTasks, handleCosts, handleLogs, handleSessions, handlePrompts];
     for (const h of handlers) {
       const done = await h(req, res, url);
       if (done || res.headersSent) return;
@@ -164,75 +127,19 @@ server.listen(args.port, '127.0.0.1', () => {
   const port = server.address().port;
   writeConfig({ port, pid: process.pid });
   console.log(`READY http://127.0.0.1:${port}`);
-  debugLog(`Server started on port ${port}`);
-  try {
-    startExecutor({ port, serverToken: token });
-    debugLog('Executor started');
-  } catch (e) {
-    debugLog(`Executor start failed: ${e?.message}`);
-    throw e;
-  }
-  try {
-    startTrackerPoller();
-    debugLog('TrackerPoller started');
-  } catch (e) {
-    debugLog(`TrackerPoller start failed: ${e?.message}`);
-    throw e;
-  }
+  // Simplified: executor disabled (no agent spawn)
+  // startExecutor({ port, serverToken: token });
 });
 
-// Idle shutdown: no API hit 10min AND no running/queued runs across ANY project.
+// Idle shutdown: no API hit for 10 minutes → exit.
 setInterval(async () => {
   const idleFor = Date.now() - lastApiHitMs;
   if (idleFor < 10 * 60_000) return;
-  const codes = listProjectDbs();
-  if (codes.length === 0) return process.exit(0);
-  let anyActive = false;
-  for (const code of codes) {
-    try {
-      const db = await getDb(code);
-      const running = runningCount(db);
-      const queued = db.prepare(`SELECT COUNT(*) AS n FROM agent_run WHERE status='queued'`).get().n;
-      if (running > 0 || queued > 0) { anyActive = true; break; }
-    } catch {}
-  }
-  if (!anyActive) {
-    console.log('[server] idle shutdown');
-    process.exit(0);
-  }
+  console.log('[server] idle shutdown');
+  process.exit(0);
 }, 30_000).unref?.();
 
 // ────────────── helpers ──────────────
-
-/**
- * SSE endpoint — broadcasts agentboard lifecycle events to subscribed browser clients.
- * The UI can subscribe and invalidate React Query caches on run.completed / run.failed.
- */
-function handleSseEvents(req, res) {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-  });
-  res.write(': connected\n\n');
-
-  /** @param {string} eventName @param {unknown} data */
-  const send = (eventName, data) => {
-    try {
-      res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
-    } catch {}
-  };
-
-  agentboardBus.onAny(send);
-
-  // Heartbeat every 30s to keep connection alive through proxies
-  const hb = setInterval(() => { try { res.write(': heartbeat\n\n'); } catch {} }, 30_000);
-
-  req.on('close', () => {
-    clearInterval(hb);
-    agentboardBus.removeOnAny(send);
-  });
-}
 
 function checkHost(req, port) {
   const h = req.headers.host || '';

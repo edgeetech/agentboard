@@ -81,17 +81,21 @@ function wrapNode(db) {
 
 const SCHEMA_SQL = readFileSync(SCHEMA_SQL_PATH, 'utf8');
 
-// Lightweight migrations for existing DBs. Each entry: (sql, why). Errors are
-// swallowed — the expected failure mode is "column already exists" on an
-// already-migrated DB, which is fine.
+// Idempotent migrations for existing DBs. Each runs inside a try/catch so
+// expected failures (table already dropped, column already exists) are silent.
 const MIGRATIONS = [
-  { sql: `ALTER TABLE agent_run ADD COLUMN claude_session_id TEXT`,
-    why: 'store claude --session-id for resume' },
-  { sql: `ALTER TABLE task ADD COLUMN workspace_path TEXT`,
-    why: 'per-task workspace isolation (P3)' },
-  // v2 → v3: retry, tracker, attachment support
-  { sql: `ALTER TABLE agent_run ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1`,
-    why: 'retry attempt counter' },
+  // Simplified mode: agent_run was removed; drop it from existing DBs.
+  { sql: `DROP TABLE IF EXISTS agent_run`, why: 'agent_run removed in simplified mode' },
+  // task_attachment: create if not exists (existing DBs opened before schema bump).
+  { sql: `CREATE TABLE IF NOT EXISTS task_attachment (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES task(id),
+    file_path TEXT NOT NULL,
+    label TEXT,
+    created_at TEXT NOT NULL
+  )`, why: 'add task_attachment table for file path attachments' },
+  { sql: `CREATE INDEX IF NOT EXISTS idx_attachment_task ON task_attachment(task_id, created_at)`,
+    why: 'index for attachment lookups' },
 ];
 
 function applyMigrations(db) {

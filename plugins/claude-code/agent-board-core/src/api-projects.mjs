@@ -4,8 +4,7 @@ import { createProject, getProject, updateProject } from './repo.mjs';
 import { openOrCreate, listProjectDbs, getDb, getActiveDb, closeDb } from './project-registry.mjs';
 import { writeConfig, readConfig } from './config.mjs';
 import { dataDir, projectDbPath, trashDir } from './paths.mjs';
-import { isoNow } from './time.mjs';
-import { statSync, renameSync, mkdirSync } from 'node:fs';
+import { statSync, renameSync, mkdirSync, copyFileSync, unlinkSync, existsSync } from 'node:fs';
 import { isAbsolute, resolve as pathResolve, sep } from 'node:path';
 
 /**
@@ -119,7 +118,7 @@ export async function handleProjects(req, res, url) {
       patch.max_parallel = n;
     }
     if ('auto_dispatch_pm' in patch) {
-      patch.auto_dispatch_pm = patch.auto_dispatch_pm ? 1 : 0;
+      delete patch.auto_dispatch_pm; // field removed; ignore silently
     }
 
     const out = updateProject(db, patch, version);
@@ -133,33 +132,35 @@ export async function handleProjects(req, res, url) {
     const db = await getDb(code).catch(() => null);
     if (!db) return json(res, 404, { error: 'no such project' });
 
-    // Kill running agent processes + cancel all runs
-    const running = db.prepare(
-      `SELECT id, pid FROM agent_run WHERE status='running'`
-    ).all();
-    for (const r of running) {
-      if (r.pid) {
-        try { process.kill(r.pid, 'SIGTERM'); } catch {}
-        setTimeout(() => { try { process.kill(r.pid, 'SIGKILL'); } catch {} }, 5000).unref?.();
-      }
-    }
-    db.prepare(
-      `UPDATE agent_run SET status='cancelled', error='project deleted', ended_at=?
-       WHERE status IN ('running','queued')`
-    ).run(isoNow());
+    // Checkpoint WAL so all data is in the main DB file before we close.
+    try { db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').run(); } catch {}
 
-    // Close handle, move DB + sidecar files to trash
+    // Close handle before moving files
     closeDb(code);
     const src = projectDbPath(lower);
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     const dst = `${trashDir()}${sep}${lower}-${ts}.db`;
     try { mkdirSync(trashDir(), { recursive: true }); } catch {}
-    let trashed = null;
-    try { renameSync(src, dst); trashed = dst; } catch (e) {
-      return json(res, 500, { error: `could not trash db: ${e?.message || e}` });
-    }
+
+    // Remove WAL/SHM sidecars — on Windows these block rename of the main file.
     for (const ext of ['-wal', '-shm']) {
-      try { renameSync(src + ext, dst + ext); } catch {}
+      try { if (existsSync(src + ext)) unlinkSync(src + ext); } catch {}
+    }
+
+    // Move main DB to trash. On Windows rename can still fail (antivirus, etc.)
+    // so fall back to copy+delete which always works.
+    let trashed = null;
+    try {
+      renameSync(src, dst);
+      trashed = dst;
+    } catch {
+      try {
+        copyFileSync(src, dst);
+        unlinkSync(src);
+        trashed = dst;
+      } catch (e) {
+        return json(res, 500, { error: `could not trash db: ${e?.message || e}` });
+      }
     }
 
     // Clear active project if this was it
@@ -170,7 +171,6 @@ export async function handleProjects(req, res, url) {
 
     return json(res, 200, {
       ok: true,
-      cancelled_runs: running.length,
       trashed_path: trashed,
     });
   }
