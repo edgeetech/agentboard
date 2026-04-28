@@ -405,6 +405,9 @@ input:focus, textarea:focus, select:focus {
   min-width: 0; flex: 0 1 auto; overflow: hidden;
 }
 .page-head .title h1 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100%;
 }

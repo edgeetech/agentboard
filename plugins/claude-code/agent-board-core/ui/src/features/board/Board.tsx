@@ -43,6 +43,7 @@ type Project = {
   repo_path: string;
   auto_dispatch_pm: number;
   max_parallel: number;
+  agent_provider: "claude" | "github_copilot";
   version: number;
 };
 
@@ -179,6 +180,11 @@ export function Board({ project }: { project: Project }) {
       <div className='page-head'>
         <div className='title'>
           <h1>
+            <AgentProviderIcon 
+              provider={project.agent_provider} 
+              size='md'
+              tooltip
+            />
             {project.name} <span className='code'>{project.code}</span>
           </h1>
         </div>
