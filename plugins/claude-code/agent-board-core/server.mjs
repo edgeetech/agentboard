@@ -15,14 +15,25 @@ import { handleCosts } from './src/api-costs.mjs';
 import { handleLogs } from './src/api-logs.mjs';
 import { handleSessions } from './src/api-sessions.mjs';
 import { handlePrompts } from './src/api-prompts.mjs';
+import { handleTracker } from './src/api-tracker.mjs';
 import { handleMcp } from './src/api-mcp.mjs';
 import { startExecutor } from './src/executor.mjs';
+import { startTrackerPoller } from './src/tracker-poller.mjs';
 import { runningCount } from './src/repo.mjs';
 import { getActiveDb, listProjectDbs, getDb } from './src/project-registry.mjs';
+import { agentboardBus } from './src/event-bus.mjs';
 
 const SERVER_BOOT_ID = randomUUID();
 const UI_DIST = new URL('./ui/dist/', import.meta.url);
 const PLUGIN_VERSION = process.env.AGENTBOARD_PLUGIN_VERSION || '0.1.0';
+
+// Crash guards — log but never exit. The server must outlive any single bad request.
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandledRejection:', reason?.stack || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[server] uncaughtException:', err?.stack || err);
+});
 
 const startedAt = Date.now();
 let lastApiHitMs = Date.now();
@@ -63,6 +74,10 @@ const server = createServer(async (req, res) => {
         server_id: SERVER_BOOT_ID,
         plugin_version: PLUGIN_VERSION,
       });
+    }
+
+    if (p === '/api/health') {
+      return json(res, 200, { status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
     }
 
     // UI: /index.html injects token (needs no Bearer — delivery channel itself)
@@ -108,12 +123,17 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    // SSE stream for live run events
+    if (p === '/api/events' && req.method === 'GET') {
+      return handleSseEvents(req, res);
+    }
+
     // MCP endpoint (used by spawned headless runs)
     const mcp = await handleMcp(req, res, url);
     if (mcp) return;
 
     // REST routers (first non-null handler wins)
-    const handlers = [handleProjects, handleTasks, handleCosts, handleLogs, handleSessions, handlePrompts];
+    const handlers = [handleProjects, handleTasks, handleCosts, handleLogs, handleSessions, handlePrompts, handleTracker];
     for (const h of handlers) {
       const done = await h(req, res, url);
       if (done || res.headersSent) return;
@@ -131,6 +151,7 @@ server.listen(args.port, '127.0.0.1', () => {
   writeConfig({ port, pid: process.pid });
   console.log(`READY http://127.0.0.1:${port}`);
   startExecutor({ port, serverToken: token });
+  startTrackerPoller();
 });
 
 // Idle shutdown: no API hit 10min AND no running/queued runs across ANY project.
@@ -155,6 +176,36 @@ setInterval(async () => {
 }, 30_000).unref?.();
 
 // ────────────── helpers ──────────────
+
+/**
+ * SSE endpoint — broadcasts agentboard lifecycle events to subscribed browser clients.
+ * The UI can subscribe and invalidate React Query caches on run.completed / run.failed.
+ */
+function handleSseEvents(req, res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+  res.write(': connected\n\n');
+
+  /** @param {string} eventName @param {unknown} data */
+  const send = (eventName, data) => {
+    try {
+      res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
+    } catch {}
+  };
+
+  agentboardBus.onAny(send);
+
+  // Heartbeat every 30s to keep connection alive through proxies
+  const hb = setInterval(() => { try { res.write(': heartbeat\n\n'); } catch {} }, 30_000);
+
+  req.on('close', () => {
+    clearInterval(hb);
+    agentboardBus.removeOnAny(send);
+  });
+}
 
 function checkHost(req, port) {
   const h = req.headers.host || '';

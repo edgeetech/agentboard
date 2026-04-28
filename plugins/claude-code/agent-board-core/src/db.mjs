@@ -87,6 +87,11 @@ const SCHEMA_SQL = readFileSync(SCHEMA_SQL_PATH, 'utf8');
 const MIGRATIONS = [
   { sql: `ALTER TABLE agent_run ADD COLUMN claude_session_id TEXT`,
     why: 'store claude --session-id for resume' },
+  { sql: `ALTER TABLE task ADD COLUMN workspace_path TEXT`,
+    why: 'per-task workspace isolation (P3)' },
+  // v2 → v3: retry, tracker, attachment support
+  { sql: `ALTER TABLE agent_run ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1`,
+    why: 'retry attempt counter' },
 ];
 
 function applyMigrations(db) {
