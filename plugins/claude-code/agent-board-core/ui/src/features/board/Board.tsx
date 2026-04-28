@@ -180,12 +180,15 @@ export function Board({ project }: { project: Project }) {
       <div className='page-head'>
         <div className='title'>
           <h1>
-            <AgentProviderIcon 
-              provider={project.agent_provider} 
-              size='md'
-              tooltip
-            />
             {project.name} <span className='code'>{project.code}</span>
+            <span className='powered-by'>
+              {t('board.powered_by', 'powered by')}
+              <AgentProviderIcon 
+                provider={project.agent_provider} 
+                size='sm'
+                tooltip
+              />
+            </span>
           </h1>
         </div>
         <div className='actions'>

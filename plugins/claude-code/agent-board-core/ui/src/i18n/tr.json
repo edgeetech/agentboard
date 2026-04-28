@@ -98,7 +98,8 @@
     "modern": "Modern",
     "classic": "Klasik",
     "needs_attention": "Dikkat gerekiyor",
-    "search": "Görev ara…"
+    "search": "Görev ara…",
+    "powered_by": "tarafından sağlanıyor"
   },
   "task": {
     "title": "Başlık",

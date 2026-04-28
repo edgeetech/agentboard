@@ -98,7 +98,8 @@
     "modern": "Moderno",
     "classic": "Clásico",
     "needs_attention": "Necesita atención",
-    "search": "Buscar tareas…"
+    "search": "Buscar tareas…",
+    "powered_by": "impulsado por"
   },
   "task": {
     "title": "Título",

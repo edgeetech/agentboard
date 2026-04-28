@@ -200,7 +200,8 @@
     "modern": "Modern",
     "classic": "Classic",
     "needs_attention": "Needs attention",
-    "search": "Search tasks…"
+    "search": "Search tasks…",
+    "powered_by": "powered by"
   },
   "skills": {
     "title": "Skills",

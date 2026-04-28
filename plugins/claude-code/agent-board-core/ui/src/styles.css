@@ -412,6 +412,21 @@ input:focus, textarea:focus, select:focus {
   max-width: 100%;
 }
 .page-head h1 .code { font-family: var(--mono); font-size: 0.95rem; color: var(--muted); font-weight: 600; }
+.page-head h1 .powered-by {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+.page-head h1 .powered-by img {
+  height: 24px;
+  width: auto;
+  opacity: 0.5;
+  display: inline-block;
+}
 .page-head .subtitle { color: var(--text-soft); font-size: 13px; margin-top: 0.15rem; }
 .page-head .actions {
   display: flex; gap: 0.5rem; align-items: center;
