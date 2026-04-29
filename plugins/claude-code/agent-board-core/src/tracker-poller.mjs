@@ -15,7 +15,9 @@ export function startTrackerPoller() {
   if (pollerStarted) return;
   pollerStarted = true;
   // Stagger first poll by 5s to let server finish boot
-  const staggerTimer = setTimeout(() => pollAll().catch(logErr), 5_000);
+  const staggerTimer = setTimeout(() => {
+    pollAll().catch(logErr);
+  }, 5_000);
   staggerTimer.unref?.();
 }
 

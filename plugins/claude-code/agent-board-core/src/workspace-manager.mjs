@@ -128,23 +128,18 @@ export class WorkspaceManager {
       throw new Error(`Path escapes workspace root: ${wsPath}`);
     }
     // Symlink check
-    try {
-      const segments = rel.split(/[\\/]/);
-      let cur = this.#rootDir;
-      for (const seg of segments) {
-        cur = join(cur, seg);
-        try {
-          if (!existsSync(cur)) break;
-          if (lstatSync(cur).isSymbolicLink()) throw new Error(`Symlink in path: ${cur}`);
-        } catch (e) {
-          // Only ignore ENOENT while traversing; rethrow other errors (permissions, IO, etc.)
-          if (e?.code === 'ENOENT') break;
-          throw e;
-        }
+    const segments = rel.split(/[\\/]/);
+    let cur = this.#rootDir;
+    for (const seg of segments) {
+      cur = join(cur, seg);
+      if (!existsSync(cur)) break;
+      try {
+        if (lstatSync(cur).isSymbolicLink()) throw new Error(`Symlink in path: ${cur}`);
+      } catch (e) {
+        // Only ignore ENOENT while traversing; rethrow other errors (permissions, IO, etc.)
+        if (e?.code === 'ENOENT') break;
+        throw e;
       }
-    } catch (e) {
-      if (e?.message?.startsWith('Symlink') || e?.message?.startsWith('Path')) throw e;
-      throw e;
     }
   }
 

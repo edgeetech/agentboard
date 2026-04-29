@@ -74,7 +74,8 @@ export async function handleTracker(req, res, url) {
     if (!cfg) return json(res, 404, { error: 'no tracker configured' });
     db.prepare(`UPDATE tracker_config SET enabled=0, updated_at=? WHERE project_id=?`)
       .run(isoNow(), project.id);
-    return json(res, 200, { enabled: false });
+    const updated = getConfig(db);
+    return json(res, 200, { enabled: updated.enabled });
   }
 
   // POST /api/projects/{code}/tracker/sync — force immediate poll

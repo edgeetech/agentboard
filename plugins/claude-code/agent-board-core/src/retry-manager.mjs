@@ -28,7 +28,7 @@ export function scheduleRetry(db, { runId, taskId, role, attempt, error, config 
   }
 
   const nextAttempt = attempt + 1;
-  const delayMs = computeBackoffMs(attempt, maxBackoffMs);
+  const delayMs = computeBackoffMs(nextAttempt - 1, maxBackoffMs);
 
   const stateId = ulid();
   db.prepare(`

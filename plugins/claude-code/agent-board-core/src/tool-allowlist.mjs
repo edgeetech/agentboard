@@ -10,6 +10,7 @@ const WORKER_BASH = [
   'node', 'tsc', 'python', 'pip', 'pytest',
   'go', 'cargo', 'dotnet', 'mvn', 'gradle',
   'git status', 'git diff', 'git log', 'git show', 'git rev-parse', 'git ls-files',
+  'git checkout', 'git switch', 'git branch', 'git add', 'git commit', 'git push', 'git pull', 'git merge', 'git rebase', 'git reset', 'git stash',
   'gh',  // GitHub CLI — read PRs/issues/comments for tasks like "fix Devin PR feedback"
   'ls', 'cat', 'find', 'mkdir', 'rm', 'mv', 'cp', 'echo', 'pwd',
 ].map(c => `Bash(${c}:*)`);

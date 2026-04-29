@@ -71,6 +71,8 @@ Multi-agent AI is powerful, but the day-to-day is messy:
 | 🪝 **Step into any run** | Each run gets `--session-id`. One click copies `claude --resume <id>` so you can jump into the live transcript from your terminal. |
 | 🎨 **9 themes, light + dark** | AgentBoard, EdgeeTech, Primer, Monochrome, Neon, Warm Tones, Muted Pastels, Deep Jewel, Vibrant. |
 
+**Server:** Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). The HTTP server uses only Node.js standard library; the overall plugin package includes a small set of production dependencies (Claude SDK, Commander, LiquidJS, Pino) for agent execution and background services.
+
 ---
 
 ## 🖼️ Product tour
@@ -107,7 +109,8 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
    ▼                       ▼
   PM agent            Worker agent       (and Reviewer in WF1)
   └─ writes ACs       └─ edits files
-                        no commits, no branches```
+                        no commits, no branches
+```
 
 **State machine:**
 

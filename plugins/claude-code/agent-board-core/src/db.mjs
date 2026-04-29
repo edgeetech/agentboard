@@ -137,6 +137,8 @@ const MIGRATIONS = [
     why: 'index for task run history' },
   { sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_cost ON agent_run(task_id, ended_at) WHERE status IN ('succeeded','failed','blocked','cancelled')`,
     why: 'index for cost calculations' },
+  { sql: `ALTER TABLE task ADD COLUMN workspace_path TEXT`,
+    why: 'add workspace_path column for workspace isolation' },
 ];
 
 function applyMigrations(db) {
