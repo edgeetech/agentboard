@@ -62,11 +62,16 @@ Multi-agent AI is powerful, but the day-to-day is messy:
 | 🟦🟧🟪🟩 **Four roles, one flow** | PM enriches → Worker codes → Reviewer verifies → Human approves. Pick **WF1** (full loop) or **WF2** (skip Reviewer). |
 | 🕹️ **Auto *or* semi-auto mode** | **Auto** — agents drive transitions end-to-end. **Semi** — you drive status changes, agents only annotate (comments + ACs). Switch per project, any time. |
 | 🧾 **Acceptance Criteria, enforced** | PM writes 3–7 testable ACs. Reviewer must check them. Server rejects finishes that skip the audit. |
-| 💰 **Real-time cost per run** | Every run parses `stream-json` usage and stamps `cost_usd` from latest Opus / Sonnet / Haiku pricing. Project header shows all-time, 7d, 30d totals. |
+| 💰 **Real-time cost per run** | Every run parses SDK usage events and stamps `cost_usd` from latest Opus / Sonnet / Haiku pricing. Project header shows all-time, 7d, 30d totals. |
 | 🔁 **Bounded rework loop** | Max 3 reviewer rejects per task. After that, task stalls with "Retry from Worker" button — no runaway agents. |
+| 🔄 **Automatic retry with backoff** | Failed runs automatically re-enqueue with exponential backoff (1s → 2s → 4s, capped at 5min, max 3 attempts). Retry history logged in `retry_state` per run. Configurable via `max_retry_attempts` / `max_retry_backoff_ms`. |
+| 🔗 **External tracker sync** | Connect Linear, GitHub Issues, or GitLab to a project. Background poller creates agentboard tasks from incoming issues, marks tasks done when issues hit terminal state. Config via `tracker_config` table; REST API at `/api/projects/{code}/tracker`. |
+| 🛡️ **Workspace path safety** | Per-task workspaces validated against path traversal (`../`) and symlink attacks before creation. Artifact caches (`.cache`, `node_modules/.cache`, `.vite`, `.turbo`, etc.) cleaned between runs. Shell lifecycle hooks (`afterCreate`, `beforeRun`, `afterRun`, `beforeRemove`) with 30s timeout. |
 | 🔒 **Local-only by design** | Binds `127.0.0.1`, DNS-rebind guard, Bearer + per-run rotated tokens, whitelisted child env. AWS / GitHub / SSH secrets in your shell are **not** passed to spawned agents. |
 | 🪝 **Step into any run** | Each run gets `--session-id`. One click copies `claude --resume <id>` so you can jump into the live transcript from your terminal. |
 | 🎨 **9 themes, light + dark** | AgentBoard, EdgeeTech, Primer, Monochrome, Neon, Warm Tones, Muted Pastels, Deep Jewel, Vibrant. |
+
+**Server:** Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). The HTTP server uses only Node.js standard library; the overall plugin package includes a small set of production dependencies (Claude SDK, Commander, LiquidJS, Pino) for agent execution and background services.
 
 ---
 
@@ -88,21 +93,23 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
 
 ```
    Your Claude Code session
-            │  (stdio MCP — read-only board + approve/reject)
-            ▼
-   ┌─────────────────────────────────────────────┐
-   │  AgentBoard core server  (Node, 127.0.0.1)  │
-   │  • REST + JSON-RPC HTTP MCP                 │
-   │  • Per-project SQLite (WAL)                 │
-   │  • Executor: spawns headless `claude -p`    │
-   │  • Reaper: 15min heartbeat timeout          │
-   └─────────┬───────────────────────────────────┘
-             │
-   ┌─────────┴────────────┐
-   ▼                      ▼
-  PM agent           Worker agent       (and Reviewer in WF1)
-  └─ writes ACs      └─ edits files
-                       no commits, no branches
+             │  (stdio MCP — read-only board + approve/reject)
+             ▼
+   ┌──────────────────────────────────────────────────────────────┐
+   │  AgentBoard core server  (Node, 127.0.0.1)                   │
+   │  • REST + JSON-RPC HTTP MCP                                  │
+   │  • Per-project SQLite (WAL, schema v3)                       │
+   │  • Executor: Claude Agent SDK (in-process, no subprocess)    │
+   │  • RetryManager: exponential backoff, max 3 attempts         │
+   │  • TrackerPoller: Linear / GitHub / GitLab background sync   │
+   │  • Reaper: 15min heartbeat timeout                           │
+   └──────────┬───────────────────────────────────────────────────┘
+              │
+   ┌──────────┴────────────┐
+   ▼                       ▼
+  PM agent            Worker agent       (and Reviewer in WF1)
+  └─ writes ACs       └─ edits files
+                        no commits, no branches
 ```
 
 **State machine:**
@@ -114,8 +121,8 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
 
 **Two workflows, picked per project at creation:**
 
-- **WF1** — `Todo → Working → Review → Approval → Done` (full loop)
-- **WF2** — `Todo → Working → Approval → Done` (skip Reviewer)
+- **WF1** — `Todo → Working → Review → Approval → Done` (full loop with Reviewer)
+- **WF2** — `Todo → Working → Approval → Done` (skip Reviewer step)
 
 **Two dispatch modes, switchable any time:**
 
@@ -142,7 +149,7 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
 - **Bearer + per-run tokens.** 32-byte hex token in `~/.agentboard/config.json` (0600 on Unix, ACL'd on Windows). Each run gets a `run_token` issued exactly once at `claim_run`.
 - **Whitelisted child env.** Spawned agents receive only `PATH`, `HOME`, `USER`, `LANG`, `TZ`, Claude auth vars, and Windows OS basics. AWS, GitHub, SSH, GCP, cloud-SDK secrets dropped.
 - **CSP nonce + HttpOnly cookie** on the UI. No inline scripts without nonce.
-- **No telemetry.** Nothing leaves your machine. Logs at `~/.agentboard/logs/<run_id>.jsonl` are full Claude transcripts — treat data dir as sensitive.
+- **No telemetry.** Nothing leaves your machine. Logs at `~/.agentboard/logs/<run_id>.ndjson` are full Claude transcripts — treat data dir as sensitive.
 
 ---
 
@@ -152,8 +159,8 @@ Outside the repo, untouched by plugin upgrades:
 
 ```
 ~/.agentboard/                  (%USERPROFILE%\.agentboard on Windows)
-  projects/<code>.db            one SQLite per project (WAL)
-  logs/<run_id>.jsonl           headless Claude stream-json
+  projects/<code>.db            one SQLite per project (WAL, schema v3)
+  logs/<run_id>.ndjson           Claude SDK structured events
   logs/<run_id>.err.log         captured stderr
   run-configs/<id>.json         tmp MCP config per run (deleted on exit)
   trash/<code>-<timestamp>.db   deleted projects (manual restore possible)
@@ -161,20 +168,85 @@ Outside the repo, untouched by plugin upgrades:
   server.lock                   single-instance lock
 ```
 
+**Per-project DB tables (schema v3):**
+
+| Table | Purpose |
+|---|---|
+| `task` | Tasks with status, assignees, acceptance criteria |
+| `task_history` | Full audit trail of every status transition |
+| `task_attachment` | Files or URLs attached to a task |
+| `agent_run` | Agent runs with cost, session-id, attempt count |
+| `retry_state` | Retry history per run (backoff delay, error, next attempt) |
+| `tracker_config` | External tracker connections per project |
+| `tracker_issue` | Synced issues from external trackers |
+| `meta` | DB schema version |
+
 ---
 
 ## 🧰 Tech stack
 
 | Layer | Stack |
 |---|---|
-| **Server** | Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). **Zero production deps.** |
+| **Server** | Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). Production deps: `@anthropic-ai/claude-agent-sdk` · `commander` · `liquidjs` · `pino`. |
+| **Agent runner** | `@anthropic-ai/claude-agent-sdk` — in-process, streaming, no subprocess required. |
 | **UI** | React 18 · Vite · TanStack Query · Zustand · @dnd-kit · react-i18next |
 | **MCP** | Two surfaces — `abrun` (HTTP, for spawned runs) and `agentboard` (stdio, for your interactive session). Names differ deliberately so `--strict-mcp-config` filters cleanly. |
 | **Pricing** | Opus 4.7 / Sonnet 4.6 / Haiku 4.5, versioned. Unknown model → `$0` + `uncosted` flag — never silently wrong numbers. |
+| **Tests** | Vitest · 91 tests across 10 files (state machine, retry, tracker, workspace safety, supervisor, turn timeout, rate limiter, prompt builder, event bus). |
 
 ---
 
-## 🔌 Letting agents use your own MCPs / skills
+## 🔗 External tracker sync
+
+Connect a Linear, GitHub Issues, or GitLab project to auto-populate agentboard tasks:
+
+```bash
+# POST /api/projects/{code}/tracker
+{
+  "kind": "github",
+  "api_key_env_var": "GITHUB_TOKEN",
+  "project_slug": "owner/repo",
+  "active_states": ["open"],
+  "terminal_states": ["closed", "merged"],
+  "poll_interval_ms": 300000
+}
+
+# Enable / disable polling
+POST /api/projects/{code}/tracker/enable
+POST /api/projects/{code}/tracker/disable
+
+# Force an immediate sync
+POST /api/projects/{code}/tracker/sync
+
+# List synced issues
+GET /api/projects/{code}/tracker/issues
+```
+
+The background `TrackerPoller` starts 5 s after boot, checks each configured project on its own schedule, and syncs new/updated issues as agentboard tasks. Deleted or terminal issues are resolved automatically.
+
+---
+
+## 🔄 Automatic retry with backoff
+
+Failed agent runs (non-`completed` status or unhandled exception) are automatically retried with exponential backoff:
+
+| Attempt | Delay |
+|---|---|
+| 1 → 2 | 1 s |
+| 2 → 3 | 2 s |
+| 3 (max) | permanent failure |
+
+Configure per-project in the project config or via env:
+
+```json
+{ "max_retry_attempts": 3, "max_retry_backoff_ms": 300000 }
+```
+
+Each retry creates a new `agent_run` row with an incremented `attempt` counter, and a `retry_state` row recording the delay and error message. The `run.failed` SSE event carries `{ permanent: true }` on the last attempt.
+
+---
+
+
 
 Spawned agents run with `--strict-mcp-config`, so only the per-run `abrun` HTTP MCP is loaded by default. Two opt-in knobs:
 

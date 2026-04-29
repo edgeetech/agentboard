@@ -35,6 +35,7 @@
   "nav": {
     "board": "Board",
     "skills": "Skills",
+    "personas": "Personas",
     "roles": "Roles",
     "sessions": "Sessions",
     "project": "Project",
@@ -164,6 +165,9 @@
     "workflow_locked": "Immutable",
     "repo_path": "Repository path",
     "repo_hint": "Absolute path. Worker edits files under this directory.",
+    "agent_provider": "Choose which agent engine to use for spawning agents",
+    "agent_provider_claude": "Claude (Anthropic SDK)",
+    "agent_provider_github_copilot": "GitHub CoPilot",
     "auto_dispatch_pm": "Auto-dispatch PM on new task",
     "max_parallel": "Max parallel runs",
     "max_parallel_hint": "1–3. Concurrent agent runs for this project.",
@@ -195,7 +199,8 @@
     "modern": "Modern",
     "classic": "Classic",
     "needs_attention": "Needs attention",
-    "search": "Search tasks…"
+    "search": "Search tasks…",
+    "powered_by": "powered by"
   },
   "skills": {
     "title": "Skills",
@@ -212,11 +217,11 @@
     "tags": "Tags",
     "tags_hint": "Comma-separated — e.g. reviewer, pytest, default."
   },
-  "roles": {
-    "title": "Roles",
+  "personas": {
+    "title": "Personas",
     "subtitle": "Agent personas that act on your tasks.",
-    "search": "Search roles…",
-    "new": "New role",
+    "search": "Search personas…",
+    "new": "New persona",
     "empty_title": "No matches",
     "empty_body": "Try a different search term.",
     "detail_subtitle": "Edit this agent persona and the skills it is allowed to use.",
@@ -224,7 +229,7 @@
     "emblem": "Emblem",
     "description": "Description",
     "skills": "Skills",
-    "skills_hint": "Tap to toggle. These appear on the role card and influence dispatch."
+    "skills_hint": "Tap to toggle. These appear on the persona card and influence dispatch."
   },
   "project": {
     "title": "Project",
@@ -237,6 +242,12 @@
   "task": {
     "title": "Title",
     "description": "Description",
+    "assignee": "Assign to",
+    "unassigned": "Unassigned (no agent)",
+    "assignee_pm": "PM",
+    "assignee_worker": "Worker",
+    "assignee_reviewer": "Reviewer",
+    "assignee_po": "PO",
     "ac": "Acceptance criteria",
     "comments": "Comments",
     "runs": "Agent runs (last 5)",

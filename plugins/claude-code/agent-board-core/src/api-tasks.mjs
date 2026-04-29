@@ -1,27 +1,17 @@
 import { json, readJson, matchRoute } from './http-util.mjs';
 import { getActiveDb, getDb } from './project-registry.mjs';
 import {
-  listTasks, getTask, getTaskByCode, createTask, transitionTask, retryFromWorker,
-  listComments, listRuns, addComment, enqueueRun,
-  finishRun, getProject,
+  listTasks, getTask, getTaskByCode, createTask, transitionTask,
+  listComments, listFilePaths, addFilePath, deleteFilePath, addComment, getProject,
+  listRunsForTask, enqueueRun,
 } from './repo.mjs';
 import { isoNow } from './time.mjs';
 
-const KILL_GRACE_MS = 5000;
 const MIN_REJECT_COMMENT = 10;
-const VALID_DISPATCH_ROLES = ['pm', 'worker', 'reviewer'];
-const RECENT_RUNS_LIMIT = 5;
 
 /** Resolve a task by either ULID id or project-scoped code. */
 function resolveTask(db, idOrCode) {
   return getTask(db, idOrCode) || getTaskByCode(db, idOrCode);
-}
-
-/** Best-effort kill: SIGTERM now, SIGKILL after grace. */
-function killProcess(pid, graceMs = KILL_GRACE_MS) {
-  if (!pid) return;
-  try { process.kill(pid, 'SIGTERM'); } catch {}
-  setTimeout(() => { try { process.kill(pid, 'SIGKILL'); } catch {} }, graceMs).unref?.();
 }
 
 // ─────────── handlers for /api/tasks/:id/* routes ───────────
@@ -31,7 +21,8 @@ async function handleGetTask(_req, res, _url, _active, task, db) {
     task,
     project: getProject(db),
     comments: listComments(db, task.id),
-    runs: listRuns(db, task.id, RECENT_RUNS_LIMIT),
+    file_paths: listFilePaths(db, task.id),
+    agent_runs: listRunsForTask(db, task.id),
   });
 }
 
@@ -41,10 +32,15 @@ async function handleTransition(req, res, _url, active, task, db) {
   // Security: REST /transition is strictly the Human path. Ignore any
   // body-supplied `by_role` — agents transition via the HTTP MCP endpoint.
   const by_role = 'human';
-  if (to_assignee === 'worker') {
+  // Only require reject_comment if reassigning from reviewer→worker (i.e., rejecting work).
+  // For initial Todo→Agent Working assignment, no comment needed.
+  if (to_assignee === 'worker' && task.status !== 'todo') {
     if (!reject_comment || reject_comment.trim().length < MIN_REJECT_COMMENT) {
       return json(res, 400, { error: `reject_comment must be ≥ ${MIN_REJECT_COMMENT} chars` });
     }
+    addComment(db, task.id, 'human', reject_comment.trim());
+  } else if (reject_comment) {
+    // If provided for other scenarios, still record it as a comment
     addComment(db, task.id, 'human', reject_comment.trim());
   }
   const project = active.db.prepare(`SELECT workflow_type, version FROM project WHERE id=?`).get(task.project_id);
@@ -60,73 +56,113 @@ async function handleTransition(req, res, _url, active, task, db) {
   return json(res, 200, out);
 }
 
-async function handleDispatch(req, res, _url, _active, task, db) {
+async function handleDispatch(_req, res) {
+  return json(res, 410, { error: 'agent dispatch disabled in simplified mode' });
+}
+
+async function handleRetryFromWorker(_req, res) {
+  return json(res, 410, { error: 'agent dispatch disabled in simplified mode' });
+}
+
+const RUN_AGENT_ROLES = new Set(['pm', 'worker', 'reviewer']);
+
+async function handleRunAgent(req, res, _url, _active, task, db) {
   const body = await readJson(req);
-  const role = body?.role;
-  if (!VALID_DISPATCH_ROLES.includes(role)) {
-    return json(res, 400, { error: 'role must be pm|worker|reviewer' });
+  const role = (body?.role || '').trim();
+  if (!RUN_AGENT_ROLES.has(role)) {
+    return json(res, 400, { error: `role must be one of ${[...RUN_AGENT_ROLES].join(', ')}` });
   }
-  const dup = db.prepare(`
-    SELECT 1 FROM agent_run WHERE task_id=? AND role=? AND status IN ('queued','running') LIMIT 1
-  `).get(task.id, role);
-  if (dup) return json(res, 409, { error: 'run already queued/running for this role' });
+  const project = getProject(db);
+  if (project?.agent_provider && project.agent_provider !== 'claude') {
+    return json(res, 400, { error: `agent_provider=${project.agent_provider} not supported` });
+  }
+  // Block if a run is already queued or running for this task — avoid
+  // double-spawn races. User can cancel-then-rerun if needed.
+  const active = db.prepare(
+    `SELECT id, role, status FROM agent_run WHERE task_id=? AND status IN ('queued','running') LIMIT 1`
+  ).get(task.id);
+  if (active) {
+    return json(res, 409, { error: `run ${active.id} already ${active.status} (${active.role})` });
+  }
   const runId = enqueueRun(db, task.id, role);
-  return json(res, 201, { runId });
-}
-
-async function handleCancelRun(_req, res, _url, _active, task, db) {
-  const running = db.prepare(`
-    SELECT * FROM agent_run WHERE task_id=? AND status='running' ORDER BY started_at DESC LIMIT 1
-  `).get(task.id);
-  if (!running) return json(res, 404, { error: 'no running run' });
-  finishRun(db, running.id, 'cancelled', 'cancelled by user', null);
-  killProcess(running.pid);
-  return json(res, 200, { ok: true, runId: running.id });
-}
-
-async function handleRetryFromWorker(_req, res, _url, _active, task, db) {
-  const out = retryFromWorker(db, task.id);
-  if (!out.ok) return json(res, out.status || 400, out);
-  return json(res, 200, out);
+  addComment(db, task.id, 'human', `RUN_AGENT: manually dispatched ${role} (run ${runId})`);
+  return json(res, 201, { run_id: runId, role });
 }
 
 async function handleDeleteTask(_req, res, _url, _active, task, db) {
-  const running = db.prepare(`SELECT * FROM agent_run WHERE task_id=? AND status='running'`).all(task.id);
-  for (const r of running) {
-    finishRun(db, r.id, 'cancelled', 'task deleted', null);
-    killProcess(r.pid);
-  }
-  db.prepare(`
-    UPDATE agent_run SET status='cancelled', error='task deleted', ended_at=?
-    WHERE task_id=? AND status='queued'
-  `).run(isoNow(), task.id);
   db.prepare(`
     UPDATE task SET deleted_at=?, version=version+1, updated_at=? WHERE id=?
   `).run(isoNow(), isoNow(), task.id);
-  return json(res, 200, { ok: true, cancelled_runs: running.length });
+  return json(res, 200, { ok: true });
+}
+
+async function handleAddComment(req, res, _url, _active, task, db) {
+  const body = await readJson(req);
+  const text = (body?.body || '').trim();
+  if (!text) return json(res, 400, { error: 'body required' });
+  if (text.length > 4000) return json(res, 400, { error: 'body too long (max 4000)' });
+  const comment = addComment(db, task.id, 'human', text);
+  return json(res, 201, { comment });
+}
+
+async function handleAddFilePath(req, res, _url, _active, task, db) {
+  const body = await readJson(req);
+  const file_path = (body?.file_path || '').trim();
+  if (!file_path) return json(res, 400, { error: 'file_path required' });
+  const fp = addFilePath(db, task.id, file_path, body?.label ?? null);
+  return json(res, 201, { file_path: fp });
+}
+
+async function handleDeleteFilePath(req, res, url, _active, task, db) {
+  const fpId = url.pathname.split('/').pop();
+  const deleted = deleteFilePath(db, fpId);
+  if (!deleted) return json(res, 404, { error: 'not found' });
+  return json(res, 200, { ok: true });
 }
 
 async function handleTaskCost(_req, res, _url, _active, task, db) {
   const row = db.prepare(`
-    SELECT SUM(input_tokens)AS input, SUM(output_tokens)AS output,
-           SUM(cache_creation_tokens)AS cache_creation, SUM(cache_read_tokens)AS cache_read,
-           SUM(cost_usd)AS cost_usd, COUNT(*)AS run_count
+    SELECT SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens,
+           SUM(cache_creation_tokens) AS cache_creation_tokens, SUM(cache_read_tokens) AS cache_read_tokens,
+           SUM(cost_usd) AS cost_usd, COUNT(*) AS run_count
     FROM agent_run WHERE task_id=?
   `).get(task.id);
   const by_role = db.prepare(`
-    SELECT role, SUM(cost_usd) AS cost_usd FROM agent_run WHERE task_id=? GROUP BY role
+    SELECT role, SUM(cost_usd) AS cost_usd, COUNT(*) AS run_count FROM agent_run WHERE task_id=? GROUP BY role
   `).all(task.id);
   return json(res, 200, { ...row, by_role });
 }
 
+async function handleBoardCost(_req, res, _url, _active, _task, db) {
+  const row = db.prepare(`
+    SELECT SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens,
+           SUM(cache_creation_tokens) AS cache_creation_tokens, SUM(cache_read_tokens) AS cache_read_tokens,
+           SUM(cost_usd) AS cost_usd, COUNT(*) AS run_count
+    FROM agent_run WHERE task_id IN (SELECT id FROM task WHERE deleted_at IS NULL)
+  `).get();
+  const by_role = db.prepare(`
+    SELECT role, SUM(cost_usd) AS cost_usd, COUNT(*) AS run_count FROM agent_run 
+    WHERE task_id IN (SELECT id FROM task WHERE deleted_at IS NULL) GROUP BY role
+  `).all();
+  const by_status = db.prepare(`
+    SELECT status, SUM(cost_usd) AS cost_usd, COUNT(*) AS run_count FROM agent_run
+    WHERE task_id IN (SELECT id FROM task WHERE deleted_at IS NULL) GROUP BY status
+  `).all();
+  return json(res, 200, { ...row, by_role, by_status });
+}
+
 // route pattern → { method: handler }
 const TASK_ROUTES = [
-  ['/api/tasks/:id',                   { GET: handleGetTask, DELETE: handleDeleteTask }],
-  ['/api/tasks/:id/transition',        { POST: handleTransition }],
-  ['/api/tasks/:id/dispatch',          { POST: handleDispatch }],
-  ['/api/tasks/:id/cancel-run',        { POST: handleCancelRun }],
-  ['/api/tasks/:id/retry-from-worker', { POST: handleRetryFromWorker }],
-  ['/api/tasks/:id/cost',              { GET: handleTaskCost }],
+  ['/api/tasks/:id',                          { GET: handleGetTask, DELETE: handleDeleteTask }],
+  ['/api/tasks/:id/transition',               { POST: handleTransition }],
+  ['/api/tasks/:id/dispatch',                 { POST: handleDispatch }],
+  ['/api/tasks/:id/retry-from-worker',        { POST: handleRetryFromWorker }],
+  ['/api/tasks/:id/run-agent',                { POST: handleRunAgent }],
+  ['/api/tasks/:id/comments',                 { POST: handleAddComment }],
+  ['/api/tasks/:id/cost',                     { GET: handleTaskCost }],
+  ['/api/tasks/:id/file-paths',               { POST: handleAddFilePath }],
+  ['/api/tasks/:id/file-paths/:fpId',         { DELETE: handleDeleteFilePath }],
+  ['/api/board/cost',                         { GET: handleBoardCost }],
 ];
 
 /**
@@ -137,11 +173,11 @@ const TASK_ROUTES = [
  */
 async function resolveScope(url) {
   const p = url.pathname;
-  const m = /^\/api\/projects\/([A-Za-z0-9]{2,7})(\/tasks(?:\/.*)?|\/tasks)?$/.exec(p);
+  const m = /^\/api\/projects\/([A-Za-z0-9]{2,7})(\/tasks(?:\/.*)?|\/board.*)?$/.exec(p);
   if (m) {
     const code = m[1];
     const rest = m[2] || '';
-    if (!rest.startsWith('/tasks')) return { handled: false };
+    if (!rest.startsWith('/tasks') && !rest.startsWith('/board')) return { handled: false };
     try {
       const db = await getDb(code);
       return { handled: true, active: { code, db }, db, taskPath: '/api' + rest };
@@ -149,7 +185,7 @@ async function resolveScope(url) {
       return { handled: true, notFound: true };
     }
   }
-  if (p === '/api/tasks' || p.startsWith('/api/tasks/')) {
+  if (p === '/api/tasks' || p.startsWith('/api/tasks/') || p === '/api/board/cost') {
     const active = await getActiveDb();
     if (!active) return { handled: true, noActive: true };
     return { handled: true, active, db: active.db, taskPath: p };
@@ -165,6 +201,10 @@ export async function handleTasks(req, res, url) {
   const { active, db, taskPath } = scope;
   const m = req.method;
 
+  if (taskPath === '/api/board/cost' && m === 'GET') {
+    return handleBoardCost(null, res, url, active, null, db);
+  }
+
   if (taskPath === '/api/tasks' && m === 'GET') {
     const search = url.searchParams.get('search') || '';
     return json(res, 200, { tasks: listTasks(db, { search }) });
@@ -174,7 +214,11 @@ export async function handleTasks(req, res, url) {
     const body = await readJson(req);
     const title = (body?.title || '').trim();
     if (!title) return json(res, 400, { error: 'title required' });
-    const out = createTask(db, { title, description: body?.description ?? '' });
+    const out = createTask(db, { 
+      title, 
+      description: body?.description ?? '',
+      assignee_role: body?.assignee_role ?? null
+    });
     return json(res, 201, out);
   }
 

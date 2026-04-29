@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { api } from '../api';
+import { AgentProviderIcon } from '../components/AgentProviderIcon';
 
 export function ProjectPage() {
   const { t } = useTranslation();
@@ -22,8 +23,8 @@ export function ProjectPage() {
   const [name, setName] = useState('');
   const [description, setDesc] = useState('');
   const [repoPath, setRepoPath] = useState('');
-  const [maxPar, setMaxPar] = useState<number>(1);
-  const [autoPm, setAutoPm] = useState<boolean>(false);
+  const [maxPar, setMaxPar] = useState<number>(2);
+  const [agentProvider, setAgentProvider] = useState<'claude' | 'github_copilot'>('claude');
   const [saved, setSaved] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export function ProjectPage() {
     setDesc(project.description || '');
     setRepoPath(project.repo_path);
     setMaxPar(project.max_parallel);
-    setAutoPm(!!project.auto_dispatch_pm);
+    setAgentProvider(project.agent_provider || 'claude');
   }, [project?.version]);
 
   const mut = useMutation({
@@ -43,7 +44,7 @@ export function ProjectPage() {
           description: description.trim(),
           repo_path: repoPath.trim(),
           max_parallel: Number(maxPar),
-          auto_dispatch_pm: autoPm ? 1 : 0,
+          agent_provider: agentProvider,
         })
       : Promise.reject(new Error('no project')),
     onSuccess: () => {
@@ -70,7 +71,7 @@ export function ProjectPage() {
     description.trim() !== (project.description || '') ||
     repoPath.trim() !== project.repo_path ||
     Number(maxPar) !== project.max_parallel ||
-    (autoPm ? 1 : 0) !== project.auto_dispatch_pm;
+    agentProvider !== (project.agent_provider || 'claude');
 
   return (
     <>
@@ -123,14 +124,27 @@ export function ProjectPage() {
             />
             <small className="muted">{t('settings.max_parallel_hint')}</small>
           </label>
-          <label className="inline-check">
-            <input
-              type="checkbox"
-              checked={autoPm}
-              onChange={e => setAutoPm(e.target.checked)}
-            />
-            <span>{t('settings.auto_dispatch_pm')}</span>
-          </label>
+           <fieldset>
+             <legend>{t('settings.agent_provider')}</legend>
+             <div className="agent-provider-toggle">
+               <button
+                 type="button"
+                 className={`agent-toggle-item ${agentProvider === 'claude' ? 'active' : ''}`}
+                 onClick={() => setAgentProvider('claude')}
+                 title="Claude (Anthropic SDK)"
+               >
+                 <AgentProviderIcon provider="claude" size="lg" tooltip={false} />
+               </button>
+               <button
+                 type="button"
+                 className={`agent-toggle-item ${agentProvider === 'github_copilot' ? 'active' : ''}`}
+                 onClick={() => setAgentProvider('github_copilot')}
+                 title="GitHub Copilot"
+               >
+                 <AgentProviderIcon provider="github_copilot" size="lg" tooltip={false} />
+               </button>
+             </div>
+           </fieldset>
 
           <div className="form-actions">
             <button
@@ -148,3 +162,4 @@ export function ProjectPage() {
     </>
   );
 }
+

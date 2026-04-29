@@ -34,6 +34,7 @@
   "nav": {
     "board": "Pano",
     "skills": "Yetenekler",
+    "personas": "Personas",
     "roles": "Roller",
     "sessions": "Oturumlar",
     "project": "Proje",
@@ -62,6 +63,9 @@
     "workflow_locked": "Değiştirilemez",
     "repo_path": "Kod dizini",
     "repo_hint": "Tam yol. Worker bu dizindeki dosyaları düzenler.",
+    "agent_provider": "Ajanları çalıştırmak için hangi motor kullanılacağını seç",
+    "agent_provider_claude": "Claude (Anthropic SDK)",
+    "agent_provider_github_copilot": "GitHub CoPilot",
     "auto_dispatch_pm": "Yeni görevde PM otomatik çalıştırılsın",
     "max_parallel": "Eş zamanlı çalışan ajan limiti",
     "max_parallel_hint": "1–3. Bu proje için eş zamanlı ajan çalışması.",
@@ -93,11 +97,18 @@
     "modern": "Modern",
     "classic": "Klasik",
     "needs_attention": "Dikkat gerekiyor",
-    "search": "Görev ara…"
+    "search": "Görev ara…",
+    "powered_by": "tarafından sağlanıyor"
   },
   "task": {
     "title": "Başlık",
     "description": "Açıklama",
+    "assignee": "Şu kişiye ata",
+    "unassigned": "Atanmamış (ajan yok)",
+    "assignee_pm": "PM",
+    "assignee_worker": "Geliştirici",
+    "assignee_reviewer": "İnceleyici",
+    "assignee_po": "ÜS",
     "ac": "Kabul kriterleri",
     "comments": "Yorumlar",
     "runs": "Ajan çalışmaları (son 5)",
@@ -135,6 +146,20 @@
     "description": "Açıklama",
     "tags": "Etiketler",
     "tags_hint": "Virgülle ayrılmış — örn. reviewer, pytest, default."
+  },
+  "personas": {
+    "title": "Personas",
+    "subtitle": "Görevlerin üzerinde çalışan ajan karakterleri.",
+    "search": "Persona ara…",
+    "new": "Yeni persona",
+    "empty_title": "Eşleşme yok",
+    "empty_body": "Farklı bir arama terimi dene.",
+    "detail_subtitle": "Bu ajan karakterini ve kullanabileceği yetenekleri düzenle.",
+    "name": "Ad",
+    "emblem": "Amblem",
+    "description": "Açıklama",
+    "skills": "Yetenekler",
+    "skills_hint": "Eklemek/çıkarmak için tıkla. Persona kartında görünür ve gönderimi etkiler."
   },
   "roles": {
     "title": "Roller",
