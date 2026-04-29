@@ -5,7 +5,7 @@ import { AppShell } from './components/AppShell';
 import { BoardPage } from './pages/BoardPage';
 import { SkillsPage } from './pages/SkillsPage';
 import { SkillDetailPage } from './pages/SkillDetailPage';
-import { RolesPage } from './pages/RolesPage';
+import { PersonasPage } from './pages/PersonasPage';
 import { RoleDetailPage } from './pages/RoleDetailPage';
 import { ProjectPage } from './pages/ProjectPage';
 import { TaskDetailPage } from './pages/TaskDetailPage';
@@ -48,8 +48,8 @@ export function App() {
         <Route path="sessions/:hash/:sessionId" element={<SessionDetailPage />} />
         <Route path="skills" element={<SkillsPage />} />
         <Route path="skills/:id" element={<SkillDetailPage />} />
-        <Route path="roles" element={<RolesPage />} />
-        <Route path="roles/:id" element={<RoleDetailPage />} />
+        <Route path="personas" element={<PersonasPage />} />
+        <Route path="personas/:id" element={<RoleDetailPage />} />
         <Route path="theme" element={<ThemePage />} />
         <Route path="projects" element={<ProjectScoped />}>
           <Route path="new" element={<SetupWizard />} />

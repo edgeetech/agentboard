@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { loadRoles } from '../data/catalog';
 import { SearchIcon } from '../components/SearchIcon';
 
-export function RolesPage() {
+export function PersonasPage() {
   const { t } = useTranslation();
   const [q, setQ] = useState('');
   const items = useMemo(loadRoles, []);
@@ -23,9 +23,9 @@ export function RolesPage() {
     <>
       <div className="page-head">
         <div className="title">
-          <h1>{t('roles.title', 'Roles')}</h1>
+          <h1>{t('personas.title', 'Personas')}</h1>
           <span className="subtitle">
-            {t('roles.subtitle', 'Agent personas that act on your tasks.')}
+            {t('personas.subtitle', 'Agent personas that act on your tasks.')}
           </span>
         </div>
         <div className="actions">
@@ -35,12 +35,12 @@ export function RolesPage() {
               <input
                 value={q}
                 onChange={e => setQ(e.target.value)}
-                placeholder={t('roles.search', 'Search roles…')}
-                aria-label="Search roles"
+                placeholder={t('personas.search', 'Search personas…')}
+                aria-label="Search personas"
               />
             </label>
             <button className="primary" disabled title={t('common.coming_soon', 'Coming soon')}>
-              + {t('roles.new', 'New role')}
+              + {t('personas.new', 'New persona')}
             </button>
           </div>
         </div>
@@ -48,13 +48,13 @@ export function RolesPage() {
 
       {list.length === 0 ? (
         <div className="empty-state">
-          <h3>{t('roles.empty_title', 'No matches')}</h3>
-          <p>{t('roles.empty_body', 'Try a different search term.')}</p>
+          <h3>{t('personas.empty_title', 'No matches')}</h3>
+          <p>{t('personas.empty_body', 'Try a different search term.')}</p>
         </div>
       ) : (
         <div className="entity-grid">
           {list.map(role => (
-            <Link key={role.id} to={`/roles/${role.id}`} className="entity-card">
+            <Link key={role.id} to={`/personas/${role.id}`} className="entity-card">
               <div className="emblem">{role.emblem}</div>
               <h3>{role.name}</h3>
               <p>{role.description}</p>

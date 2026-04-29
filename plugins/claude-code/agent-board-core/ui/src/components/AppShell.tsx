@@ -59,8 +59,8 @@ export function AppShell() {
         <NavLink to="/skills" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
           {t('nav.skills', 'Skills')}
         </NavLink>
-        <NavLink to="/roles" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
-          {t('nav.roles', 'Roles')}
+        <NavLink to="/personas" className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
+          {t('nav.personas', 'Personas')}
         </NavLink>
         <NavLink to={projectHref} className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}>
           {t('nav.project', 'Project')}
@@ -79,9 +79,9 @@ export function AppShell() {
           <span className="icon" aria-hidden>✦</span>
           <span className="nav-label">{t('nav.skills', 'Skills')}</span>
         </NavLink>
-        <NavLink to="/roles" title={t('nav.roles', 'Roles')}>
-          <span className="icon" aria-hidden>◉</span>
-          <span className="nav-label">{t('nav.roles', 'Roles')}</span>
+        <NavLink to="/personas" title={t('nav.personas', 'Personas')}>
+          <span className="icon" aria-hidden>👤</span>
+          <span className="nav-label">{t('nav.personas', 'Personas')}</span>
         </NavLink>
         <NavLink to="/sessions" title={t('nav.sessions', 'Sessions')}>
           <span className="icon" aria-hidden>⟳</span>

@@ -61,7 +61,7 @@ sqlite3 ~/.agentboard/projects/<code>.db "SELECT code, status, assignee_role, re
 
 Task transitions are workflow-aware CAS updates:
 
-- `src/state-machine.mjs` holds the `(WF1|WF2, from_status, to_status)` allow-list.
+- `src/state-machine.mjs` holds the `(WF1|WF2, from_status, to_status, by_role)` allow-list. **Human role can now initiate tasks from Todo → Agent Working**, allowing semi-automated workflows where users drive task dispatch.
 - `src/dispatch-map.mjs` resolves `(status, assignee_role)` → role to auto-dispatch. **Triggers on assignee change as well as status change** — this is how Reviewer-reject (status unchanged, assignee flips reviewer→worker) and Worker-NEEDS_PM (worker→pm) routing work.
 - `src/repo.mjs::transitionTask` does the CAS, writes `task_history`, and enqueues the next `agent_run` **in the same SQLite transaction**. The executor polls `queued` rows independently, so crash-between-write-and-dispatch is safe.
 

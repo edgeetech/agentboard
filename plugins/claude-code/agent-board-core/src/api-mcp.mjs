@@ -4,7 +4,7 @@
 // Auth: server Bearer (outer) + run_token (per-call for mutations).
 
 import { json, readJson } from './http-util.mjs';
-import { getActiveDb } from './project-registry.mjs';
+import { getActiveDb, getDb } from './project-registry.mjs';
 import { randomBytes } from 'node:crypto';
 import {
   getTask, getProject, listComments, listRuns,
