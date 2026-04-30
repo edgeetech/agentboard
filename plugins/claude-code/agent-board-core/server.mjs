@@ -2,9 +2,24 @@
 // Launched by `/agent-board open` skill in the Claude Code plugin.
 
 import { createServer } from 'node:http';
-import { readFileSync, existsSync, statSync, createReadStream } from 'node:fs';
-import { extname, resolve, sep } from 'node:path';
+import { readFileSync, existsSync, statSync, createReadStream, createWriteStream, mkdirSync } from 'node:fs';
+import { extname, resolve, sep, join } from 'node:path';
+import { homedir } from 'node:os';
 import { randomUUID, randomBytes } from 'node:crypto';
+
+// Redirect stdout/stderr to a log file so console.log/error survives parent
+// exit (ensure-server.mjs spawns us detached). Without this, logs vanish
+// when the launching shell closes its pipes.
+try {
+  const logDir = join(process.env.AGENTBOARD_DATA_DIR || join(homedir(), '.agentboard'), 'logs');
+  mkdirSync(logDir, { recursive: true });
+  const logStream = createWriteStream(join(logDir, 'server.log'), { flags: 'a' });
+  const origLog = process.stdout.write.bind(process.stdout);
+  const origErr = process.stderr.write.bind(process.stderr);
+  process.stdout.write = (chunk, ...rest) => { try { logStream.write(chunk); } catch {} return origLog(chunk, ...rest); };
+  process.stderr.write = (chunk, ...rest) => { try { logStream.write(chunk); } catch {} return origErr(chunk, ...rest); };
+} catch { /* logging is best-effort — never fail startup */ }
+
 import { ensureDirs } from './src/paths.mjs';
 import { readConfig, writeConfig } from './src/config.mjs';
 import { generateServerToken } from './src/auth.mjs';
@@ -130,11 +145,33 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(args.port, '127.0.0.1', () => {
+// Preferred port: 5501. Falls back to OS-chosen port if 5501 is in use.
+// Override via --port <n> (0 = always random).
+const PREFERRED_PORT = 5501;
+const requestedPort = args.port === 0 ? PREFERRED_PORT : args.port;
+
+const onReady = () => {
   const port = server.address().port;
   writeConfig({ port, pid: process.pid });
   console.log(`READY http://127.0.0.1:${port}`);
   startExecutor({ port, serverToken: token });
+};
+
+const onListenError = (err) => {
+  server.removeListener('error', onListenError);
+  if (err.code === 'EADDRINUSE' && requestedPort !== 0) {
+    console.log(`[server] port ${requestedPort} in use; falling back to OS-chosen port`);
+    server.listen(0, '127.0.0.1', onReady);
+  } else {
+    console.error('[server] listen failed:', err);
+    process.exit(1);
+  }
+};
+
+server.once('error', onListenError);
+server.listen(requestedPort, '127.0.0.1', () => {
+  server.removeListener('error', onListenError);
+  onReady();
 });
 
 // Idle shutdown: no API hit for 10 minutes → exit.

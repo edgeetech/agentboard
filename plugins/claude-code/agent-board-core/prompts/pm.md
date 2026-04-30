@@ -15,10 +15,10 @@ You enrich a newly-created Todo task and hand it off to Worker.
 
 2. `mcp__abrun__claim_run({ run_id })` → store `run_token`. If you already have one from the spawn prompt, skip this step but still verify via `mcp__abrun__get_task`.
 3. `mcp__abrun__get_task({ task_id })` → confirm `status='todo'` or `status='agent_working'`. If not, `mcp__abrun__finish_run({ run_token, status:'failed', error:'wrong state' })` and stop.
-3a. **Read all task comments.** From the `get_task` response, treat any `author_role:'human'` comment as guidance (especially comments with `created_at` after the run's `queued_at`). Note `comments.length` as `start_comment_count` for the sign-off re-check.
+3a. **Read all task comments.** From the `get_task` response, treat any `author_role:'human'` comment as guidance (especially comments with `created_at` after the run's `queued_at`). Treat `author_role:'system'` comments with prefix `POSTFLIGHT_HINT:` as a corrective from a prior failed run — read them carefully and ensure you complete the missing outputs they call out (AC items, ENRICHMENT_SUMMARY, finish_run). Note `comments.length` as `start_comment_count` for the sign-off re-check.
 4. **Check description clarity**: If description is vague or unclear (will cause Worker to fail):
    - `mcp__abrun__add_comment({ body: "Detail Needed: <specific clarification or examples needed, min 10 chars>" })`
-   - `mcp__abrun__update_task({ patch: { assignee_role:'po', status:'todo', version } })` — assign to PO for clarification
+   - `mcp__abrun__update_task({ patch: { assignee_role:'human', status:'todo', version } })` — assign to PO for clarification
    - `mcp__abrun__finish_run({ status:'succeeded', summary:'sent to PO for clarification' })`
    - **Stop here** — do not proceed.
 
@@ -62,8 +62,15 @@ You enrich a newly-created Todo task and hand it off to Worker.
 
 If any fails → `finish_run` returns 400. Fix and retry within your `--max-turns` budget.
 
-## Blocked path
-If the request is too vague to enrich safely:
+## Escalation to PO (Human)
+If you cannot decide on a description or AC after reading the task, comments, and `repo_path` — or a Worker/Reviewer bounced the task back with `NEEDS_PM:` and you cannot resolve the underlying ambiguity yourself — escalate to PO. Do NOT guess AC, do NOT loop with Worker/Reviewer.
+- `mcp__abrun__add_comment({ body: "NEEDS_PO: <specific question for the human, min 10 chars>" })`
+- `mcp__abrun__update_task({ patch: { assignee_role:'human', status:'todo', version } })`
+- `mcp__abrun__finish_run({ status:'blocked', summary:'escalated to PO for clarification' })`
+- **Stop here.** Human responds and re-dispatches.
+
+## Blocked path (legacy — prefer PO escalation above)
+If you must signal blocked without reassigning:
 - `mcp__abrun__add_comment({ body: "BLOCKED: <specific question to human>" })`
 - `mcp__abrun__finish_run({ status:'blocked', summary: '...' })`
 - Do NOT transition status. Human will respond and re-dispatch.

@@ -11,19 +11,23 @@ const WF1 = [
   { from: 'todo',           to: 'agent_review',   allowedAssignees: ['reviewer'],   byRoles: ['pm','reviewer'] },
   { from: 'agent_working',  to: 'agent_working',  allowedAssignees: ['worker','pm'], byRoles: ['worker','reviewer','human'] },
   { from: 'agent_working',  to: 'agent_review',   allowedAssignees: ['reviewer'],   byRoles: ['worker'] },
+  { from: 'agent_working',  to: 'todo',           allowedAssignees: ['pm'],         byRoles: ['worker'] },
   { from: 'agent_review',   to: 'agent_working',  allowedAssignees: ['worker'],     byRoles: ['reviewer'] },
+  { from: 'agent_review',   to: 'todo',           allowedAssignees: ['pm'],         byRoles: ['reviewer'] },
   { from: 'agent_review',   to: 'human_approval', allowedAssignees: ['human'],      byRoles: ['reviewer'] },
   { from: 'human_approval', to: 'agent_working',  allowedAssignees: ['worker'],     byRoles: ['human'] },
   { from: 'human_approval', to: 'done',           allowedAssignees: ['human'],      byRoles: ['human'] },
-  { from: 'todo',           to: 'todo',           allowedAssignees: ['pm','po'],    byRoles: ['worker','reviewer','pm'] },
+  { from: 'todo',           to: 'todo',           allowedAssignees: ['pm','human'],    byRoles: ['worker','reviewer','pm'] },
 ];
 
 const WF2 = [
   { from: 'todo',           to: 'agent_working',  allowedAssignees: ['worker'],     byRoles: ['pm', 'human'] },
   { from: 'agent_working',  to: 'agent_working',  allowedAssignees: ['worker','pm'], byRoles: ['worker','human'] },
+  { from: 'agent_working',  to: 'todo',           allowedAssignees: ['pm'],         byRoles: ['worker'] },
   { from: 'agent_working',  to: 'human_approval', allowedAssignees: ['human'],      byRoles: ['worker'] },
   { from: 'human_approval', to: 'agent_working',  allowedAssignees: ['worker'],     byRoles: ['human'] },
   { from: 'human_approval', to: 'done',           allowedAssignees: ['human'],      byRoles: ['human'] },
+  { from: 'todo',           to: 'todo',           allowedAssignees: ['pm','human'],    byRoles: ['worker','pm'] },
 ];
 
 export function transitions(wf) {

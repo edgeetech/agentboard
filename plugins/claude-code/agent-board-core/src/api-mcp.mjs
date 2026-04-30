@@ -4,7 +4,7 @@
 // Auth: server Bearer (outer) + run_token (per-call for mutations).
 
 import { json, readJson } from './http-util.mjs';
-import { getActiveDb, getDb } from './project-registry.mjs';
+import { getActiveDb, getDb, getDbForRunId, getDbForRunToken } from './project-registry.mjs';
 import { randomBytes } from 'node:crypto';
 import {
   getTask, getProject, listComments, listRuns,
@@ -70,17 +70,48 @@ export async function handleMcp(req, res, url) {
   }
 
   if (method === 'tools/call') {
-    const active = await getActiveDb();
-    if (!active) return sendRpc(res, id, { code: -32000, message: 'no active project' });
-    const { db } = active;
     const { name, arguments: args = {} } = body.params || {};
+    const argSummary = (() => {
+      try {
+        const s = JSON.stringify(args);
+        return s.length > 200 ? s.slice(0, 200) + '…' : s;
+      } catch { return '?'; }
+    })();
+    // Resolve DB per call:
+    // - claim_run: lookup by run_id (run not yet claimed; no token).
+    // - other run-scoped tools: lookup by run_token (works across projects).
+    // - list_queue / get_project: fall back to active project (UI focus).
+    let db;
+    try {
+      if (name === 'claim_run') {
+        const r = await getDbForRunId(args?.run_id);
+        if (!r) throw new Error('run not found');
+        db = r.db;
+      } else if (args?.run_token) {
+        const r = await getDbForRunToken(args.run_token);
+        if (!r) throw new Error('invalid run_token or run not running');
+        db = r.db;
+      } else {
+        const active = await getActiveDb();
+        if (!active) throw new Error('no active project');
+        db = active.db;
+      }
+    } catch (e) {
+      console.log(`[mcp] ${name} FAIL args=${argSummary} err="${e?.message || e}" (db-resolve)`);
+      return sendRpc(res, id, null, {
+        content: [{ type: 'text', text: `Error: ${e?.message || e}` }],
+        isError: true,
+      });
+    }
     try {
       const out = await callTool(db, name, args);
+      console.log(`[mcp] ${name} ok args=${argSummary}`);
       return sendRpc(res, id, null, {
         content: [{ type: 'text', text: typeof out === 'string' ? out : JSON.stringify(out, null, 2) }],
         isError: false,
       });
     } catch (e) {
+      console.log(`[mcp] ${name} FAIL args=${argSummary} err="${e?.message || e}"`);
       return sendRpc(res, id, null, {
         content: [{ type: 'text', text: `Error: ${e?.message || e}` }],
         isError: true,

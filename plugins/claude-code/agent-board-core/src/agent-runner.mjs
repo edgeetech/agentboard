@@ -138,7 +138,25 @@ export class AgentRunner {
       for await (const msg of q) {
         if (msg?.type) {
           onEvent?.(msg.type, msg);
-          sessionLog?.info({ type: msg.type, runId }, 'Agent event');
+          // Capture assistant text + tool_use names for postmortem diagnostics.
+          let snippet = null;
+          if (msg.type === 'assistant' && msg.message?.content) {
+            const parts = [];
+            for (const c of msg.message.content) {
+              if (c.type === 'text' && c.text) parts.push(`text=${c.text.slice(0, 400)}`);
+              else if (c.type === 'tool_use') parts.push(`tool=${c.name} input=${JSON.stringify(c.input || {}).slice(0, 200)}`);
+            }
+            if (parts.length) snippet = parts.join(' | ');
+          } else if (msg.type === 'user' && Array.isArray(msg.message?.content)) {
+            for (const c of msg.message.content) {
+              if (c.type === 'tool_result') {
+                const text = Array.isArray(c.content) ? c.content.map(p => p.text || '').join('') : (c.content || '');
+                snippet = `tool_result is_error=${!!c.is_error} text=${String(text).slice(0, 300)}`;
+                break;
+              }
+            }
+          }
+          sessionLog?.info({ type: msg.type, runId, ...(snippet ? { snippet } : {}) }, 'Agent event');
         }
 
         // Capture session ID from init

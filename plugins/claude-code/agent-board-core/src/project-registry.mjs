@@ -49,3 +49,36 @@ export async function getActiveDb() {
     return { code: cfg.active_project_code, db: await getDb(cfg.active_project_code) };
   } catch { return null; }
 }
+
+// Find the project DB containing a given agent_run id. Needed because MCP
+// callers (spawned agents) reference a run by id, but the run may live in a
+// different project than the currently "active" one (the active project is a
+// UI focus hint, not a hard scope). Scans all project DBs; cheap because each
+// is a small SQLite file with an index on agent_run.id.
+export async function getDbForRunId(runId) {
+  if (!runId) return null;
+  for (const code of listProjectDbs()) {
+    try {
+      const db = await getDb(code);
+      const row = db.prepare('SELECT 1 FROM agent_run WHERE id=?').get(runId);
+      if (row) return { code, db };
+    } catch { /* skip unreadable db */ }
+  }
+  return null;
+}
+
+// Find the project DB containing a given run_token. Tokens are 24-byte hex,
+// effectively unique across the install. Scoped lookup so post-claim MCP
+// calls (get_task, update_task, finish_run, …) always resolve to the run's
+// own DB regardless of which project the user has focused in the UI.
+export async function getDbForRunToken(runToken) {
+  if (!runToken) return null;
+  for (const code of listProjectDbs()) {
+    try {
+      const db = await getDb(code);
+      const row = db.prepare('SELECT 1 FROM agent_run WHERE token=?').get(runToken);
+      if (row) return { code, db };
+    } catch { /* skip unreadable db */ }
+  }
+  return null;
+}

@@ -12,7 +12,7 @@ import { computeCost, PRICING_VERSION } from './pricing.mjs';
 import {
   listQueuedRunsForProject, runningCount, getRun, setRunCost,
   finishRun, getProject, getTask, listComments, reapOrphans,
-  claimRun as claimRunRow, bumpHeartbeat,
+  claimRun as claimRunRow, bumpHeartbeat, addComment,
 } from './repo.mjs';
 import { getActiveDb, getDb, listProjectDbs } from './project-registry.mjs';
 import { readConfig } from './config.mjs';
@@ -253,8 +253,23 @@ async function tryClaimAndRun(db, project, run, { port, serverToken }) {
       const freshComments = listComments(db, task.id);
       const pfErr = checkPostflight(run.role, freshTask, freshComments);
       if (pfErr) {
+        // Postflight failure on natural end_turn (agent forgot to call finish_run
+        // and skipped required outputs). Retry once with a hint comment so the
+        // next run can self-correct. Permanent failure only when retries exhausted.
+        const hintBody = `POSTFLIGHT_HINT: previous ${run.role} run ended without completing required outputs — ${pfErr}. ` +
+          (run.role === 'pm'
+            ? 'Add 3–7 acceptance_criteria items via update_task and post an ENRICHMENT_SUMMARY comment, then call finish_run.'
+            : run.role === 'worker'
+              ? 'Post DEV_COMPLETED, FILES_CHANGED, and DIFF_SUMMARY comments, then call finish_run.'
+              : 'Post REVIEW_VERDICT and RATIONALE comments, then call finish_run.');
+        try { addComment(db, task.id, 'system', hintBody); } catch (e) { logErr(e); }
         finishRun(db, run.id, 'failed', null, `postflight: ${pfErr} (no finish_run called)`);
-        agentboardBus.emit('run.failed', { runId: run.id, error: pfErr, permanent: true, reason: 'postflight' });
+        const retry = scheduleRetry(db, { runId: run.id, taskId: task.id, role: run.role, attempt: run.attempt ?? 1, error: `postflight: ${pfErr}` });
+        if (!retry.scheduled) {
+          agentboardBus.emit('run.failed', { runId: run.id, error: pfErr, permanent: true, reason: 'postflight' });
+        } else {
+          agentboardBus.emit('run.failed', { runId: run.id, error: pfErr, retryAt: retry.delayMs, reason: 'postflight' });
+        }
       } else {
         finishRun(db, run.id, 'succeeded', null, null);
         agentboardBus.emit('run.completed', { runId: run.id, role: run.role, taskCode: task.code });

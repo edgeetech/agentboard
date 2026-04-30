@@ -69,6 +69,8 @@ async function spawnServer() {
     windowsHide: true,
     cwd: CORE_ROOT,
   });
+
+
   child.unref();
 
   // Wait for READY line on stdout

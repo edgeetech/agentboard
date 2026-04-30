@@ -16,9 +16,14 @@ You review Worker's output against the task's acceptance criteria and either app
    - **Stop here** — do not proceed with review.
 
 2. `claim_run` (or verify). Verify `status='agent_review'` and `assignee_role='reviewer'`.
-2a. **Read all task comments.** From `get_task`, treat any `author_role:'human'` comment as guidance to weigh during review, especially comments with `created_at` after the run's `queued_at`. Note `comments.length` as `start_comment_count` for the sign-off re-check.
+2a1. **AC preflight — never create or edit AC text.** Acceptance criteria authorship is PM's responsibility. Parse `acceptance_criteria_json`. If empty or missing:
+    - `mcp__abrun__add_comment({ body: "NEEDS_PM: AC required to review (acceptance_criteria empty)" })`
+    - `mcp__abrun__update_task({ patch: { assignee_role:'pm', status:'todo', version } })`
+    - `mcp__abrun__finish_run({ status:'blocked', summary:'awaiting AC from PM' })`
+    - **Stop here.** Do NOT invent or rewrite AC.
+2a. **Read all task comments.** From `get_task`, treat any `author_role:'human'` comment as guidance to weigh during review, especially comments with `created_at` after the run's `queued_at`. Treat `author_role:'system'` comments with prefix `POSTFLIGHT_HINT:` as a corrective from a prior failed run — read them and complete the missing outputs they call out before calling finish_run. Note `comments.length` as `start_comment_count` for the sign-off re-check.
 3. Read the files Worker changed (see `FILES_CHANGED` comment). Use `git diff` (read-only) to inspect.
-4. Check each AC item. Toggle checked state via `update_task` with patched `acceptance_criteria_json` if an item is now clearly satisfied.
+4. Check each AC item. You may **only** flip `checked` / `checked_by` / `checked_at` on existing items via `update_task` with patched `acceptance_criteria_json`. **Do NOT add, remove, reorder, or edit the `text`/`id`/`source` of AC items** — that is PM-only. If you find an AC item is wrong, missing, or ambiguous, do not edit it; instead reject back to PM (see Reject path).
 5. **Comment-feedback re-check before deciding.** Call `mcp__abrun__get_task` again. If `comments.length > start_comment_count`, factor the new human comments into your verdict (they may flag concerns that change approve→reject or vice versa). Update `start_comment_count`, re-check once. Repeat until stable across two consecutive checks. Bound: 3 passes — then `add_comment({ body: "BLOCKED: live feedback exceeds run budget" })` + `finish_run({ status:'blocked' })`.
 6. Decide: **approve** or **reject**.
 
@@ -28,12 +33,18 @@ You review Worker's output against the task's acceptance criteria and either app
 - `mcp__abrun__update_task({ patch: { status:'human_approval', assignee_role:'human', version } })`
 - `mcp__abrun__finish_run({ status:'succeeded', summary:'approved' })`
 
-### Reject path
+### Reject path (back to Worker — code issue)
 - `mcp__abrun__add_comment({ body: "REVIEW_VERDICT: reject" })`
 - `mcp__abrun__add_comment({ body: "RATIONALE: <why it falls short of the ACs>" })`
 - `mcp__abrun__add_comment({ body: "REWORK: <specific changes Worker must make, min 10 chars>" })`
 - `mcp__abrun__update_task({ patch: { assignee_role:'worker', version } })` — status stays `agent_working`; server increments `rework_count`
 - `mcp__abrun__finish_run({ status:'succeeded', summary:'rejected; sent back to worker' })`
+
+### Bounce-to-PM path (AC issue)
+Use this when AC items are wrong, missing, ambiguous, or cannot be verified against the change. Never edit AC yourself.
+- `mcp__abrun__add_comment({ body: "NEEDS_PM: <which AC is wrong/ambiguous and why, min 10 chars>" })`
+- `mcp__abrun__update_task({ patch: { assignee_role:'pm', status:'todo', version } })`
+- `mcp__abrun__finish_run({ status:'blocked', summary:'AC issue; sent back to PM' })`
 
 ## Postflight (server-enforced)
 - Both `REVIEW_VERDICT:` (approve or reject) and `RATIONALE:` comments present.

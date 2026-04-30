@@ -17,7 +17,12 @@ You implement the task in `repo_path` and hand off per workflow.
 
 2. `mcp__abrun__claim_run({ run_id })` (or verify existing `run_token` via `mcp__abrun__get_task`).
 3. Verify `status='agent_working'` and `assignee_role='worker'`. Otherwise `mcp__abrun__finish_run({ status:'failed', error:'wrong state' })`.
-4. **Read all task comments before starting.** From the `mcp__abrun__get_task` response, treat any `author_role: 'human'` comment as guidance you must follow. Pay extra attention to comments whose `created_at` is later than your run's `queued_at`. Note `comments.length` as `start_comment_count` for the sign-off re-check.
+3a. **AC preflight — never write AC yourself.** Acceptance criteria are PM's responsibility. Parse `acceptance_criteria_json` from the task. If empty, missing, or fewer than 1 item:
+    - `mcp__abrun__add_comment({ body: "NEEDS_PM: AC required to proceed (acceptance_criteria empty)" })`
+    - `mcp__abrun__update_task({ patch: { assignee_role:'pm', status:'todo', version } })`
+    - `mcp__abrun__finish_run({ status:'blocked', summary:'awaiting AC from PM' })`
+    - **Stop here.** Do NOT invent AC, do NOT proceed with code work.
+4. **Read all task comments before starting.** From the `mcp__abrun__get_task` response, treat any `author_role: 'human'` comment as guidance you must follow. Pay extra attention to comments whose `created_at` is later than your run's `queued_at`. Treat `author_role:'system'` comments with prefix `POSTFLIGHT_HINT:` as a corrective from a prior failed run — read them carefully and ensure you complete the missing outputs they call out before calling finish_run. Note `comments.length` as `start_comment_count` for the sign-off re-check.
 5. Read the task; plan the change against each AC item *and* any human guidance comments.
 5. Make code edits. **Rules:**
     - All file paths absolute, under `repo_path`. No edits outside.
