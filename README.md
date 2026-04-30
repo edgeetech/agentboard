@@ -34,7 +34,9 @@ Install the plugin inside any Claude Code session:
 /agentboard:open      # boots local server + opens UI in your browser
 ```
 
-**Requires:** Node ≥ 22 *or* Bun ≥ 1.x · `claude` CLI ≥ 2.0.0 · `ANTHROPIC_API_KEY` env or active OAuth (`claude /login`) · Windows / macOS / Linux.
+**Requires:** Node ≥ 22 *or* Bun ≥ 1.x · `npm` (or `bun`) on `PATH` · `claude` CLI ≥ 2.0.0 · `ANTHROPIC_API_KEY` env or active OAuth (`claude /login`) · Windows / macOS / Linux.
+
+> **First run installs core deps automatically.** The plugin marketplace ships only source — on the first `/agentboard:open` (or session-start hook) after install/upgrade, AgentBoard runs `npm install` (prefers `bun install` if present) inside the cached `agent-board-core/` directory. Expect a one-time ~20 s pause. If install fails (no `npm`/`bun` on `PATH`, no network), the server exits with code 4 and prints the manual command to run.
 
 ### 🔶 Copilot CLI User? → See [AGENTS.md § Copilot CLI Setup](AGENTS.md#copilot-cli-setup)
 

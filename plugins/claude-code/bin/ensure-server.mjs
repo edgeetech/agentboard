@@ -8,7 +8,7 @@
 // 2. If config.port exists AND /alive returns matching server_id AND plugin_version matches → reuse.
 // 3. Else spawn detached `node server.mjs`; wait for READY line; write config; return port.
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { openSync, writeFileSync, readFileSync, existsSync, mkdirSync, closeSync, unlinkSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -59,6 +59,7 @@ async function spawnServer() {
     console.error(`agentboard: core server not found at ${SERVER_JS}`);
     process.exit(2);
   }
+  ensureCoreDeps();
   // --experimental-sqlite: Node 22 gate for node:sqlite (built-in; no better-sqlite3 install needed).
   //                        Ignored by Node ≥24 (stable there).
   const child = spawn(process.execPath, ['--experimental-sqlite', '--no-warnings', SERVER_JS], {
@@ -123,6 +124,37 @@ async function tryLock() {
 }
 
 function releaseLock(p) { try { unlinkSync(p); } catch {} }
+
+// Plugin marketplace cache copies the source tree without running `npm install`,
+// so `agent-board-core/node_modules` may be missing on first run after install or
+// upgrade. Install once, in-place, before the server is spawned.
+function ensureCoreDeps() {
+  const nodeModules = join(CORE_ROOT, 'node_modules');
+  const pkgJson = join(CORE_ROOT, 'package.json');
+  if (existsSync(nodeModules) || !existsSync(pkgJson)) return;
+
+  const useBun = !!which('bun');
+  const cmd = useBun ? 'bun' : (IS_WINDOWS ? 'npm.cmd' : 'npm');
+  const args = useBun ? ['install', '--silent'] : ['install', '--no-audit', '--no-fund', '--silent'];
+
+  if (!silent) console.log(`agentboard: installing core deps (first run, ~20s) via ${useBun ? 'bun' : 'npm'}...`);
+  const res = spawnSync(cmd, args, { cwd: CORE_ROOT, stdio: silent ? 'ignore' : 'inherit', shell: IS_WINDOWS });
+  if (res.status !== 0) {
+    console.error(`agentboard: failed to install core deps (exit ${res.status}). Run: cd "${CORE_ROOT}" && ${useBun ? 'bun' : 'npm'} install`);
+    process.exit(4);
+  }
+}
+
+function which(bin) {
+  const exts = IS_WINDOWS ? ['.cmd', '.exe', '.bat', ''] : [''];
+  const paths = (process.env.PATH || '').split(IS_WINDOWS ? ';' : ':');
+  for (const p of paths) {
+    for (const ext of exts) {
+      try { if (existsSync(join(p, bin + ext))) return true; } catch {}
+    }
+  }
+  return false;
+}
 
 function processAlive(pid) { try { process.kill(pid, 0); return true; } catch { return false; } }
 function readJsonSafe(p) { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; } }
