@@ -139,6 +139,8 @@ const MIGRATIONS = [
     why: 'index for cost calculations' },
   { sql: `ALTER TABLE task ADD COLUMN workspace_path TEXT`,
     why: 'add workspace_path column for workspace isolation' },
+  { sql: `ALTER TABLE task ADD COLUMN agent_provider_override TEXT CHECK (agent_provider_override IN ('claude', 'github_copilot', NULL))`,
+    why: 'add agent_provider_override column for task-level executor selection' },
 ];
 
 function applyMigrations(db) {

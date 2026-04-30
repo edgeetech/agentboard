@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS task (
   status                   TEXT NOT NULL CHECK (status IN ('todo','agent_working','agent_review','human_approval','done')),
   assignee_role            TEXT CHECK (assignee_role IN ('pm','worker','reviewer','human')),
   rework_count             INTEGER NOT NULL DEFAULT 0,
+  agent_provider_override  TEXT CHECK (agent_provider_override IN ('claude', 'github_copilot', NULL)),
   version                  INTEGER NOT NULL DEFAULT 0,
   deleted_at               TEXT,
   created_at               TEXT NOT NULL,

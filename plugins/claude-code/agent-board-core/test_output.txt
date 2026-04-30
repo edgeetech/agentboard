@@ -1,0 +1,38 @@
+
+> agent-board-core@0.1.0 test
+> vitest run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90mC:/Workspace/EDGEETECH/ai/agentboard/plugins/claude-code/agent-board-core[39m
+
+ [31mÔØ»[39m test/copilot-runner.test.mjs [2m([22m[2m0 test[22m[2m)[22m
+ [32mÔ£ô[39m test/turn-timeout.test.mjs [2m([22m[2m8 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+stderr | test/supervisor.test.mjs > Supervisor > marks unhealthy after maxRestarts exceeded
+[supervisor] max restarts exceeded ÔÇö stopping { maxRestarts: 3 }
+
+ [32mÔ£ô[39m test/supervisor.test.mjs [2m([22m[2m6 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32mÔ£ô[39m test/event-bus.test.mjs [2m([22m[2m9 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32mÔ£ô[39m test/state-machine.test.mjs [2m([22m[2m15 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32mÔ£ô[39m test/executor-copilot.test.mjs [2m([22m[2m14 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32mÔ£ô[39m test/rate-limit-tracker.test.mjs [2m([22m[2m10 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32mÔ£ô[39m test/workspace-manager.test.mjs [2m([22m[2m6 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32mÔ£ô[39m test/retry-manager.test.mjs [2m([22m[2m15 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32mÔ£ô[39m test/tracker-factory.test.mjs [2m([22m[2m8 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+stderr | test/prompt-builder.test.mjs > PromptBuilder > buildRolePrompt with broken templateOverride falls back to default prompt
+[prompt-builder] template render failed, using default: tag "invalid_tag_xyz" not found, line:1, col:1
+
+ [32mÔ£ô[39m test/prompt-builder.test.mjs [2m([22m[2m8 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32mÔ£ô[39m test/workspace-safety.test.mjs [2m([22m[2m6 tests[22m[2m)[22m[32m 139[2mms[22m[39m
+
+ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ» Failed Suites 1 ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»
+
+ FAIL  test/copilot-runner.test.mjs [ test/copilot-runner.test.mjs ]
+SyntaxError: Identifier 'delay' has already been declared
+ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»[1/1]ÔÄ»
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m11 passed[39m[22m[90m (12)[39m
+[2m      Tests [22m [1m[32m105 passed[39m[22m[90m (105)[39m
+[2m   Start at [22m 00:08:14
+[2m   Duration [22m 572ms[2m (transform 761ms, setup 0ms, import 1.10s, tests 286ms, environment 2ms)[22m
+

@@ -25,11 +25,21 @@ const CLAUDE = [
   'CLAUDE_CONFIG_DIR',
   'XDG_CONFIG_HOME',
 ];
+// GitHub Copilot SDK auth — needed for @github/copilot-sdk:
+const COPILOT = [
+  'GITHUB_TOKEN',
+  'COPILOT_TOKEN',
+  'COPILOT_CLI',
+  'COPILOT_CLI_BINARY_VERSION',
+  'COPILOT_RUN_APP',
+  'COPILOT_AGENT_SESSION_ID',
+];
 
 export function buildChildEnv(base = process.env) {
   const keys = [
     ...UNIVERSAL,
     ...CLAUDE,
+    ...COPILOT,
     ...(platform() === 'win32' ? WINDOWS : POSIX),
   ];
   const out = {};

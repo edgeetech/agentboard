@@ -55,7 +55,7 @@ export async function handleProjects(req, res, url) {
 
   if (p === '/api/projects' && m === 'POST') {
     const body = await readJson(req);
-    const { code, name, description, workflow_type, repo_path } = body || {};
+    const { code, name, description, workflow_type, repo_path, agent_provider } = body || {};
     const codeErr = validateCode(code);
     if (codeErr) return json(res, 400, { error: codeErr });
     if (!name || !workflow_type || !repo_path) {
@@ -63,6 +63,10 @@ export async function handleProjects(req, res, url) {
     }
     if (!['WF1', 'WF2'].includes(workflow_type)) {
       return json(res, 400, { error: 'workflow_type must be WF1 or WF2' });
+    }
+    // Validate agent_provider if provided
+    if (agent_provider && !['claude', 'github_copilot'].includes(agent_provider)) {
+      return json(res, 400, { error: 'agent_provider must be "claude" or "github_copilot"' });
     }
     const rp = validateRepoPath(repo_path);
     if (!rp.ok) return json(res, 400, { error: rp.error });
@@ -73,6 +77,7 @@ export async function handleProjects(req, res, url) {
     const project = createProject(db, {
       code, name, description, workflow_type,
       repo_path: rp.canonical,
+      ...(agent_provider && { agent_provider }),
     });
     // First project auto-activated
     const cfg = readConfig();
@@ -116,6 +121,12 @@ export async function handleProjects(req, res, url) {
         return json(res, 400, { error: 'max_parallel must be 1..3' });
       }
       patch.max_parallel = n;
+    }
+    // Validate agent_provider if changing
+    if ('agent_provider' in patch) {
+      if (!['claude', 'github_copilot'].includes(patch.agent_provider)) {
+        return json(res, 400, { error: 'agent_provider must be "claude" or "github_copilot"' });
+      }
     }
     if ('auto_dispatch_pm' in patch) {
       delete patch.auto_dispatch_pm; // field removed; ignore silently

@@ -1,4 +1,4 @@
-// Executor: drains queued runs, executes via Claude Agent SDK query(), reaps orphans.
+// Executor: drains queued runs, executes via Claude Agent SDK or Copilot CLI, reaps orphans.
 
 import { readFileSync, writeFileSync, appendFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -18,6 +18,7 @@ import { getActiveDb, getDb, listProjectDbs } from './project-registry.mjs';
 import { readConfig } from './config.mjs';
 import { isoNow } from './time.mjs';
 import { AgentRunner } from './agent-runner.mjs';
+import { CopilotRunner } from './copilot-runner.mjs';
 import { RateLimitTracker } from './rate-limit-tracker.mjs';
 import { agentboardBus } from './event-bus.mjs';
 import { sessionLogger } from './session-logger.mjs';
@@ -85,12 +86,10 @@ async function drain({ port, serverToken }) {
       for (const q of queued) {
         // Fire-and-forget: each run is an independent async task so the drain loop
         // is never blocked waiting for an agent (which can take minutes).
-        tryClaimAndRun(db, project, q, { port, serverToken }).catch(e => {
-          logErr(e);
-        });
+        tryClaimAndRun(db, project, q, { port, serverToken }).catch(e => logErr(e));
       }
-    } catch (e) { 
-      logErr(e); 
+    } catch (e) {
+      logErr(e);
     }
   }
 }
@@ -107,6 +106,13 @@ async function tryClaimAndRun(db, project, run, { port, serverToken }) {
   const task = getTask(db, run.task_id);
   if (!task) {
     finishRun(db, run.id, 'failed', null, 'task missing');
+    return;
+  }
+
+  // Resolve effective executor provider: task override > project default > 'claude'
+  const effectiveProvider = task.agent_provider_override ?? project.agent_provider ?? 'claude';
+  if (!['claude', 'github_copilot'].includes(effectiveProvider)) {
+    finishRun(db, run.id, 'failed', null, `unsupported executor provider: ${effectiveProvider}`);
     return;
   }
 
@@ -175,7 +181,9 @@ async function tryClaimAndRun(db, project, run, { port, serverToken }) {
   }, 30_000);
   heartbeatTicker.unref?.();
 
-  const runner = new AgentRunner({
+  // Create appropriate runner based on effective provider
+  let runner;
+  const runnerOpts = {
     runId: run.id,
     role: run.role,
     prompt: promptBody,
@@ -204,7 +212,11 @@ async function tryClaimAndRun(db, project, run, { port, serverToken }) {
         agentboardBus.emit('run.rate-limited', detail);
       }
     },
-  });
+  };
+
+  runner = effectiveProvider === 'github_copilot'
+    ? new CopilotRunner(runnerOpts)
+    : new AgentRunner(runnerOpts);
 
   try {
     const result = await runner.run();

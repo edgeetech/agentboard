@@ -105,13 +105,7 @@ export function createTask(db, { title, description = '', assignee_role = null }
     // Spawn agent if assignee_role is set
     let runId = null;
     if (assignee_role) {
-      if (project.agent_provider === 'claude') {
-        // Enqueue run for Claude agents
         runId = enqueueRun(db, id, assignee_role);
-      } else if (project.agent_provider === 'CoPilot') {
-        // Add comment for CoPilot (not supported yet)
-        addComment(db, id, 'system', 'CoPilot agent spawn is not supported yet. This task must be handled manually.');
-      }
     }
     
     return { task: getTask(db, id), runId };

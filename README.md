@@ -2,24 +2,30 @@
 
 # 🎛️ AgentBoard
 
-### Run AI agents like a kanban team — locally, with full cost + audit trails.
+### Multi-agent orchestration platform: Run Claude, Copilot, and future AI agents like a kanban team — locally, with full cost + audit trails.
 
 [![Version](https://img.shields.io/badge/version-0.1.33-3b82f6?style=for-the-badge)](./plugins/claude-code/.claude-plugin/plugin.json)
 [![License](https://img.shields.io/badge/license-Elastic--2.0-f59e0b?style=for-the-badge)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-22c55e?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d946ef?style=for-the-badge)](https://docs.claude.com/en/docs/claude-code)
+[![Copilot CLI](https://img.shields.io/badge/Copilot%20CLI-supported-0d9488?style=for-the-badge)](AGENTS.md#copilot-cli-setup)
 [![Local-only](https://img.shields.io/badge/cloud-zero-ef4444?style=for-the-badge)]()
 
 **🟦 PM** → **🟧 Worker** → **🟪 Reviewer** → **🟩 Human** — a real workflow, not a chat window.
+
+**Agents:** [Claude Code](CLAUDE.md) · [Copilot CLI](AGENTS.md#copilot-cli-setup) · [More coming](AGENTS.md#supported-agents--status-table)
 
 </div>
 
 ---
 
-## 🚀 Quick start
+## 🚀 Which setup is for you?
 
-> [!IMPORTANT]
-> AgentBoard is a **Claude Code plugin**. Install from inside any Claude Code session — no `git clone`, no `npm install`.
+AgentBoard works as a **Claude Code plugin** or **standalone server** supporting Claude Code, Copilot CLI, and future agents.
+
+### 🔷 Claude Code User? → Claude Code Plugin
+
+Install the plugin inside any Claude Code session:
 
 ```bash
 /plugin marketplace add edgeetech/agentboard
@@ -29,6 +35,19 @@
 ```
 
 **Requires:** Node ≥ 22 *or* Bun ≥ 1.x · `claude` CLI ≥ 2.0.0 · `ANTHROPIC_API_KEY` env or active OAuth (`claude /login`) · Windows / macOS / Linux.
+
+### 🔶 Copilot CLI User? → See [AGENTS.md § Copilot CLI Setup](AGENTS.md#copilot-cli-setup)
+
+Or run standalone server:
+
+```bash
+git clone https://github.com/edgeetech/agentboard.git
+cd plugins/claude-code/agent-board-core
+node --experimental-sqlite --no-warnings server.mjs
+# Open http://localhost:3000
+```
+
+### 🤔 Not sure? → See [AGENTS.md § 2. Supported Agents](AGENTS.md#2-supported-agents--status-table)
 
 ---
 
@@ -63,6 +82,7 @@ Multi-agent AI is powerful, but the day-to-day is messy:
 | 🕹️ **Auto *or* semi-auto mode** | **Auto** — agents drive transitions end-to-end. **Semi** — you drive status changes, agents only annotate (comments + ACs). Switch per project, any time. |
 | 🧾 **Acceptance Criteria, enforced** | PM writes 3–7 testable ACs. Reviewer must check them. Server rejects finishes that skip the audit. |
 | 💰 **Real-time cost per run** | Every run parses SDK usage events and stamps `cost_usd` from latest Opus / Sonnet / Haiku pricing. Project header shows all-time, 7d, 30d totals. |
+| 🤖 **Multi-agent execution** | Run tasks with **Claude agents** (default, low-cost) or **Copilot CLI agents** (for capability mix). Set per-project or override per-task. |
 | 🔁 **Bounded rework loop** | Max 3 reviewer rejects per task. After that, task stalls with "Retry from Worker" button — no runaway agents. |
 | 🔄 **Automatic retry with backoff** | Failed runs automatically re-enqueue with exponential backoff (1s → 2s → 4s, capped at 5min, max 3 attempts). Retry history logged in `retry_state` per run. Configurable via `max_retry_attempts` / `max_retry_backoff_ms`. |
 | 🔗 **External tracker sync** | Connect Linear, GitHub Issues, or GitLab to a project. Background poller creates agentboard tasks from incoming issues, marks tasks done when issues hit terminal state. Config via `tracker_config` table; REST API at `/api/projects/{code}/tracker`. |
@@ -91,15 +111,17 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
 
 ## 🧠 How it works
 
+AgentBoard routes tasks to the right **executor** — Claude SDK, Copilot CLI, or future agents — based on project/task configuration. See [AGENTS.md § Executor Lifecycle](AGENTS.md#5-executor-lifecycle) for full details.
+
 ```
-   Your Claude Code session
+   Your AI agent platform
              │  (stdio MCP — read-only board + approve/reject)
              ▼
    ┌──────────────────────────────────────────────────────────────┐
    │  AgentBoard core server  (Node, 127.0.0.1)                   │
-   │  • REST + JSON-RPC HTTP MCP                                  │
+    │  • REST + JSON-RPC HTTP MCP (abrun — for agents)             │
    │  • Per-project SQLite (WAL, schema v3)                       │
-   │  • Executor: Claude Agent SDK (in-process, no subprocess)    │
+    │  • Multi-executor routing: Claude SDK + Copilot CLI         │
    │  • RetryManager: exponential backoff, max 3 attempts         │
    │  • TrackerPoller: Linear / GitHub / GitLab background sync   │
    │  • Reaper: 15min heartbeat timeout                           │
@@ -121,7 +143,7 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
 
 **Two workflows, picked per project at creation:**
 
-- **WF1** — `Todo → Working → Review → Approval → Done` (full loop with Reviewer)
+- **WF1** — `Todo → Working → Review → Approval → Done` (full loop with Reviewer). See [AGENTS.md § Workflows](AGENTS.md#workflows-wf1-vs-wf2)
 - **WF2** — `Todo → Working → Approval → Done` (skip Reviewer step)
 
 **Two dispatch modes, switchable any time:**
@@ -131,7 +153,9 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
 
 ---
 
-## 🛠️ Slash commands
+## 🛠️ Claude Code Plugin Commands
+
+**If using AgentBoard as a Claude Code plugin, these slash commands are available:**
 
 | Command | Does |
 |---|---|
@@ -140,6 +164,8 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
 | `/agentboard:doctor` | Health checklist: Node/Bun version, claude CLI, auth, data dir, DB schema, pricing freshness, available updates. |
 | `/agentboard:update` | Checks GitHub `main` for newer plugin version, prints upgrade commands. |
 | `/agentboard:delete-project` | Interactive: pick project → confirm → DB moved to `~/.agentboard/trash/` (manual restore possible). |
+
+**Using Copilot CLI or standalone server?** See [AGENTS.md § Getting Help](AGENTS.md#9-getting-help) for how to interact with AgentBoard.
 
 ---
 
@@ -187,12 +213,12 @@ Outside the repo, untouched by plugin upgrades:
 
 | Layer | Stack |
 |---|---|
-| **Server** | Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). Production deps: `@anthropic-ai/claude-agent-sdk` · `commander` · `liquidjs` · `pino`. |
-| **Agent runner** | `@anthropic-ai/claude-agent-sdk` — in-process, streaming, no subprocess required. |
+| **Server** | Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). Production deps: `commander` · `liquidjs` · `pino`. |
+| **Agent runners** | **Claude SDK** (`@anthropic-ai/claude-agent-sdk`) — in-process, streaming. **Copilot CLI** — subprocess, stream-json parsing. Multi-executor routing based on project/task configuration. |
 | **UI** | React 18 · Vite · TanStack Query · Zustand · @dnd-kit · react-i18next |
-| **MCP** | Two surfaces — `abrun` (HTTP, for spawned runs) and `agentboard` (stdio, for your interactive session). Names differ deliberately so `--strict-mcp-config` filters cleanly. |
-| **Pricing** | Opus 4.7 / Sonnet 4.6 / Haiku 4.5, versioned. Unknown model → `$0` + `uncosted` flag — never silently wrong numbers. |
-| **Tests** | Vitest · 91 tests across 10 files (state machine, retry, tracker, workspace safety, supervisor, turn timeout, rate limiter, prompt builder, event bus). |
+| **MCP** | Two surfaces — `abrun` (HTTP, for spawned agents) and `agentboard` (stdio, for your interactive session). Names differ deliberately so `--strict-mcp-config` filters cleanly. |
+| **Pricing** | Opus 4.7 / Sonnet 4.6 / Haiku 4.5 + Copilot Pro, versioned. Unknown model → `$0` + `uncosted` flag — never silently wrong numbers. See [AGENTS.md § Supported Agents](AGENTS.md#2-supported-agents--status-table) for per-agent pricing. |
+| **Tests** | Vitest · 109 tests across 12 files (state machine, retry, tracker, workspace safety, supervisor, turn timeout, rate limiter, prompt builder, event bus, executor resolution, cost computation). |
 
 ---
 
@@ -299,3 +325,5 @@ Crafted at **EdgeeTech Limited** · [github.com/edgeetech/agentboard](https://gi
 ⭐ If AgentBoard helps you ship cleaner agent workflows, drop a star — helps others find it.
 
 </div>
+
+

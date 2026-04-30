@@ -30,7 +30,7 @@ export function TaskDetailPanel({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectMsg, setRejectMsg] = useState('');
   const [rejectFilePaths, setRejectFilePaths] = useState<string[]>([]);
-  const [tab, setTab] = useState<'files' | 'comments' | 'agent_runs'>('files');
+  const [tab, setTab] = useState<'files' | 'comments' | 'agent_runs'>('agent_runs');
   const [elapsedTimes, setElapsedTimes] = useState<Record<string, number>>({});
   const [runAgentRole, setRunAgentRole] = useState<'pm' | 'worker' | 'reviewer'>('worker');
   const [commentDraft, setCommentDraft] = useState('');
@@ -181,11 +181,11 @@ export function TaskDetailPanel({
         <div className="detail-tabs" role="tablist">
           <button
             role="tab"
-            aria-selected={tab === 'files'}
-            className={`tab${tab === 'files' ? ' active' : ''}`}
-            onClick={() => setTab('files')}
+            aria-selected={tab === 'agent_runs'}
+            className={`tab${tab === 'agent_runs' ? ' active' : ''}`}
+            onClick={() => setTab('agent_runs')}
           >
-            {t('task.files', 'Files')} <span className="count">{file_paths?.length ?? 0}</span>
+            {t('task.agent_runs', 'Agent Runs')} <span className="count">{agent_runs?.length ?? 0}</span>
           </button>
           <button
             role="tab"
@@ -197,11 +197,11 @@ export function TaskDetailPanel({
           </button>
           <button
             role="tab"
-            aria-selected={tab === 'agent_runs'}
-            className={`tab${tab === 'agent_runs' ? ' active' : ''}`}
-            onClick={() => setTab('agent_runs')}
+            aria-selected={tab === 'files'}
+            className={`tab${tab === 'files' ? ' active' : ''}`}
+            onClick={() => setTab('files')}
           >
-            {t('task.agent_runs', 'Agent Runs')} <span className="count">{agent_runs?.length ?? 0}</span>
+            {t('task.files', 'Files')} <span className="count">{file_paths?.length ?? 0}</span>
           </button>
         </div>
 

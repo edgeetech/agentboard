@@ -2,9 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Cross-references:**
+- **Multi-agent concepts** (workflows, roles, executor lifecycle) → [AGENTS.md](AGENTS.md)
+- **Copilot CLI support** → [AGENTS.md § Copilot CLI Setup](AGENTS.md#copilot-cli-setup)
+- **Platform features & overview** → [README.md](README.md)
+
 ## What this is
 
-`agentboard` is a Claude Code plugin that runs a local kanban board driven by headless `claude -p` subprocesses. A Node.js server (`agent-board-core/`) holds per-project SQLite DBs, spawns headless runs with role-specific prompts (PM / Worker / Reviewer), and serves a React UI. The plugin itself (`plugins/claude-code/`) is a thin wrapper that boots the server and exposes read/approve tools over stdio MCP for the user's interactive Claude session.
+`agentboard` is a **Claude Code plugin** that runs a local kanban board driven by headless `claude -p` subprocesses. A Node.js server (`agent-board-core/`) holds per-project SQLite DBs, spawns headless runs with role-specific prompts (PM / Worker / Reviewer), and serves a React UI. The plugin itself (`plugins/claude-code/`) is a thin wrapper that boots the server and exposes read/approve tools over stdio MCP for the user's interactive Claude session.
+
+**AgentBoard is now multi-agent.** Claude Code is the primary executor, but [Copilot CLI is also supported](AGENTS.md#copilot-cli-setup) as of v1.1. This document covers Claude Code plugin implementation details. For executor-agnostic workflows and setup, see [AGENTS.md](AGENTS.md).
 
 ## Commands
 
@@ -59,13 +66,19 @@ sqlite3 ~/.agentboard/projects/<code>.db "SELECT code, status, assignee_role, re
 
 ### State machine + auto-dispatch
 
-Task transitions are workflow-aware CAS updates:
+**For generic state machine and dispatch concepts, see [AGENTS.md § Task Lifecycle States](AGENTS.md#task-lifecycle-states) and [AGENTS.md § Dispatch Modes](AGENTS.md#dispatch-modes).**
+
+Claude Code implementation:
 
 - `src/state-machine.mjs` holds the `(WF1|WF2, from_status, to_status, by_role)` allow-list. **Human role can now initiate tasks from Todo → Agent Working**, allowing semi-automated workflows where users drive task dispatch.
 - `src/dispatch-map.mjs` resolves `(status, assignee_role)` → role to auto-dispatch. **Triggers on assignee change as well as status change** — this is how Reviewer-reject (status unchanged, assignee flips reviewer→worker) and Worker-NEEDS_PM (worker→pm) routing work.
 - `src/repo.mjs::transitionTask` does the CAS, writes `task_history`, and enqueues the next `agent_run` **in the same SQLite transaction**. The executor polls `queued` rows independently, so crash-between-write-and-dispatch is safe.
 
 ### Postflight and audit comments
+
+**For role-specific audit requirements, see [AGENTS.md § Roles & Responsibilities](AGENTS.md#roles--responsibilities).**
+
+Claude Code implementation:
 
 On `finish_run(status='succeeded')` the server enforces role-specific required comments (`src/postflight.mjs`):
 
@@ -77,11 +90,46 @@ Assignee reassigns within `agent_working` also require a prefixed comment (`REWO
 
 ### Executor lifecycle
 
-`src/executor.mjs`:
+**For executor lifecycle phases (spawn → run → cost → transition), see [AGENTS.md § Executor Lifecycle](AGENTS.md#5-executor-lifecycle).**
+
+Claude Code spawning specifics in `src/executor.mjs`:
+
 1. Drains `queued` runs respecting `project.max_parallel` (default 1, cap 3).
-2. For each: pre-check `repo_path` exists → open stdout/stderr log fds → write tmp MCP config with `run_token` Bearer → `spawn` detached `claude -p` with `--strict-mcp-config --allowedTools <per-role> --permission-mode acceptEdits --output-format stream-json --max-turns 60`.
+2. For each: pre-check `repo_path` exists → open stdout/stderr log fds → write tmp MCP config with `run_token` Bearer → **select executor** (Claude or Copilot) based on `task.agent_provider_override ?? project.agent_provider ?? 'claude'` → `spawn` detached process with `--strict-mcp-config --allowedTools <per-role> --permission-mode acceptEdits --output-format stream-json --max-turns 60`.
 3. On child exit: parse `logs/<run_id>.jsonl` for `model` (system.init event) + `usage` (per message.usage), compute cost via `src/pricing.mjs`, stamp `agent_run.cost_usd` + `cost_version`.
 4. Reaper every 60s marks `running` runs as `failed` when `last_heartbeat_at` is older than 15min (each MCP call bumps heartbeat).
+
+### Multi-Provider Agent Execution (Claude & Copilot CLI)
+
+**For agent selection (project/task level) and workflows, see [AGENTS.md § Setting Agents Per-Project & Per-Task](AGENTS.md#4-setting-agents-per-project--per-task).**
+
+Claude Code implementation specifics:
+
+**Provider Resolution in tryClaimAndRun()**
+
+- `src/executor.mjs::tryClaimAndRun()` resolves effective provider after task lookup: `task.agent_provider_override ?? project.agent_provider ?? 'claude'`
+- Branches to `AgentRunner` (Claude Agent SDK via `@anthropic-ai/claude-agent-sdk`) or `CopilotRunner` (Copilot SDK via `@github/copilot-sdk`)
+- Both implementations return same contract: `{status, sessionId, usage, model, totalCostUsd, error, errorKind}`
+
+**CopilotRunner Implementation (SDK-Based)**
+
+- `src/copilot-runner.mjs` mirrors `AgentRunner` interface using `@github/copilot-sdk`
+- Uses `CopilotClient` and `createSession()` with event handlers (like Claude SDK's async generator)
+- Receives same permission model (approveAll) and event handlers as Claude
+- Captures usage, model, cost from SDK session events (no stdout parsing)
+- Retry, timeout, rate-limiting, heartbeat logic provider-agnostic
+
+**Cost Tracking**
+
+- `src/pricing.mjs` handles both Claude and Copilot models
+- Unknown models → `$0` + `uncosted: true` flag (never silently wrong)
+- `agent_run.cost_version` bumped for audit trail when pricing changes
+
+**Fallback & Error Handling**
+
+- If a project selects `'github_copilot'` but Copilot CLI unavailable: task dispatch fails with error (surfaced in UI)
+- User can switch project to `'claude'` or ensure Copilot CLI installed
+- Future: auto-fallback to Claude (deferred to v1.2)
 
 ### Security model
 
@@ -99,9 +147,9 @@ Assignee reassigns within `agent_working` also require a prefixed comment (`REWO
 - **Pricing table in `src/pricing.mjs`** has `PRICING_VERSION`. Bump it when Anthropic prices change, so v1.1 `/agentboard reprice` can recompute historical runs.
 - **Role prompts in `agent-board-core/prompts/*.md` are the product.** Treat them like code — version them, iterate against real runs. Drift-guards (postflight + required-comment checks) catch structural mistakes, but tone/brevity is prompt-only.
 
-## Security model specifics (reviewer's Q → A)
+## Security model specifics (Claude Code & Copilot CLI)
 
-- **Child env is whitelisted, not inherited.** `src/child-env.mjs::buildChildEnv` ships only PATH/HOME/USER/LANG/TZ + Claude-auth vars (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, etc.) on POSIX; Windows adds USERPROFILE/APPDATA/LOCALAPPDATA/SYSTEM* and friends. AWS, GitHub, SSH, GCP, cloud SDK vars are dropped. If you add a new env var the CLI needs, add it to that module — not `{...process.env}`.
+- **Child env is whitelisted, not inherited.** `src/child-env.mjs::buildChildEnv` ships only PATH/HOME/USER/LANG/TZ + Claude-auth vars (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, etc.) on POSIX; Windows adds USERPROFILE/APPDATA/LOCALAPPDATA/SYSTEM* and friends. AWS, GitHub, SSH, GCP, cloud SDK vars are dropped. Applies equally to Claude and Copilot spawned processes. If you add a new env var the CLI needs, add it to that module — not `{...process.env}`.
 - **`claim_run` returns `run_token` exactly once, to the queued→running CAS winner.** There is no "already-claimed" retry path; a subsequent call on a running run returns an error. This is deliberate; don't add a "convenience" retry.
 - **REST `/api/tasks/:id/transition` always writes `by_role='human'`.** Client-supplied `by_role` is ignored. Agent transitions happen through the HTTP MCP endpoint, which is the only place `by_role` is derived from `run.role`.
 - **`/alive` is intentionally unauth.** It returns `{ok, server_id, plugin_version}` — used by `ensure-server.mjs` to detect stale config or version mismatch. No token, no secrets. Do not protect it.
@@ -117,4 +165,7 @@ Assignee reassigns within `agent_working` also require a prefixed comment (`REWO
 
 ## References
 
+- **Multi-agent workflows & executor-agnostic concepts** → [AGENTS.md](AGENTS.md)
+- **Platform features, Copilot CLI setup, and overview** → [README.md](README.md)
+- **All agent types and status** → [AGENTS.md § Supported Agents](AGENTS.md#2-supported-agents--status-table)
 - `.claude/plans/i-need-you-to-sleepy-scroll.md` (in the parent workspace) — full design plan with architecture, data model, dispatch rules, verification steps. Treat as canonical when plan and code disagree; otherwise trust the code.

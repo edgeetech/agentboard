@@ -73,8 +73,14 @@ async function handleRunAgent(req, res, _url, _active, task, db) {
     return json(res, 400, { error: `role must be one of ${[...RUN_AGENT_ROLES].join(', ')}` });
   }
   const project = getProject(db);
-  if (project?.agent_provider && project.agent_provider !== 'claude') {
-    return json(res, 400, { error: `agent_provider=${project.agent_provider} not supported` });
+  // Validate agent_provider if set, allow both 'claude' and 'github_copilot'
+  if (project?.agent_provider && !['claude', 'github_copilot'].includes(project.agent_provider)) {
+    return json(res, 400, { error: `agent_provider=${project.agent_provider} invalid` });
+  }
+  // Validate executor_override if provided (optional, task-level executor selection)
+  const executor_override = body?.executor_override;
+  if (executor_override && !['claude', 'github_copilot'].includes(executor_override)) {
+    return json(res, 400, { error: `executor_override must be 'claude' or 'github_copilot'` });
   }
   // Block if a run is already queued or running for this task — avoid
   // double-spawn races. User can cancel-then-rerun if needed.
@@ -84,8 +90,16 @@ async function handleRunAgent(req, res, _url, _active, task, db) {
   if (active) {
     return json(res, 409, { error: `run ${active.id} already ${active.status} (${active.role})` });
   }
+  
+  // Update task.agent_provider_override BEFORE enqueueRun to ensure executor reads correct value
+  // Must happen atomically to prevent drain loop race (executor sees old value)
+  if (executor_override) {
+    db.prepare(`UPDATE task SET agent_provider_override=?, version=version+1, updated_at=? WHERE id=?`)
+      .run(executor_override, isoNow(), task.id);
+  }
+  
   const runId = enqueueRun(db, task.id, role);
-  addComment(db, task.id, 'human', `RUN_AGENT: manually dispatched ${role} (run ${runId})`);
+  addComment(db, task.id, 'human', `RUN_AGENT: manually dispatched ${role} (run ${runId})${executor_override ? ` [executor: ${executor_override}]` : ''}`);
   return json(res, 201, { run_id: runId, role });
 }
 

@@ -19,6 +19,12 @@ import { handleMcp } from './src/api-mcp.mjs';
 import { getActiveDb } from './src/project-registry.mjs';
 import { startExecutor } from './src/executor.mjs';
 
+// Debug: Check Copilot auth env vars at server startup
+console.log('[SERVER STARTUP] Checking Copilot auth environment:');
+['GITHUB_TOKEN', 'COPILOT_TOKEN', 'COPILOT_CLI', 'COPILOT_CLI_BINARY_VERSION'].forEach(v => {
+  console.log(`  ${v}: ${process.env[v] ? 'SET' : 'NOT SET'}`);
+});
+
 const SERVER_BOOT_ID = randomUUID();
 const UI_DIST = new URL('./ui/dist/', import.meta.url);
 const PLUGIN_VERSION = process.env.AGENTBOARD_PLUGIN_VERSION || '0.1.0';
