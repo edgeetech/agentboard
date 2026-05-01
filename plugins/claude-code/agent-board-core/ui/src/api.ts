@@ -83,6 +83,10 @@ export const api = {
       role?: string | null;
       topFiles?: Array<{ path: string; count: number }>;
       planFiles?: string[];
+      source?: 'agentboard' | 'cli';
+      taskCode?: string | null;
+      projectCode?: string | null;
+      repoPath?: string | null;
     }>;
   }>; error?: string }>('GET', '/api/sessions'),
   prompt: (kind: 'role' | 'skill', id: string) =>

@@ -274,6 +274,12 @@ export function TaskDetailPanel({
                     {run.status === 'running' && run.started_at && (
                       <span className="elapsed-time">⏱ {formatElapsed(elapsedTimes[run.id] ?? 0)}</span>
                     )}
+                    {run.claude_session_id && (
+                      <ResumeRunButton
+                        sessionId={run.claude_session_id}
+                        repoPath={project?.repo_path}
+                      />
+                    )}
                   </div>
                   <div className="run-timestamps">
                     <span className="queued">{new Date(run.queued_at).toLocaleString()}</span>
@@ -420,6 +426,35 @@ function RoleAvatar({ role, label }: { role: string; label: string }) {
     <span className={`avatar role-${role}`} title={label} aria-label={label}>
       <span className="avatar-initials">{initials}</span>
     </span>
+  );
+}
+
+function ResumeRunButton({
+  sessionId, repoPath,
+}: { sessionId: string; repoPath: string | null | undefined }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const cmd = repoPath
+    ? `cd "${repoPath}"; claude --resume ${sessionId}`
+    : `claude --resume ${sessionId}`;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {}
+  }
+  return (
+    <button
+      type="button"
+      className={`resume-chip${copied ? ' is-copied' : ''}`}
+      onClick={copy}
+      title={copied ? t('task.resume_copied', 'Copied — paste in terminal') : cmd}
+      aria-label={t('task.resume', 'Resume session')}
+    >
+      <span className="resume-chip-glyph" aria-hidden>{copied ? '✓' : '›_'}</span>
+      <span className="resume-chip-id mono">{sessionId.slice(0, 8)}</span>
+    </button>
   );
 }
 

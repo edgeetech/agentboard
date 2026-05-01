@@ -12,6 +12,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { json } from './http-util.mjs';
+import { listProjectDbs, getDb } from './project-registry.mjs';
 
 function sessionsDirs() {
   const primary = process.env.AGENTBOARD_SESSION_DIR
@@ -122,6 +123,41 @@ function enrichSession(db, sessionId) {
   };
 }
 
+/** Build map: claude_session_id -> { source:'agentboard', taskCode, role, repoPath, projectCode }
+ *  by scanning every per-project SQLite DB. Best-effort; failures skip the DB. */
+async function loadAgentboardSessionMap() {
+  const map = new Map();
+  for (const code of listProjectDbs()) {
+    let db;
+    try { db = await getDb(code); } catch { continue; }
+    let repoPath = null;
+    try {
+      const proj = db.prepare(`SELECT repo_path FROM project LIMIT 1`).get();
+      repoPath = proj?.repo_path ?? null;
+    } catch {}
+    let rows = [];
+    try {
+      rows = db.prepare(`
+        SELECT r.claude_session_id AS sid, r.role AS role, t.code AS task_code
+        FROM agent_run r
+        LEFT JOIN task t ON t.id = r.task_id
+        WHERE r.claude_session_id IS NOT NULL AND r.claude_session_id != ''
+      `).all();
+    } catch {}
+    for (const r of rows) {
+      if (!r.sid) continue;
+      map.set(r.sid, {
+        source: 'agentboard',
+        taskCode: r.task_code ?? null,
+        role: r.role ?? null,
+        repoPath,
+        projectCode: code,
+      });
+    }
+  }
+  return map;
+}
+
 async function listSessionsAll(res) {
   const open = await getOpener();
   if (!open) return json(res, 200, { dbs: [], error: 'sqlite adapter unavailable' });
@@ -137,6 +173,7 @@ async function listSessionsAll(res) {
     }
   }
   const dbs = [];
+  const abMap = await loadAgentboardSessionMap();
 
   for (const f of files) {
     let db;
@@ -151,6 +188,7 @@ async function listSessionsAll(res) {
         sizeBytes: f.size,
         sessions: rows.map(s => {
           const e = enrichSession(db, s.session_id);
+          const ab = abMap.get(s.session_id);
           return {
             id: s.session_id,
             projectDir: s.project_dir,
@@ -160,9 +198,13 @@ async function listSessionsAll(res) {
             compactCount: s.compact_count,
             firstPrompt: e.firstPrompt,
             intent: e.intent,
-            role: e.role,
+            role: e.role || ab?.role || null,
             topFiles: e.topFiles,
             planFiles: e.planFiles,
+            source: ab ? 'agentboard' : 'cli',
+            taskCode: ab?.taskCode ?? null,
+            projectCode: ab?.projectCode ?? null,
+            repoPath: ab?.repoPath ?? s.project_dir ?? null,
           };
         }),
       });

@@ -909,7 +909,7 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
   background: var(--surface-alt); padding: 0.55rem 0.75rem;
   border-radius: var(--radius-sm); border: 1px solid var(--line);
 }
-.agent-run .run-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
+.agent-run .run-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; flex-wrap: wrap; }
 .agent-run .elapsed-time {
   font-size: 11px; font-weight: 600; color: var(--accent); margin-left: auto;
 }
@@ -2098,7 +2098,10 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
   color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.session-row .session-meta { font-size: 10.5px; }
+.session-row .session-meta {
+  font-size: 10.5px;
+  display: inline-flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;
+}
 
 /* New intent column */
 .session-stat.intent-col { min-width: 110px; }
@@ -2137,7 +2140,72 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
   font-family: var(--mono); font-weight: 600;
   color: var(--muted); background: var(--surface-alt);
 }
-.session-meta { margin-top: 0.3rem; }
+.session-tag.source.agentboard {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  margin-right: 0.4rem;
+}
+.resume-inline {
+  font-size: 0.78em;
+  padding: 0 0.35rem;
+}
+
+/* Compact terminal-style resume chip used in agent-run header rows.
+   Lives next to status badges; mono id, accent prompt glyph on hover. */
+.resume-chip {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  height: 20px; padding: 0 7px;
+  font-family: var(--mono);
+  font-size: 10.5px; font-weight: 600;
+  line-height: 1;
+  color: var(--text-soft);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+.resume-chip:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.resume-chip:active { transform: translateY(1px); }
+.resume-chip-glyph {
+  font-weight: 800;
+  color: color-mix(in srgb, var(--accent) 75%, var(--text-soft));
+  letter-spacing: -0.5px;
+}
+.resume-chip:hover .resume-chip-glyph { color: var(--accent); }
+.resume-chip-id {
+  letter-spacing: 0.04em;
+  opacity: 0.9;
+}
+.resume-chip.is-copied {
+  color: white;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.resume-chip.is-copied .resume-chip-glyph { color: white; }
+.source-filter {
+  display: inline-flex; gap: 0.25rem; margin-right: 0.5rem;
+}
+.source-filter .pill {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--text-soft); font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.source-filter .pill.active {
+  background: var(--accent); color: white;
+  border-color: var(--accent);
+}
+.source-filter .pill .count {
+  font-size: 10px; opacity: 0.85;
+}
 
 /* ─── Session detail summary pane ───────────────────────────────────── */
 

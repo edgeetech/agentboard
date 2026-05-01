@@ -17,9 +17,15 @@ type Session = {
   role?: string | null;
   topFiles?: Array<{ path: string; count: number }>;
   planFiles?: string[];
+  source?: 'agentboard' | 'cli';
+  taskCode?: string | null;
+  projectCode?: string | null;
+  repoPath?: string | null;
   dbHash: string;      // full hash (filename without .db)
   dbHashShort: string; // first 8 chars for display
 };
+
+type SourceFilter = 'all' | 'agentboard' | 'cli';
 
 const INTENT_ICON: Record<string, string> = {
   investigate: '🔎',
@@ -55,6 +61,7 @@ function durationMin(a: string, b: string) {
 export function SessionsPage() {
   const { t } = useTranslation();
   const [q, setQ] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const data = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
 
   const flat: Session[] = useMemo(() => {
@@ -68,20 +75,34 @@ export function SessionsPage() {
     return out;
   }, [data.data]);
 
+  const sourceCounts = useMemo(() => {
+    let agentboard = 0, cli = 0;
+    for (const s of flat) {
+      if (s.source === 'agentboard') agentboard++;
+      else cli++;
+    }
+    return { all: flat.length, agentboard, cli };
+  }, [flat]);
+
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return flat;
-    return flat.filter(x =>
-      x.id.toLowerCase().includes(s) ||
-      (x.projectDir ?? '').toLowerCase().includes(s) ||
-      (x.firstPrompt ?? '').toLowerCase().includes(s) ||
-      (x.intent ?? '').toLowerCase().includes(s) ||
-      (x.role ?? '').toLowerCase().includes(s) ||
-      (x.topFiles ?? []).some(f => f.path.toLowerCase().includes(s)) ||
-      (x.planFiles ?? []).some(p => p.toLowerCase().includes(s)) ||
-      x.dbHash.includes(s)
-    );
-  }, [q, flat]);
+    return flat.filter(x => {
+      if (sourceFilter === 'agentboard' && x.source !== 'agentboard') return false;
+      if (sourceFilter === 'cli' && x.source === 'agentboard') return false;
+      if (!s) return true;
+      return (
+        x.id.toLowerCase().includes(s) ||
+        (x.projectDir ?? '').toLowerCase().includes(s) ||
+        (x.firstPrompt ?? '').toLowerCase().includes(s) ||
+        (x.intent ?? '').toLowerCase().includes(s) ||
+        (x.role ?? '').toLowerCase().includes(s) ||
+        (x.taskCode ?? '').toLowerCase().includes(s) ||
+        (x.topFiles ?? []).some(f => f.path.toLowerCase().includes(s)) ||
+        (x.planFiles ?? []).some(p => p.toLowerCase().includes(s)) ||
+        x.dbHash.includes(s)
+      );
+    });
+  }, [q, flat, sourceFilter]);
 
   const totals = useMemo(() => {
     const sessions = flat.length;
@@ -101,6 +122,25 @@ export function SessionsPage() {
           </span>
         </div>
         <div className="actions">
+          <div className="source-filter" role="tablist" aria-label={t('sessions.filter_source', 'Filter by source')}>
+            {(['all', 'agentboard', 'cli'] as SourceFilter[]).map(f => (
+              <button
+                key={f}
+                type="button"
+                role="tab"
+                aria-selected={sourceFilter === f}
+                className={`pill${sourceFilter === f ? ' active' : ''}`}
+                onClick={() => setSourceFilter(f)}
+              >
+                {f === 'all'
+                  ? t('sessions.source_all', 'All')
+                  : f === 'agentboard'
+                    ? t('sessions.source_agentboard', 'Agentboard')
+                    : t('sessions.source_cli', 'CLI / Other')}
+                <span className="count mono">{sourceCounts[f]}</span>
+              </button>
+            ))}
+          </div>
           <label className="search-bar wide">
             <SearchIcon />
             <input
@@ -176,6 +216,15 @@ export function SessionsPage() {
                 >
                   <div className="session-main">
                     <div className="session-title oneline" title={s.firstPrompt ?? undefined}>
+                      {s.source === 'agentboard' && (
+                        <span
+                          className="session-tag source agentboard"
+                          title={s.taskCode ? `${t('sessions.source_agentboard', 'Agentboard')} · ${s.taskCode}${s.role ? ' · ' + s.role : ''}` : t('sessions.source_agentboard', 'Agentboard')}
+                        >
+                          {s.taskCode ?? t('sessions.source_agentboard', 'Agentboard')}
+                          {s.role ? ` · ${s.role}` : ''}
+                        </span>
+                      )}
                       {s.firstPrompt
                         ? <span className="quoted">“{s.firstPrompt}”</span>
                         : <span className="muted">{t('sessions.untitled', 'No prompt recorded')}</span>}
@@ -183,7 +232,13 @@ export function SessionsPage() {
                     <div className="session-sub mono" title={s.projectDir ?? undefined}>
                       {s.projectDir || '—'}
                     </div>
-                    <div className="session-meta mono">{s.id.slice(0, 12)} · db:{s.dbHashShort}</div>
+                    <div className="session-meta mono">
+                      {s.id.slice(0, 12)} · db:{s.dbHashShort}
+                      <ResumeInline
+                        sessionId={s.id}
+                        repoPath={s.repoPath ?? s.projectDir}
+                      />
+                    </div>
                   </div>
                   <div className="session-stat intent-col">
                     <span className="label">{t('sessions.intent', 'Intent')}</span>
@@ -228,5 +283,33 @@ function Stat({ label, value }: { label: string; value: string | number }) {
       <div className="session-kpi-value">{value}</div>
       <div className="session-kpi-label">{label}</div>
     </div>
+  );
+}
+
+function ResumeInline({
+  sessionId, repoPath,
+}: { sessionId: string; repoPath: string | null | undefined }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const cmd = repoPath
+    ? `cd "${repoPath}"; claude --resume ${sessionId}`
+    : `claude --resume ${sessionId}`;
+  return (
+    <button
+      type="button"
+      className="linkish resume-inline"
+      title={cmd}
+      onClick={async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(cmd);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1800);
+        } catch {}
+      }}
+    >
+      {copied ? t('common.copied', 'Copied ✓') : `⏎ ${t('task.resume', 'Open in CLI')}`}
+    </button>
   );
 }
