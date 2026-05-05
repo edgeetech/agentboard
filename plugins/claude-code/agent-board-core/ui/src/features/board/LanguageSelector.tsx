@@ -82,7 +82,7 @@ export function LanguageSelector() {
     <div className="lang-selector" ref={ref}>
       <button
         className="lang-trigger"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { setOpen(o => !o); }}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={current.flagAlt}
@@ -101,7 +101,7 @@ export function LanguageSelector() {
                 role="option"
                 aria-selected={l.code === i18n.language}
                 className={`lang-option${l.code === i18n.language ? ' is-active' : ''}`}
-                onClick={() => change(l.code)}
+                onClick={() => { change(l.code); }}
                 tabIndex={0}
               >
                 <F />

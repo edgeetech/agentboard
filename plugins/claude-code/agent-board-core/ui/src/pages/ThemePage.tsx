@@ -1,16 +1,18 @@
 import { useTranslation } from 'react-i18next';
-import { useTheme, Palette, Scheme } from '../theme/ThemeProvider';
+
 import { EdgeeTechLogo } from '../components/EdgeeTechLogo';
 import { Logo } from '../components/Logo';
+import type { Palette, Scheme } from '../theme/ThemeProvider';
+import { useTheme } from '../theme/ThemeProvider';
 
-type Option = {
+interface Option {
   id: Palette;
   name: string;
   tagline: string;
   swatches: string[];
   logo: 'agentboard' | 'edgeetech';
   darkOnly?: boolean;
-};
+}
 
 const OPTIONS: Option[] = [
   {
@@ -108,7 +110,7 @@ export function ThemePage() {
               role="radio"
               aria-checked={scheme === s}
               className={'scheme-opt ' + (scheme === s ? 'active' : '')}
-              onClick={() => setScheme(s)}
+              onClick={() => { setScheme(s); }}
             >
               <span className={'scheme-swatch scheme-' + s} />
               {t(`theme.scheme_${s}`, s === 'light' ? 'Light' : 'Dark')}
@@ -126,7 +128,7 @@ export function ThemePage() {
               <button
                 key={o.id}
                 className={'theme-card ' + (active ? 'active' : '')}
-                onClick={() => setPalette(o.id)}
+                onClick={() => { setPalette(o.id); }}
                 aria-pressed={active}
               >
                 <div className="theme-card-top">

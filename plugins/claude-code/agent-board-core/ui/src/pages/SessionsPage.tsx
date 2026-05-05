@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
+
 import { api } from '../api';
 import { SearchIcon } from '../components/SearchIcon';
 
-type Session = {
+interface Session {
   id: string;
   projectDir: string | null;
   startedAt: string;
@@ -15,15 +16,16 @@ type Session = {
   firstPrompt?: string | null;
   intent?: string | null;
   role?: string | null;
-  topFiles?: Array<{ path: string; count: number }>;
+  topFiles?: { path: string; count: number }[];
   planFiles?: string[];
   source?: 'agentboard' | 'cli';
   taskCode?: string | null;
   projectCode?: string | null;
   repoPath?: string | null;
+  provider?: 'claude' | 'github_copilot' | 'codex' | null;
   dbHash: string;      // full hash (filename without .db)
   dbHashShort: string; // first 8 chars for display
-};
+}
 
 type SourceFilter = 'all' | 'agentboard' | 'cli';
 
@@ -130,7 +132,7 @@ export function SessionsPage() {
                 role="tab"
                 aria-selected={sourceFilter === f}
                 className={`pill${sourceFilter === f ? ' active' : ''}`}
-                onClick={() => setSourceFilter(f)}
+                onClick={() => { setSourceFilter(f); }}
               >
                 {f === 'all'
                   ? t('sessions.source_all', 'All')
@@ -145,7 +147,7 @@ export function SessionsPage() {
             <SearchIcon />
             <input
               value={q}
-              onChange={e => setQ(e.target.value)}
+              onChange={e => { setQ(e.target.value); }}
               placeholder={t('sessions.search', 'Search project or session id…')}
               aria-label="Search sessions"
               autoComplete="off"
@@ -155,7 +157,7 @@ export function SessionsPage() {
               <button
                 type="button"
                 className="search-clear"
-                onClick={() => setQ('')}
+                onClick={() => { setQ(''); }}
                 aria-label={t('common.clear', 'Clear')}
                 title={t('common.clear', 'Clear')}
               >×</button>
@@ -172,7 +174,7 @@ export function SessionsPage() {
       ) : data.isError ? (
         <div className="empty-state">
           <h3>{t('sessions.error_title', 'Could not read sessions')}</h3>
-          <p className="muted">{String((data.error as Error)?.message || '')}</p>
+          <p className="muted">{String((data.error)?.message || '')}</p>
         </div>
       ) : data.data?.error ? (
         <div className="empty-state">
@@ -237,6 +239,7 @@ export function SessionsPage() {
                       <ResumeInline
                         sessionId={s.id}
                         repoPath={s.repoPath ?? s.projectDir}
+                        provider={s.provider}
                       />
                     </div>
                   </div>
@@ -287,13 +290,14 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 function ResumeInline({
-  sessionId, repoPath,
-}: { sessionId: string; repoPath: string | null | undefined }) {
+  sessionId, repoPath, provider = 'claude',
+}: { sessionId: string; repoPath: string | null | undefined; provider?: 'claude' | 'github_copilot' | 'codex' | null }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const bin = provider === 'codex' ? 'codex resume' : 'claude --resume';
   const cmd = repoPath
-    ? `cd "${repoPath}"; claude --resume ${sessionId}`
-    : `claude --resume ${sessionId}`;
+    ? `cd "${repoPath}"; ${bin} ${sessionId}`
+    : `${bin} ${sessionId}`;
   return (
     <button
       type="button"
@@ -305,7 +309,7 @@ function ResumeInline({
         try {
           await navigator.clipboard.writeText(cmd);
           setCopied(true);
-          setTimeout(() => setCopied(false), 1800);
+          setTimeout(() => { setCopied(false); }, 1800);
         } catch {}
       }}
     >

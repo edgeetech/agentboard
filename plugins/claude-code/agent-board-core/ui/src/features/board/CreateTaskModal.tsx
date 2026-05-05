@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+
 import { api } from '../../api';
 import { loadRoles } from '../../data/catalog';
+
 import { FileDropZone } from './FileDropZone';
 
 export function CreateTaskModal({ onClose }: { onClose: () => void }) {
@@ -32,17 +34,17 @@ export function CreateTaskModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => { e.stopPropagation(); }}>
         <h2>{t('board.new_task')}</h2>
         <form onSubmit={e => { e.preventDefault(); m.mutate(); }}>
           <label>{t('task.title')}
-            <input value={title} onChange={e => setTitle(e.target.value)} required autoFocus />
+            <input value={title} onChange={e => { setTitle(e.target.value); }} required autoFocus />
           </label>
           <label>{t('task.description')}
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} />
+            <textarea value={description} onChange={e => { setDescription(e.target.value); }} rows={4} />
           </label>
           <label>{t('task.assignee', 'Assign to')}
-            <select value={assignee_role || ''} onChange={e => setAssigneeRole(e.target.value || null)}>
+            <select value={assignee_role || ''} onChange={e => { setAssigneeRole(e.target.value || null); }}>
               <option value="">{t('task.unassigned', 'Unassigned (no agent)')}</option>
               {personas.map(p => (
                 <option key={p.id} value={p.id}>
@@ -59,7 +61,7 @@ export function CreateTaskModal({ onClose }: { onClose: () => void }) {
               {t('board.new_task')}
             </button>
           </div>
-          {m.isError && <div className="err">{(m.error as Error).message}</div>}
+          {m.isError && <div className="err">{(m.error).message}</div>}
         </form>
       </div>
     </div>

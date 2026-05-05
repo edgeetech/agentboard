@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getRole, upsertRole, loadSkills, Role } from '../data/catalog';
+import { Link, useParams } from 'react-router-dom';
+
+import { api } from '../api';
 import { PromptPanel } from '../components/PromptPanel';
+import type { Role } from '../data/catalog';
+import { getRole, upsertRole } from '../data/catalog';
 
 export function RoleDetailPage() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const existing = getRole(id);
-  const allSkills = useMemo(loadSkills, []);
+  const skillsQ = useQuery({ queryKey: ['skills'], queryFn: () => api.listSkills() });
+  const allSkills = skillsQ.data?.skills ?? [];
 
   const [name, setName] = useState(existing?.name ?? '');
   const [emblem, setEmblem] = useState(existing?.emblem ?? '');
@@ -56,7 +61,7 @@ export function RoleDetailPage() {
     };
     upsertRole(next);
     setSaved(t('common.saved'));
-    setTimeout(() => setSaved(null), 2500);
+    setTimeout(() => { setSaved(null); }, 2500);
   }
 
   return (
@@ -72,7 +77,7 @@ export function RoleDetailPage() {
         </div>
         <div className="actions">
           {!promptOpen && (
-            <button className="ghost" type="button" onClick={() => setPromptOpen(true)}>
+            <button className="ghost" type="button" onClick={() => { setPromptOpen(true); }}>
               {t('prompt.show', 'Show prompt')}
             </button>
           )}
@@ -85,15 +90,15 @@ export function RoleDetailPage() {
         <div className="form-grid">
           <label>
             {t('roles.name', 'Name')}
-            <input value={name} onChange={e => setName(e.target.value)} required />
+            <input value={name} onChange={e => { setName(e.target.value); }} required />
           </label>
           <label>
             {t('roles.emblem', 'Emblem')}
-            <input value={emblem} onChange={e => setEmblem(e.target.value.toUpperCase().slice(0, 3))} maxLength={3} />
+            <input value={emblem} onChange={e => { setEmblem(e.target.value.toUpperCase().slice(0, 3)); }} maxLength={3} />
           </label>
           <label>
             {t('roles.description', 'Description')}
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} />
+            <textarea value={description} onChange={e => { setDescription(e.target.value); }} rows={4} />
           </label>
 
           <div>
@@ -108,7 +113,7 @@ export function RoleDetailPage() {
                     key={s.id}
                     type="button"
                     className={'skill-pick' + (active ? ' active' : '')}
-                    onClick={() => toggleSkill(s.id)}
+                    onClick={() => { toggleSkill(s.id); }}
                   >
                     <span className="e">{s.emblem}</span>
                     <span className="n">{s.name}</span>
@@ -132,7 +137,7 @@ export function RoleDetailPage() {
           </small>
         </div>
       </form>
-      {promptOpen && <PromptPanel kind="role" id={existing.id} onClose={() => setPromptOpen(false)} />}
+      {promptOpen && <PromptPanel kind="role" id={existing.id} onClose={() => { setPromptOpen(false); }} />}
       </div>
     </>
   );

@@ -2,18 +2,19 @@
 
 # 🎛️ AgentBoard
 
-### Multi-agent orchestration platform: Run Claude, Copilot, and future AI agents like a kanban team — locally, with full cost + audit trails.
+### Multi-agent orchestration platform: Run Claude, Codex, Copilot, and future AI agents like a kanban team — locally, with full cost + audit trails.
 
-[![Version](https://img.shields.io/badge/version-0.1.33-3b82f6?style=for-the-badge)](./plugins/claude-code/.claude-plugin/plugin.json)
+[![Version](https://img.shields.io/badge/version-0.1.86-3b82f6?style=for-the-badge)](./plugins/claude-code/.claude-plugin/plugin.json)
 [![License](https://img.shields.io/badge/license-Elastic--2.0-f59e0b?style=for-the-badge)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-22c55e?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d946ef?style=for-the-badge)](https://docs.claude.com/en/docs/claude-code)
+[![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-10a37f?style=for-the-badge)](AGENTS.md#supported-agents--status-table)
 [![Copilot CLI](https://img.shields.io/badge/Copilot%20CLI-supported-0d9488?style=for-the-badge)](AGENTS.md#copilot-cli-setup)
 [![Local-only](https://img.shields.io/badge/cloud-zero-ef4444?style=for-the-badge)]()
 
 **🟦 PM** → **🟧 Worker** → **🟪 Reviewer** → **🟩 Human** — a real workflow, not a chat window.
 
-**Agents:** [Claude Code](CLAUDE.md) · [Copilot CLI](AGENTS.md#copilot-cli-setup) · [More coming](AGENTS.md#supported-agents--status-table)
+**Agents:** [Claude Code](CLAUDE.md) · [Codex CLI](AGENTS.md#supported-agents--status-table) · [Copilot CLI](AGENTS.md#copilot-cli-setup) · [More coming](AGENTS.md#supported-agents--status-table)
 
 </div>
 
@@ -45,7 +46,8 @@ Or run standalone server:
 ```bash
 git clone https://github.com/edgeetech/agentboard.git
 cd plugins/claude-code/agent-board-core
-node --experimental-sqlite --no-warnings server.mjs
+npm install
+node --experimental-sqlite --experimental-strip-types --no-warnings server.ts
 # Open http://localhost:3000
 ```
 
@@ -84,7 +86,10 @@ Multi-agent AI is powerful, but the day-to-day is messy:
 | 🕹️ **Auto *or* semi-auto mode** | **Auto** — agents drive transitions end-to-end. **Semi** — you drive status changes, agents only annotate (comments + ACs). Switch per project, any time. |
 | 🧾 **Acceptance Criteria, enforced** | PM writes 3–7 testable ACs. Reviewer must check them. Server rejects finishes that skip the audit. |
 | 💰 **Real-time cost per run** | Every run parses SDK usage events and stamps `cost_usd` from latest Opus / Sonnet / Haiku pricing. Project header shows all-time, 7d, 30d totals. |
-| 🤖 **Multi-agent execution** | Run tasks with **Claude agents** (default, low-cost) or **Copilot CLI agents** (for capability mix). Set per-project or override per-task. |
+| 🤖 **Multi-agent execution** | Run tasks with **Claude agents** (default), **Codex CLI**, or **Copilot CLI** (for capability mix). Set per-project or override per-task. |
+| 🧭 **Inner phase machine** | Each run drives an FSM: `DISCOVERY → REFINEMENT → PLANNING → EXECUTING → VERIFICATION → DONE` (plus `cancel|wontfix|revisit` exits). Discovery modes — `full | validate | technical-depth | ship-fast | explore` — tune the loop per task. Live phase + tool activity streamed over SSE. |
+| 🪪 **Project-scoped skills** | Server scans `<repo>/**/.claude/skills/*` (folder skills with `SKILL.md` and flat `<name>.md`) on project create / repo change / manual rescan. Disk is source of truth; UI edits write back. 6 read-only built-ins (code-review, unit-tests, tech-spec, refactor, api-client, release-notes) merged into the same catalog. Agents resolve by name via `mcp__abrun__use_skill` with fuzzy suggestions on miss. |
+| 🎯 **Concern packs** | Pluggable concern lists steer PM/Worker/Reviewer prompts. Built-in packs: `well-engineered`, `beautiful-product`, `long-lived`. Custom packs per project via `concerns_json`. |
 | 🔁 **Bounded rework loop** | Max 3 reviewer rejects per task. After that, task stalls with "Retry from Worker" button — no runaway agents. |
 | 🔄 **Automatic retry with backoff** | Failed runs automatically re-enqueue with exponential backoff (1s → 2s → 4s, capped at 5min, max 3 attempts). Retry history logged in `retry_state` per run. Configurable via `max_retry_attempts` / `max_retry_backoff_ms`. |
 | 🔗 **External tracker sync** | Connect Linear, GitHub Issues, or GitLab to a project. Background poller creates agentboard tasks from incoming issues, marks tasks done when issues hit terminal state. Config via `tracker_config` table; REST API at `/api/projects/{code}/tracker`. |
@@ -113,7 +118,7 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
 
 ## 🧠 How it works
 
-AgentBoard routes tasks to the right **executor** — Claude SDK, Copilot CLI, or future agents — based on project/task configuration. See [AGENTS.md § Executor Lifecycle](AGENTS.md#5-executor-lifecycle) for full details.
+AgentBoard routes tasks to the right **executor** — Claude SDK, Codex CLI, Copilot CLI, or future agents — based on project/task configuration. See [AGENTS.md § Executor Lifecycle](AGENTS.md#5-executor-lifecycle) for full details.
 
 ```
    Your AI agent platform
@@ -122,8 +127,10 @@ AgentBoard routes tasks to the right **executor** — Claude SDK, Copilot CLI, o
    ┌──────────────────────────────────────────────────────────────┐
    │  AgentBoard core server  (Node, 127.0.0.1)                   │
     │  • REST + JSON-RPC HTTP MCP (abrun — for agents)             │
-   │  • Per-project SQLite (WAL, schema v3)                       │
-    │  • Multi-executor routing: Claude SDK + Copilot CLI         │
+   │  • Per-project SQLite (WAL, schema v5)                       │
+    │  • Multi-executor routing: Claude SDK + Codex + Copilot     │
+   │  • Inner phase machine (DISCOVERY→…→DONE) per run            │
+   │  • Skill scanner: <repo>/**/.claude/skills/* + 6 built-ins   │
    │  • RetryManager: exponential backoff, max 3 attempts         │
    │  • TrackerPoller: Linear / GitHub / GitLab background sync   │
    │  • Reaper: 15min heartbeat timeout                           │
@@ -187,7 +194,7 @@ Outside the repo, untouched by plugin upgrades:
 
 ```
 ~/.agentboard/                  (%USERPROFILE%\.agentboard on Windows)
-  projects/<code>.db            one SQLite per project (WAL, schema v3)
+  projects/<code>.db            one SQLite per project (WAL, schema v5)
   logs/<run_id>.ndjson           Claude SDK structured events
   logs/<run_id>.err.log         captured stderr
   run-configs/<id>.json         tmp MCP config per run (deleted on exit)
@@ -196,18 +203,23 @@ Outside the repo, untouched by plugin upgrades:
   server.lock                   single-instance lock
 ```
 
-**Per-project DB tables (schema v3):**
+**Per-project DB tables (schema v5):**
 
 | Table | Purpose |
 |---|---|
-| `task` | Tasks with status, assignees, acceptance criteria |
+| `project` | Project config — workflow, repo path, agent provider, `concerns_json`, `scan_ignore_json`, `allow_git` |
+| `task` | Tasks with status, assignees, acceptance criteria, `discovery_mode` |
 | `task_history` | Full audit trail of every status transition |
 | `task_attachment` | Files or URLs attached to a task |
-| `agent_run` | Agent runs with cost, session-id, attempt count |
+| `task_debt` | Per-task debt items recorded during a run (tech debt, follow-ups) |
+| `agent_run` | Agent runs with cost, session-id, attempt count, `phase`, `phase_state_json`, `phase_history_json` |
+| `agent_activity` | Live event log (phase transitions, tool calls) — backs the SSE stream |
 | `retry_state` | Retry history per run (backoff delay, error, next attempt) |
 | `tracker_config` | External tracker connections per project |
 | `tracker_issue` | Synced issues from external trackers |
-| `meta` | DB schema version |
+| `skill` | Skills discovered in `<repo>/**/.claude/skills/*` (folder + flat) |
+| `skill_scan` | Scan run history (status, started/finished, errors) |
+| `meta` | DB schema version (currently `5`) |
 
 ---
 
@@ -215,12 +227,12 @@ Outside the repo, untouched by plugin upgrades:
 
 | Layer | Stack |
 |---|---|
-| **Server** | Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). Production deps: `commander` · `liquidjs` · `pino`. |
-| **Agent runners** | **Claude SDK** (`@anthropic-ai/claude-agent-sdk`) — in-process, streaming. **Copilot CLI** — subprocess, stream-json parsing. Multi-executor routing based on project/task configuration. |
+| **Server** | Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). TypeScript executed directly via `--experimental-strip-types` (no JS emit). Production deps: `commander` · `liquidjs` · `pino` · `zod`. |
+| **Agent runners** | **Claude SDK** (`@anthropic-ai/claude-agent-sdk`) — in-process, streaming. **Codex CLI** — subprocess. **Copilot SDK** (`@github/copilot-sdk`) — in-process, mirrors Claude runner contract. Multi-executor routing based on project/task configuration. |
 | **UI** | React 18 · Vite · TanStack Query · Zustand · @dnd-kit · react-i18next |
 | **MCP** | Two surfaces — `abrun` (HTTP, for spawned agents) and `agentboard` (stdio, for your interactive session). Names differ deliberately so `--strict-mcp-config` filters cleanly. |
 | **Pricing** | Opus 4.7 / Sonnet 4.6 / Haiku 4.5 + Copilot Pro, versioned. Unknown model → `$0` + `uncosted` flag — never silently wrong numbers. See [AGENTS.md § Supported Agents](AGENTS.md#2-supported-agents--status-table) for per-agent pricing. |
-| **Tests** | Vitest · 109 tests across 12 files (state machine, retry, tracker, workspace safety, supervisor, turn timeout, rate limiter, prompt builder, event bus, executor resolution, cost computation). |
+| **Tests** | Vitest · 231 tests across 27 files (state machine, phase machine, phase repo, postflight phase gate, retry, tracker, workspace safety/manager, supervisor, turn timeout, rate limiter, prompt builder, event bus, executor resolution, cost computation, skill repo, skill scanner, skill scan worker, api-skills, api-mcp use_skill, concerns, discovery modes, codex config, copilot runner, run hooks, folder rules, string distance, project triggers). Run via `npm test`. Quality gate: `npm run check` (`typecheck && lint && format:check`). |
 
 ---
 
@@ -299,10 +311,10 @@ Paste in a terminal at the project repo and you're inside the agent's session. I
 
 ## 🗺️ Roadmap
 
-- 🛡️ Per-run rate limiting on MCP mutations (v1.1)
-- ✅ Stricter UTF-8 body validation (v1.1)
+- 🛡️ Per-run rate limiting on MCP mutations
 - 💱 `/agentboard reprice` skill — recompute historical run costs when Anthropic prices change
 - 🔍 Auto-discover plugin-registered MCPs (today, mirror them into `~/.claude.json` or `mcps.json`)
+- 🌳 Skill-scan UI tree view (deferred — table view ships today)
 
 ---
 

@@ -1,7 +1,9 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+
 import { setProjectCode, getProjectCode } from '../api';
+
 import { rememberLastProject } from './useCurrentProjectCode';
 
 /**

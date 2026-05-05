@@ -1,4 +1,5 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
+
 import { Tooltip } from '../../components/Tooltip';
 
 /* Category → swatch colour (token) + inline SVG icon. Chunky 14px glyphs,

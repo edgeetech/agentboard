@@ -1,17 +1,31 @@
 # Copilot Instructions for AgentBoard
 
-AgentBoard is a multi-agent workflow orchestrator running as a Claude Code plugin. This file guides Copilot CLI sessions working in this repository.
+AgentBoard is a multi-agent workflow orchestrator running as a Claude Code plugin. It supports **Claude Code**, **Codex CLI**, and **Copilot CLI** as executors. This file guides Copilot CLI sessions working in this repository.
 
 ## Build & Run
 
 ### Core Server
 
+The server is pure TypeScript — no JS emit. Node 22 runs `.ts` directly via `--experimental-strip-types`.
+
 ```bash
 # From plugins/claude-code/agent-board-core/
-node server.mjs                    # Start server standalone (127.0.0.1 only)
+node --experimental-sqlite --experimental-strip-types --no-warnings server.ts
+
+# Quality gate (CI)
+npm run check         # = typecheck && lint && format:check
+npm run typecheck     # tsc --noEmit -p src/tsconfig.json
+npm run lint          # eslint flat config (eslint.config.js)
+npm run format        # prettier --write .
+npm test              # vitest run (231 tests across 27 files)
+
+# Build (UI bundle only — no JS emit for server)
+npm run build         # = typecheck && build:ui
+
+# Pre-commit: simple-git-hooks runs lint-staged on staged .ts/.tsx files.
 
 # Via plugin entry point
-node plugins/claude-code/bin/ensure-server.mjs  # Boot server (idempotent, version-aware)
+node plugins/claude-code/bin/ensure-server.ts  # Boot server (idempotent, version-aware)
 ```
 
 ### UI (React + TypeScript)
@@ -30,7 +44,8 @@ npx tsc --noEmit                   # Type-check only (no emit)
 ```bash
 # Fast-reaper (override 15min timeout for quicker iteration)
 AGENTBOARD_REAPER_TIMEOUT_MS=10000 AGENTBOARD_REAPER_SWEEP_MS=2000 \
-  node --experimental-sqlite --no-warnings plugins/claude-code/agent-board-core/server.mjs
+  node --experimental-sqlite --experimental-strip-types --no-warnings \
+    plugins/claude-code/agent-board-core/server.ts
 
 # Tail live run logs
 cat ~/.agentboard/logs/<run_id>.jsonl | jq .
@@ -49,55 +64,63 @@ sqlite3 ~/.agentboard/projects/<project_code>.db "SELECT code, status, agent_pro
 
 ### Executor Engine
 
-Current: Uses Claude Agent SDK via `AgentRunner` class in `src/agent-runner.mjs`
+Routes runs to one of three runner classes based on the resolved provider.
 
 ```
-executor.mjs (drain loop)
+executor.ts (drain loop)
   → tryClaimAndRun(project, run)
     → resolve effective executor provider (task override > project default > 'claude')
-    → AgentRunner({ provider, role, prompt, systemPrompt, mcp, ... })
-    → runner.run() → stream-json parsing → cost computation
+    → AgentRunner | CodexRunner | CopilotRunner
+    → runner.run() → cost computation
     → finishRun() or scheduleRetry()
 ```
 
 Key files:
-- `src/executor.mjs` — drain loop, reaper, run lifecycle, executor provider resolution
-- `src/agent-runner.mjs` — Claude Agent SDK wrapper
-- `src/copilot-runner.mjs` — Copilot CLI wrapper (mirrors AgentRunner interface)
-- `src/repo.mjs` — DB queries, task dispatch, state transitions
-- `src/retry-manager.mjs` — retry scheduling + exponential backoff
-- `src/supervisor.mjs` — crash recovery wrapper
+- `src/executor.ts` — drain loop, reaper, run lifecycle, executor provider resolution
+- `src/agent-runner.ts` — Claude Agent SDK wrapper
+- `src/codex-runner.ts` — Codex CLI subprocess wrapper
+- `src/copilot-runner.ts` — Copilot SDK wrapper (mirrors AgentRunner interface)
+- `src/repo.ts` — DB queries, task dispatch, state transitions
+- `src/retry-manager.ts` — retry scheduling + exponential backoff
+- `src/supervisor.ts` — crash recovery wrapper
+- `src/phase-machine.ts` / `src/phase-repo.ts` — inner per-run FSM
+- `src/skill-repo.ts` / `src/skill-scanner.ts` / `src/skill-scan-worker.ts` — project skills
 
 ### Multi-Agent Support
 
-**Status:** 🔄 In Progress. Schema and routing logic complete; Copilot CLI spawning in active implementation.
+**Status:** ✅ Stable. Claude, Codex CLI, and Copilot CLI all production-ready.
 
 ```
-project.agent_provider  = 'claude' | 'github_copilot'  [ready]
-task.agent_provider_override  = 'claude' | 'github_copilot' | NULL  [ready]
+project.agent_provider          = 'claude' | 'codex' | 'github_copilot'
+task.agent_provider_override    = 'claude' | 'codex' | 'github_copilot' | NULL
 ```
 
-**Implemented:**
-- Resolution: `task.agent_provider_override ?? project.agent_provider ?? 'claude'` ✅
-- Schema: both columns, migrations, validation ✅
-- API: project POST/PATCH, task executor_override parameter ✅
-- Cost computation for both models ✅
-- Unit tests: executor resolution, cost computation ✅
+- Resolution: `task.agent_provider_override ?? project.agent_provider ?? 'claude'`
+- Schema: columns, migrations, validation
+- API: project POST/PATCH, task `executor_override` parameter
+- Cost computation for Claude, Codex, and Copilot models
+- Tests covering executor resolution, cost computation, copilot runner, codex config
 
-**In Progress:**
-- CopilotRunner spawn logic (placeholder → actual Copilot CLI integration)
-- Copilot CLI availability detection
-- Integration tests with mocked Copilot CLI
+### Inner Phase Machine
+
+Each run drives an FSM `DISCOVERY → REFINEMENT → PLANNING → EXECUTING → VERIFICATION → DONE` (plus exit verbs `cancel | wontfix | revisit`). Discovery modes (`full` default, `validate`, `technical-depth`, `ship-fast`, `explore`) tune the loop; bug-type tasks default to `ship-fast` (collapses DISCOVERY→PLANNING).
+
+Persisted on `agent_run.phase`, `agent_run.phase_state_json`, `agent_run.phase_history_json`. Live phase + tool activity broadcast over SSE on `/api/runs/:id/events`. Postflight phase gate requires `DONE` (or an exit verb) before `finish_run(succeeded)` is accepted.
+
+### Project-Scoped Skills
+
+Server scans `<repo>/**/.claude/skills/*` (folder skills with `SKILL.md`, plus flat `<name>.md`) on project create / repo change / manual rescan. Disk is the single source of truth; UI edits write back. Default ignores (node_modules, bin, obj, vendor, target, __pycache__, .git, dist, …) overlaid with per-project `project.scan_ignore_json`. 6 read-only built-ins (id prefix `builtin:`) merged into the same `/api/skills` endpoint. Async scan worker mirrors the executor Supervisor (1 s polling, single-in-flight per project).
 
 ### MCP Surfaces
 
 **HTTP MCP `abrun`** — spawned agents call home
-- Location: `src/api-mcp.mjs`
-- Tools: `claim_run`, `get_task`, `update_task`, `add_comment`, `finish_run`, `add_heartbeat`
+- Location: `src/api-mcp.ts`
+- Run-lifecycle tools: `claim_run`, `get_task`, `update_task`, `add_comment`, `finish_run`, `add_heartbeat`
+- Phase + skill tools: `next`, `advance`, `record_debt`, `resolve_debt`, `record_tool` (PreToolUse hook), `use_skill`
 - Auth: Bearer token + per-run rotated `run_token`
 
 **Stdio MCP `agentboard`** — interactive session (your current session)
-- Location: `mcp/agentboard.mjs`
+- Location: `plugins/claude-code/mcp/agentboard.mjs` *(thin REST proxy; not part of server TS migration)*
 - Tools: read-only board inspection + human actions (approve, reject, dispatch)
 - Auth: Bearer token only
 
@@ -110,14 +133,14 @@ todo → agent_working → [agent_review] → human_approval → done
               └────── rework loop (max 3 tries) ──┘
 ```
 
-Auto-dispatch (`src/dispatch-map.mjs`):
+Auto-dispatch (`src/dispatch-map.ts`):
 - `(status, assignee_role) → next_role` (workflow-aware)
 - Triggers on status change **or** assignee change (e.g., reviewer reject flips assignee back to worker)
 - Transaction: state CAS + task history + enqueue next run (atomic)
 
 ### Postflight Validation
 
-On `finish_run(status='succeeded')`, server enforces role-specific required comments (`src/postflight.mjs`):
+On `finish_run(status='succeeded')`, server enforces role-specific required comments (`src/postflight.ts`) and the inner phase gate (run must have reached `DONE` or an exit verb):
 
 **PM:** description + 1–20 acceptance criteria + `ENRICHMENT_SUMMARY:` comment
 **Worker:** `DEV_COMPLETED`, `FILES_CHANGED`, `DIFF_SUMMARY` (or `NO_CHANGES` / `NOT_A_REPO`)
@@ -136,27 +159,30 @@ Both Claude and Copilot agents must satisfy same postflight rules.
   name: 'ACME Corp',
   workflow_type: 'WF1',           // WF1 = PM→Worker→Reviewer→Human, WF2 = PM→Worker→Human
   repo_path: '/path/to/repo',
-  agent_provider: 'claude',       // or 'github_copilot' (when fully supported)
+  agent_provider: 'claude',       // 'claude' | 'codex' | 'github_copilot'
   max_parallel: 1,                // 1–3 agents in flight per project
+  concerns_json: ['well-engineered'],
+  scan_ignore_json: [],           // basenames or repo-relative subtree paths
+  allow_git: false,
 }
 ```
 
-### Task-Level Override (Ready)
+### Task-Level Override
 
 ```typescript
 // When manually dispatching a task
 PATCH /api/tasks/:id/transition
 {
   role: 'worker',
-  executor_override: 'github_copilot'   // overrides project.agent_provider for this run
+  executor_override: 'github_copilot'   // 'claude' | 'codex' | 'github_copilot'
 }
 ```
 
 The `executor_override` is persisted in `task.agent_provider_override` and resolved at spawn time.
 
-### TypeScript + JSDoc
+### TypeScript everywhere
 
-- **Core:** vanilla `.mjs` with JSDoc type hints (no runtime compilation)
+- **Server:** pure `.ts`, executed directly via Node 22 `--experimental-strip-types`. `tsc --noEmit` is the typecheck step. No JS emit.
 - **UI:** TypeScript source → compiled by Vite → `ui/dist/` (committed artifact, marked `linguist-generated`)
 
 ### Committed Artifacts
@@ -173,9 +199,9 @@ The `executor_override` is persisted in `task.agent_provider_override` and resol
 
 ### Pricing & Cost Tracking
 
-File: `src/pricing.mjs` (Claude models + Copilot models when added)
+File: `src/pricing.ts` (Claude, Codex, and Copilot models)
 
-- `PRICING_VERSION` bumped when prices change (enables `/agentboard reprice` in v1.1)
+- `PRICING_VERSION` bumped when prices change (enables `/agentboard reprice` to recompute history)
 - Unknown models → `$0` + uncosted flag (never silently wrong)
 - Cost computed on every run finish, even if run was orphaned
 
@@ -191,21 +217,21 @@ Location: `agent-board-core/prompts/<role>.md`
 
 ### Add a New Role Prompt
 
-1. Create `agent-board-core/prompts/<new_role>.md`
-2. Update `src/tool-allowlist.mjs` — add tools for role
-3. Update `src/dispatch-map.mjs` — define routing (which roles can transition to/from)
-4. Update `src/postflight.mjs` — add required comments (if any) for role
-5. Test with `npm run typecheck` + live run
+1. Create `plugins/claude-code/agent-board-core/prompts/<new_role>.md`
+2. Update `src/tool-allowlist.ts` — add tools for role
+3. Update `src/dispatch-map.ts` — define routing (which roles can transition to/from)
+4. Update `src/postflight.ts` — add required comments (if any) for role
+5. Test with `npm run check` + `npm test` + live run
 
 ### Support a New Agent Provider
 
-1. **Executor:** Extend `AgentRunner` with provider branching (Claude vs Copilot CLI)
-   - Provider detection → conditional spawn logic
+1. **Executor:** Add a new runner class alongside `AgentRunner` / `CodexRunner` / `CopilotRunner`
+   - Provider detection → conditional dispatch in `executor.ts::tryClaimAndRun()`
    - Reuse: cost computation, retry, timeout, MCP config (provider-agnostic)
-   
-2. **Pricing:** Add provider models to `src/pricing.mjs`
 
-3. **Availability:** Detect provider CLI in `src/config.mjs`
+2. **Pricing:** Add provider models to `src/pricing.ts`
+
+3. **Availability:** Detect provider CLI in `src/config.ts`
 
 4. **Task Override:** Ensure `task.agent_provider_override` flows through dispatch
 
@@ -215,7 +241,7 @@ Location: `agent-board-core/prompts/<role>.md`
 
 1. Set `project.agent_provider = 'github_copilot'` via UI or API
 2. Copilot CLI must be in PATH on server machine
-3. First task enqueued will spawn Copilot agent (when implementation complete)
+3. First task enqueued will spawn Copilot agent
 
 ### Debug a Failing Run
 
@@ -240,23 +266,27 @@ sqlite3 ~/.agentboard/projects/<code>.db "
 
 - **`--allowedTools` single-command only.** Compound shell (`cd X && npm install`) triggers permission deadlocks. Push complex logic into role prompts or extend allowlist.
 - **Windows argv cap (~32KB).** If role prompts + task body get huge, switch from `--append-system-prompt` to tmp file path.
-- **Node 22 requires `--experimental-sqlite`.** `ensure-server.mjs` passes it; Node ≥24 ignores harmlessly.
-- **Copilot CLI not on all machines.** When fully supported, fallback to Claude or show error if Copilot selected but unavailable.
-- **Role prompts tuned for Claude.** Copilot inherits same prompts; may need post-launch tuning.
+- **Node 22 requires `--experimental-sqlite` and `--experimental-strip-types`.** `ensure-server.ts` passes both; Node ≥24 ignores harmlessly.
+- **Copilot/Codex CLI not on all machines.** Dispatch fails with a surfaced error if the selected provider's CLI/SDK is unavailable.
+- **Role prompts tuned for Claude.** Codex and Copilot inherit the same prompts; may need per-provider tuning.
 
-## Current Incoming Work
+## Current State
 
-- ✅ Project-level agent provider selection (schema + UI ready)
-- 🔄 Task-level executor override (in planning)
-- 🔄 Copilot CLI spawn implementation (in planning)
-- 🔄 Copilot cost tracking (in planning)
-- ⏳ Copilot agent validation (planned after MVP)
+- ✅ Project-level agent provider selection (Claude / Codex / Copilot)
+- ✅ Task-level executor override
+- ✅ Copilot SDK runner + cost tracking
+- ✅ Codex CLI runner + cost tracking
+- ✅ Inner phase machine (DISCOVERY → … → DONE) + discovery modes
+- ✅ Project-scoped skills + 6 built-ins
+- ✅ Schema v5 (task_debt, agent_activity, skill, skill_scan, plus phase columns and project flags)
+- 🔄 Per-run rate limiting on MCP mutations
+- 🔄 Skill-scan UI tree view (table view ships today)
 
 ## Further Reading
 
-- **CLAUDE.md** (repo root) — detailed internals, state machine, dispatch rules, security model
+- **CLAUDE.md** (repo root) — detailed internals, state machine, dispatch rules, phase machine, skills, security model
+- **AGENTS.md** (repo root) — multi-agent workflows, MCP tools, executor lifecycle
 - **README.md** — feature tour, quick-start, workflow description
-- **plan.md** (session workspace) — full implementation roadmap for Copilot support
 
 ## Environment Setup
 
@@ -270,9 +300,15 @@ bun --version         # ≥1.x
 
 ### Claude Agent SDK
 
-Installed implicitly via `--experimental-sqlite` Node flag + native HTTP/SQLite modules.
+Resolved via `@anthropic-ai/claude-agent-sdk` dependency. Server uses `node:http` and `node:sqlite` (native).
 
-### Copilot CLI (When Enabled)
+### Codex CLI
+
+```bash
+codex --version       # Must be in PATH when project.agent_provider='codex'
+```
+
+### Copilot CLI
 
 ```bash
 copilot --version     # Must be in PATH when project.agent_provider='github_copilot'
@@ -281,17 +317,22 @@ copilot --version     # Must be in PATH when project.agent_provider='github_copi
 ### Authentication
 
 - Claude agents: `ANTHROPIC_API_KEY` env or active Claude CLI OAuth
-- Copilot agents: GitHub Copilot CLI authentication (when supported)
+- Codex agents: Codex CLI's own OpenAI auth
+- Copilot agents: GitHub Copilot CLI authentication
 
 ## Files You'll Edit Most
 
 | File | Purpose |
 |------|---------|
-| `src/executor.mjs` | Executor drain loop, run lifecycle, provider resolution |
-| `src/agent-runner.mjs` | Claude Agent SDK wrapper (extend for Copilot) |
-| `src/repo.mjs` | DB queries, task dispatch, state transitions |
-| `src/dispatch-map.mjs` | Workflow routing rules |
-| `src/postflight.mjs` | Role-specific finish requirements |
-| `agent-board-core/prompts/*.md` | Role system/user prompts |
-| `db/schema.sql` | Database schema (idempotent, run on every open) |
-| `agent-board-core/ui/src/**` | React UI components |
+| `src/executor.ts` | Executor drain loop, run lifecycle, provider resolution |
+| `src/agent-runner.ts` | Claude Agent SDK wrapper |
+| `src/codex-runner.ts` | Codex CLI subprocess wrapper |
+| `src/copilot-runner.ts` | Copilot SDK wrapper |
+| `src/repo.ts` | DB queries, task dispatch, state transitions |
+| `src/dispatch-map.ts` | Workflow routing rules |
+| `src/postflight.ts` | Role-specific finish requirements + phase gate |
+| `src/phase-machine.ts` / `src/phase-repo.ts` | Inner per-run FSM |
+| `src/skill-repo.ts` / `src/skill-scanner.ts` | Project skills catalog |
+| `plugins/claude-code/agent-board-core/prompts/*.md` | Role system/user prompts |
+| `db/schema.sql` | Database schema (idempotent, run on every open) — schema v5 |
+| `plugins/claude-code/agent-board-core/ui/src/**` | React UI components |

@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+
 import { api } from '../api';
 import { useCurrentProject } from '../hooks/useCurrentProjectCode';
 
-type Project = { code: string; name: string; workflow_type?: string };
+interface Project { code: string; name: string; workflow_type?: string }
 
 /**
  * Sidebar project switcher. Replaces the old static "Active project" card.
@@ -43,7 +44,7 @@ export function ProjectPicker() {
     return (
       <div className="project-card project-picker-card">
         <div className="label">{t('nav.active', 'Active project')}</div>
-        <button className="project-picker-empty" onClick={() => nav('/projects/new')}>
+        <button className="project-picker-empty" onClick={() => { nav('/projects/new'); }}>
           + New project
         </button>
       </div>
@@ -56,7 +57,7 @@ export function ProjectPicker() {
       <button
         type="button"
         className="project-picker-trigger"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => { setOpen(v => !v); }}
         aria-haspopup="listbox"
         aria-expanded={open}
       >

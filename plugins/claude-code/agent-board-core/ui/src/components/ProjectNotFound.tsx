@@ -1,6 +1,7 @@
-import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation, Trans } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+
 import { api } from '../api';
 
 /** Shown in the main area when the URL's projectCode doesn't exist.
@@ -9,7 +10,7 @@ export function ProjectNotFound({ code }: { code: string }) {
   const { t } = useTranslation();
   const nav = useNavigate();
   const { data } = useQuery({ queryKey: ['projects-list'], queryFn: api.listProjects });
-  const projects: Array<{ code: string; name: string; workflow_type?: string }> = data?.projects || [];
+  const projects: { code: string; name: string; workflow_type?: string }[] = data?.projects || [];
 
   return (
     <div className="empty-state project-not-found">
@@ -28,7 +29,7 @@ export function ProjectNotFound({ code }: { code: string }) {
             key={p.code}
             type="button"
             className="project-not-found-item"
-            onClick={() => nav(`/projects/${p.code}`)}
+            onClick={() => { nav(`/projects/${p.code}`); }}
           >
             <span className="name">{p.name}</span>
             <span className="code">{p.code}{p.workflow_type ? ` · ${p.workflow_type}` : ''}</span>
@@ -37,7 +38,7 @@ export function ProjectNotFound({ code }: { code: string }) {
         <button
           type="button"
           className="project-not-found-item project-not-found-new"
-          onClick={() => nav('/projects/new')}
+          onClick={() => { nav('/projects/new'); }}
         >
           + {t('nav.new_project', 'New project…')}
         </button>

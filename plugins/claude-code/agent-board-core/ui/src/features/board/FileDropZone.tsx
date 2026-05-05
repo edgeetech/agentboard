@@ -47,7 +47,7 @@ export function FileDropZone({ paths, onChange }: Props) {
       <div
         className={`file-drop-zone${dragging ? ' drag-over' : ''}`}
         onDragOver={e => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={() => { setDragging(false); }}
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
       >
@@ -79,13 +79,13 @@ export function FileDropZone({ paths, onChange }: Props) {
               <input
                 type="text"
                 value={p}
-                onChange={e => handleUpdate(i, e.target.value)}
+                onChange={e => { handleUpdate(i, e.target.value); }}
                 placeholder={t('files.path_placeholder', '/absolute/path/to/file')}
               />
               <button
                 type="button"
                 className="icon-btn danger-hover"
-                onClick={() => handleRemove(i)}
+                onClick={() => { handleRemove(i); }}
                 title={t('common.remove', 'Remove')}
                 aria-label={t('common.remove', 'Remove')}
               >

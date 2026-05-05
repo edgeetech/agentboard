@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+
 import { api, getProjectCode } from '../../api';
+
+import { DebtList } from './DebtList';
 import { FileDropZone } from './FileDropZone';
+import { PhaseTimeline } from './PhaseTimeline';
 
 type Variant = 'drawer' | 'inline';
 
@@ -78,12 +82,12 @@ export function TaskDetailPanel({
   const runAgent = useMutation({
     mutationFn: (role: 'pm' | 'worker' | 'reviewer') => api.runAgent(taskCode, role),
     onSuccess: invalidate,
-    onError: (err: any) => alert(err?.message || 'Run agent failed'),
+    onError: (err: any) => { alert(err?.message || 'Run agent failed'); },
   });
   const addComment = useMutation({
     mutationFn: (body: string) => api.addComment(taskCode, body),
     onSuccess: () => { invalidate(); setCommentDraft(''); },
-    onError: (err: any) => alert(err?.message || 'Add comment failed'),
+    onError: (err: any) => { alert(err?.message || 'Add comment failed'); },
   });
 
   // Update elapsed times for running agents
@@ -106,7 +110,7 @@ export function TaskDetailPanel({
         return changed ? updated : prev;
       });
     }, 1000);
-    return () => clearInterval(timer);
+    return () => { clearInterval(timer); };
   }, [q.data?.agent_runs]);
 
   const Wrapper = variant === 'drawer' ? 'aside' : 'div';
@@ -183,7 +187,7 @@ export function TaskDetailPanel({
             role="tab"
             aria-selected={tab === 'agent_runs'}
             className={`tab${tab === 'agent_runs' ? ' active' : ''}`}
-            onClick={() => setTab('agent_runs')}
+            onClick={() => { setTab('agent_runs'); }}
           >
             {t('task.agent_runs', 'Agent Runs')} <span className="count">{agent_runs?.length ?? 0}</span>
           </button>
@@ -191,7 +195,7 @@ export function TaskDetailPanel({
             role="tab"
             aria-selected={tab === 'comments'}
             className={`tab${tab === 'comments' ? ' active' : ''}`}
-            onClick={() => setTab('comments')}
+            onClick={() => { setTab('comments'); }}
           >
             {t('task.comments')} <span className="count">{comments.length}</span>
           </button>
@@ -199,7 +203,7 @@ export function TaskDetailPanel({
             role="tab"
             aria-selected={tab === 'files'}
             className={`tab${tab === 'files' ? ' active' : ''}`}
-            onClick={() => setTab('files')}
+            onClick={() => { setTab('files'); }}
           >
             {t('task.files', 'Files')} <span className="count">{file_paths?.length ?? 0}</span>
           </button>
@@ -216,7 +220,7 @@ export function TaskDetailPanel({
                     <button
                       type="button"
                       className="icon-btn danger-hover"
-                      onClick={() => deleteFilePath.mutate(fp.id)}
+                      onClick={() => { deleteFilePath.mutate(fp.id); }}
                       title={t('common.remove', 'Remove')}
                       aria-label={t('common.remove', 'Remove')}
                     >
@@ -226,7 +230,7 @@ export function TaskDetailPanel({
                 ))}
               </ul>
             )}
-            <AddFilePathRow onAdd={fp => addFilePath.mutate(fp)} />
+            <AddFilePathRow onAdd={fp => { addFilePath.mutate(fp); }} />
           </section>
         )}
 
@@ -244,7 +248,7 @@ export function TaskDetailPanel({
             <div className="add-comment-row" style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <textarea
                 value={commentDraft}
-                onChange={(e) => setCommentDraft(e.target.value)}
+                onChange={(e) => { setCommentDraft(e.target.value); }}
                 placeholder={t('task.add_comment_placeholder', 'Add guidance for active or future agents…')}
                 rows={3}
                 disabled={addComment.isPending}
@@ -254,7 +258,7 @@ export function TaskDetailPanel({
                   type="button"
                   className="primary"
                   disabled={addComment.isPending || commentDraft.trim().length === 0}
-                  onClick={() => addComment.mutate(commentDraft.trim())}
+                  onClick={() => { addComment.mutate(commentDraft.trim()); }}
                 >
                   {t('task.add_comment', 'Add comment')}
                 </button>
@@ -265,6 +269,17 @@ export function TaskDetailPanel({
 
         {tab === 'agent_runs' && (
           <section role="tabpanel">
+            {(() => {
+              const latest = (agent_runs ?? []).find((r: any) => r.status === 'running')
+                ?? (agent_runs ?? [])[0];
+              const latestId = latest?.id ?? null;
+              return (
+                <>
+                  <PhaseTimeline runId={latestId} />
+                  <DebtList runId={latestId} />
+                </>
+              );
+            })()}
             <ul className="agent-runs-list">
               {(agent_runs ?? []).map((run: any) => (
                 <li key={run.id} className={`agent-run status-${run.status}`}>
@@ -301,8 +316,8 @@ export function TaskDetailPanel({
         <div className="actions">
           {task.status === 'human_approval' && (
             <>
-              <button className="primary" onClick={() => approve.mutate()}>{t('task.approve')}</button>
-              <button onClick={() => setRejectOpen(true)}>{t('task.reject')}</button>
+              <button className="primary" onClick={() => { approve.mutate(); }}>{t('task.approve')}</button>
+              <button onClick={() => { setRejectOpen(true); }}>{t('task.reject')}</button>
             </>
           )}
           {(() => {
@@ -313,7 +328,7 @@ export function TaskDetailPanel({
               <span className="run-agent-group" style={{ display: 'inline-flex', gap: '0.25rem', alignItems: 'center' }}>
                 <select
                   value={runAgentRole}
-                  onChange={(e) => setRunAgentRole(e.target.value as 'pm' | 'worker' | 'reviewer')}
+                  onChange={(e) => { setRunAgentRole(e.target.value as 'pm' | 'worker' | 'reviewer'); }}
                   disabled={runAgent.isPending || hasActiveRun}
                   aria-label={t('task.run_agent_role', 'Agent role')}
                 >
@@ -323,7 +338,7 @@ export function TaskDetailPanel({
                 </select>
                 <button
                   type="button"
-                  onClick={() => runAgent.mutate(runAgentRole)}
+                  onClick={() => { runAgent.mutate(runAgentRole); }}
                   disabled={runAgent.isPending || hasActiveRun}
                   title={hasActiveRun ? t('task.run_agent_busy', 'Run already queued/active') : ''}
                 >
@@ -346,12 +361,12 @@ export function TaskDetailPanel({
       </footer>
 
       {rejectOpen && (
-        <div className="modal-overlay" onClick={() => setRejectOpen(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => { setRejectOpen(false); }}>
+          <div className="modal" onClick={e => { e.stopPropagation(); }}>
             <h2>{t('task.reject_title')}</h2>
             <textarea
               value={rejectMsg}
-              onChange={e => setRejectMsg(e.target.value)}
+              onChange={e => { setRejectMsg(e.target.value); }}
               placeholder={t('task.reject_prompt')}
               rows={4}
               autoFocus
@@ -361,13 +376,13 @@ export function TaskDetailPanel({
             </label>
             <FileDropZone paths={rejectFilePaths} onChange={setRejectFilePaths} />
             <div className="actions">
-              <button className="ghost" onClick={() => setRejectOpen(false)}>
+              <button className="ghost" onClick={() => { setRejectOpen(false); }}>
                 {t('common.cancel')}
               </button>
               <button
                 className="danger"
                 disabled={rejectMsg.trim().length < 10 || reject.isPending}
-                onClick={() => reject.mutate()}
+                onClick={() => { reject.mutate(); }}
               >
                 {t('task.reject')}
               </button>
@@ -385,7 +400,7 @@ function AddFilePathRow({ onAdd }: { onAdd: (fp: string) => void }) {
 
   function commit() {
     const valid = drafts.map(p => p.trim()).filter(Boolean);
-    valid.forEach(fp => onAdd(fp));
+    valid.forEach(fp => { onAdd(fp); });
     setDrafts([]);
   }
 
@@ -441,7 +456,7 @@ function ResumeRunButton({
     try {
       await navigator.clipboard.writeText(cmd);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
+      setTimeout(() => { setCopied(false); }, 1400);
     } catch {}
   }
   return (
@@ -496,7 +511,7 @@ function CopyContextButton({
     try {
       await navigator.clipboard.writeText(buildContext());
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      setTimeout(() => { setCopied(false); }, 1800);
     } catch { /* clipboard blocked */ }
   }
   return (

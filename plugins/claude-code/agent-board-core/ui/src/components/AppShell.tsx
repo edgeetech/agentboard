@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { NavLink, Outlet } from 'react-router-dom';
+
 import { api } from '../api';
-import { Logo } from './Logo';
-import { useTheme } from '../theme/ThemeProvider';
 import { LanguageSelector } from '../features/board/LanguageSelector';
-import { ProjectPicker } from './ProjectPicker';
 import { useCurrentProject } from '../hooks/useCurrentProjectCode';
+import { useTheme } from '../theme/ThemeProvider';
+
+import { Logo } from './Logo';
+import { ProjectPicker } from './ProjectPicker';
+
 
 const SIDEBAR_KEY = 'agentboard.sidebar.collapsed';
 
@@ -28,7 +31,7 @@ function useSidebarCollapsed(): [boolean, (v: boolean) => void] {
       setV(prev => !prev);
     }
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); };
   }, []);
   return [v, setV];
 }
@@ -101,7 +104,7 @@ export function AppShell() {
         <button
           type="button"
           className="side-toggle"
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={() => { setCollapsed(!collapsed); }}
           title={collapsed ? t('nav.expand', 'Expand sidebar ([)') : t('nav.collapse', 'Collapse sidebar ([)')}
           aria-label={collapsed ? t('nav.expand', 'Expand sidebar') : t('nav.collapse', 'Collapse sidebar')}
           aria-expanded={!collapsed}

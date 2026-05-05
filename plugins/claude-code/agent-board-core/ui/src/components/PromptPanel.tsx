@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+
 import { api } from '../api';
+
 import { CopyIcon } from './CopyIcon';
 
 export function PromptPanel({
@@ -46,7 +48,7 @@ export function PromptPanel({
         {q.isError && (
           <div className="muted" style={{ padding: '0.75rem' }}>
             {(() => {
-              const raw = String((q.error as Error)?.message || 'error');
+              const raw = String((q.error)?.message || 'error');
               if (raw === 'prompt not found') return t('prompt.not_found', 'Prompt not found');
               return raw;
             })()}

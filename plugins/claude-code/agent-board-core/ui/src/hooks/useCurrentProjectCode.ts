@@ -1,5 +1,6 @@
-import { useMatch } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useMatch } from 'react-router-dom';
+
 import { api } from '../api';
 
 const LAST_KEY = 'agentboard.lastProject';
@@ -32,7 +33,7 @@ export function useCurrentProject() {
   const urlCode = (nestedMatch?.params?.projectCode || leafMatch?.params?.projectCode)?.toUpperCase() || null;
 
   const { data } = useQuery({ queryKey: ['projects-list'], queryFn: api.listProjects });
-  const projects: Array<any> = data?.projects || [];
+  const projects: any[] = data?.projects || [];
 
   const resolvedCode = urlCode
     || (recallLastProject() ? recallLastProject()!.toUpperCase() : null)

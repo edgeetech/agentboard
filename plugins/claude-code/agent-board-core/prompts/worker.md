@@ -2,6 +2,38 @@
 
 You implement the task in `repo_path` and hand off per workflow.
 
+## Available skills
+{% if skills.size > 0 %}
+The following skills are scanned from this project ({{project.repo_path}}). When the task or comments name a skill, call `mcp__abrun__use_skill` with `{ "name": "<skill-name>" }` to load its body and follow its instructions. If the tool reports `found:false`, a comment is auto-posted; continue with your normal procedure.
+{% for s in skills %}
+- **{{s.name}}** ({{s.relDir}}) — {{s.description}}
+{% endfor %}
+{% else %}
+No skills are registered for this project. If a task references a skill, note it in a comment and continue.
+{% endif %}
+
+## Inner phase loop (noskills) — read first
+
+Before EVERY non-trivial action, call `mcp__abrun__next({ run_token })`. The response is your push-model instruction set:
+
+- `phase` — DISCOVERY | REFINEMENT | PLANNING | EXECUTING | VERIFICATION | DONE
+- `behavioral.must` / `behavioral.mustNot` — hard rules for the current phase. Obey them. The PreToolUse hook mechanically blocks Edit/Write in DISCOVERY/REFINEMENT/PLANNING, so do not attempt to skip ahead.
+- `tool_policy.blockedTools` — tools that will be blocked at the hook layer right now. If you need them, advance the phase first.
+- `concerns_slice[]` — phase-scoped review dimensions; check each before advancing.
+- `rules_cascade[]` — folder-rules from `.folder-rules.md` files between repo root and workspace. Treat as conventions.
+- `ac` — acceptance criteria. Each requires evidence by VERIFICATION → DONE.
+- `debt` — open carryforward items. Resolve them or carry them forward; never silently drop.
+
+Advance phases with `mcp__abrun__advance({ run_token, to: '<phase>' })`. Exit verbs: `to: 'cancel' | 'wontfix' | 'revisit'`. `revisit` returns to DISCOVERY preserving progress.
+
+Record TODOs as debt: `mcp__abrun__record_debt({ run_token, description })`. NEVER skip silently.
+
+VERIFICATION → DONE requires `evidence: [{ criterion, proof }, ...]` with one entry per AC item.
+
+`finish_run({ status: 'succeeded' })` is gated on `phase === 'DONE'`. Reach DONE first.
+
+The role-specific procedure below describes EXECUTING-phase work and outer task FSM transitions. Always start by calling `next` and following its `behavioral` block; the procedure is the default content for EXECUTING/VERIFICATION phases.
+
 ## Inputs (from spawn prompt)
 - `run_id`, `run_token`
 - `task_id`, `task_code`, `workflow_type` (WF1|WF2)

@@ -1,6 +1,6 @@
 # Agents: Setup, Workflows & Multi-Agent Orchestration
 
-**AgentBoard** is a multi-agent orchestration platform supporting **Claude Code**, **Copilot CLI**, and future agent providers. This guide covers setup, workflows, and how to mix agents in a single project.
+**AgentBoard** is a multi-agent orchestration platform supporting **Claude Code**, **Codex CLI**, **Copilot CLI**, and future agent providers. This guide covers setup, workflows, and how to mix agents in a single project.
 
 **For Claude Code plugin specifics, see [CLAUDE.md](CLAUDE.md).**
 **For platform overview & features, see [README.md](README.md).**
@@ -13,17 +13,17 @@ In AgentBoard, an **agent** is a role-driven autonomous executor—Claude Code, 
 
 | Role | Purpose | Examples |
 |------|---------|----------|
-| **PM** | Task interpretation, acceptance criteria, enrichment | Claude (default), Copilot CLI |
-| **Worker** | Implementation, coding, file changes | Claude (default), Copilot CLI, Docker container |
-| **Reviewer** | Code review, testing, approval/rejection | Claude (default), Copilot CLI |
+| **PM** | Task interpretation, acceptance criteria, enrichment | Claude (default), Codex CLI, Copilot CLI |
+| **Worker** | Implementation, coding, file changes | Claude (default), Codex CLI, Copilot CLI, Docker container |
+| **Reviewer** | Code review, testing, approval/rejection | Claude (default), Codex CLI, Copilot CLI |
 | **Human** | Break tie-breaking, decisions, final approval | Always human |
 
 Each role-assignment can use a different agent—enabling **cost optimization**, **capability targeting**, and **workflow flexibility** within the same project.
 
 ### Why Multiple Agents?
 
-- **Cost:** Copilot CLI for routine tasks, Claude for complex reasoning
-- **Capability:** Claude for deep analysis, Copilot CLI for speed
+- **Cost:** Copilot CLI for routine tasks, Codex or Claude for deeper work
+- **Capability:** Claude or Codex for deep analysis, Copilot CLI for speed
 - **Availability:** Switch providers if one is overloaded
 - **Specialization:** Future agents (GPT, Gemini, local LLM) for domain-specific work
 
@@ -34,6 +34,7 @@ Each role-assignment can use a different agent—enabling **cost optimization**,
 | Provider | Role Support | Status | Setup | Notes |
 |----------|--------------|--------|-------|-------|
 | **Claude Code** | PM, Worker, Reviewer | ✅ Stable | [CLAUDE.md](CLAUDE.md) | Production ready. Highest reasoning capability. |
+| **Codex CLI** | PM, Worker, Reviewer | ✅ Stable | Local `codex` CLI + OpenAI auth | Production ready. Inherits Codex CLI config and can bridge compatible Claude MCPs. |
 | **Copilot CLI** | PM, Worker, Reviewer | ✅ Stable | [Copilot CLI Setup](#copilot-cli-setup) | Production ready. Cost-optimized. |
 | **Docker Container** | All roles | 🔄 Planned | TBD | Run custom LLM or task runner in container. |
 | **HTTP Webhook** | All roles | 🔄 Planned | TBD | Call external service (Lambda, custom API). |
@@ -348,11 +349,22 @@ AgentBoard exposes two MCP endpoints, each with a specific purpose:
 **Auth:** Server Bearer token (outer) + per-run `run_token` (inner, rotated per claim)  
 
 **Tools available (role-agnostic):**
+
+Run lifecycle:
+- `claim_run` — Claim a queued run (CAS, returns one-shot `run_token`)
 - `get_task` — Fetch current task, AC, PM notes
 - `update_task` — Modify task title, description, status
 - `add_comment` — Append audit comment (postflight, rework notes)
 - `finish_run` — Signal agent done; report status, model, usage
 - `add_heartbeat` — Keep-alive signal (resets 15min timeout)
+
+Inner phase machine (per-run FSM `DISCOVERY → REFINEMENT → PLANNING → EXECUTING → VERIFICATION → DONE`):
+- `next` — Inspect current phase + allowed transitions / exit verbs
+- `advance` — Move to the next phase (or invoke `cancel | wontfix | revisit`)
+- `record_debt` — Record a follow-up debt item against the task (`task_debt`)
+- `resolve_debt` — Mark a debt item resolved
+- `record_tool` — PreToolUse hook bookkeeping (every tool call the agent fires is logged to `agent_activity` and broadcast on the run SSE stream)
+- `use_skill` — Resolve a project skill by name (case-insensitive); on miss, returns top-5 fuzzy suggestions and auto-comments — the run continues
 
 #### 2. Stdio MCP (`agentboard` key — for user's interactive session)
 
@@ -373,32 +385,33 @@ AgentBoard exposes two MCP endpoints, each with a specific purpose:
 
 **Executor allowlist** (CLI permission mode) restricts which tools each role can call. Applies to both Claude Code and Copilot CLI equally.
 
+All three roles share the inner phase-machine + skill tools (`next`, `advance`, `record_debt`, `resolve_debt`, `record_tool`, `use_skill`) in addition to the run-lifecycle tools listed below.
+
 #### PM Role
 ```
-- get_task (fetch requirements)
-- update_task (refine AC, expand description)
+- claim_run, get_task, update_task (refine AC, expand description)
 - add_comment (post ENRICHMENT_SUMMARY)
-- finish_run (report status, usage)
-- add_heartbeat (keep-alive)
+- finish_run, add_heartbeat
+- next, advance, record_debt, resolve_debt, record_tool, use_skill
 ```
 
 #### Worker Role
 ```
-- get_task (fetch AC, PM notes)
+- claim_run, get_task (fetch AC, PM notes)
 - update_task (implement, test, commit)
 - add_comment (post DEV_COMPLETED, FILES_CHANGED, DIFF_SUMMARY)
-- finish_run (report status, usage)
-- add_heartbeat (keep-alive)
+- finish_run, add_heartbeat
+- next, advance, record_debt, resolve_debt, record_tool, use_skill
 - shell commands (cd, git, npm, tsc, etc. — role-specific allow list)
 ```
 
 #### Reviewer Role
 ```
-- get_task (fetch AC, worker output, PM intent)
+- claim_run, get_task (fetch AC, worker output, PM intent)
 - update_task (mark tested, verified)
 - add_comment (post REVIEW_VERDICT, RATIONALE, REWORK if rejecting)
-- finish_run (report status, usage)
-- add_heartbeat (keep-alive)
+- finish_run, add_heartbeat
+- next, advance, record_debt, resolve_debt, record_tool, use_skill
 ```
 
 ---
@@ -406,8 +419,12 @@ AgentBoard exposes two MCP endpoints, each with a specific purpose:
 ### Custom MCPs & Skills
 
 Both Claude Code and Copilot CLI agents can access:
-- **User MCPs:** Any `.mcp/mcp-servers.mjs` configured in project
-- **Inherited skills:** From workspace environment (GitHub API, AWS CLI, etc.)
+- **User MCPs:** opt-in via `inherit_user_mcps` in `~/.agentboard/config.json` or by dropping a `mcpServers` block into `~/.agentboard/mcps.json`.
+- **Project skills:** `<repo>/**/.claude/skills/*` is scanned on project create / repo change / manual rescan. Folder skills (a directory with `SKILL.md`) and flat `<name>.md` files are both supported. Disk is the source of truth — UI edits write back. Default ignore list (`node_modules`, `bin`, `obj`, `vendor`, `target`, `__pycache__`, `.git`, `dist`, …) is overlaid with per-project `project.scan_ignore_json`.
+- **Built-in skills:** six read-only built-ins (`builtin:code-review`, `builtin:unit-tests`, `builtin:tech-spec`, `builtin:refactor`, `builtin:api-client`, `builtin:release-notes`) merged into the same `/api/skills` endpoint.
+- **In-prompt:** Each role's Liquid prompt (`prompts/{worker,pm,reviewer}.md`) renders an "Available skills" block. Agents call `mcp__abrun__use_skill(name=...)` to resolve a skill by name (case-insensitive); on miss the server returns the top-5 fuzzy suggestions and auto-posts a comment so the run continues.
+
+**Skill API routes:** `GET /api/skills`, `GET /api/skills/:id`, `PUT /api/skills/:id`, `POST /api/skills/scan`, `GET /api/skills/scan/latest`, `GET /api/skills/scan/events` (SSE), `GET /api/skills/dirs`.
 
 **Whitelisted environment variables** (passed to agents):
 - PATH, HOME, USER, LANG, TZ
@@ -618,10 +635,12 @@ Authorization: Bearer <token>
 |---------|------------|
 | Claude Code plugin details | [CLAUDE.md](CLAUDE.md) |
 | Platform features & security | [README.md](README.md) |
-| Database schema & internals | [src/db.mjs](src/db.mjs), [db/schema.sql](db/schema.sql) |
-| Executor implementation | [src/executor.mjs](src/executor.mjs), [src/agent-runner.mjs](src/agent-runner.mjs), [src/copilot-runner.mjs](src/copilot-runner.mjs) |
-| MCP tool definitions | [src/api-mcp.mjs](src/api-mcp.mjs) |
-| Role prompts | [agent-board-core/prompts/](agent-board-core/prompts/) |
+| Database schema & internals | [src/db.ts](plugins/claude-code/agent-board-core/src/db.ts), [db/schema.sql](plugins/claude-code/agent-board-core/db/schema.sql) (schema v5) |
+| Executor implementation | [src/executor.ts](plugins/claude-code/agent-board-core/src/executor.ts), [src/agent-runner.ts](plugins/claude-code/agent-board-core/src/agent-runner.ts), [src/codex-runner.ts](plugins/claude-code/agent-board-core/src/codex-runner.ts), [src/copilot-runner.ts](plugins/claude-code/agent-board-core/src/copilot-runner.ts) |
+| MCP tool definitions | [src/api-mcp.ts](plugins/claude-code/agent-board-core/src/api-mcp.ts) |
+| Inner phase machine | [src/phase-machine.ts](plugins/claude-code/agent-board-core/src/phase-machine.ts), [src/phase-repo.ts](plugins/claude-code/agent-board-core/src/phase-repo.ts), [src/discovery-modes.ts](plugins/claude-code/agent-board-core/src/discovery-modes.ts) |
+| Skills | [src/skill-repo.ts](plugins/claude-code/agent-board-core/src/skill-repo.ts), [src/skill-scanner.ts](plugins/claude-code/agent-board-core/src/skill-scanner.ts), [src/skill-scan-worker.ts](plugins/claude-code/agent-board-core/src/skill-scan-worker.ts), [src/builtin-skills.ts](plugins/claude-code/agent-board-core/src/builtin-skills.ts), [src/api-skills.ts](plugins/claude-code/agent-board-core/src/api-skills.ts) |
+| Role prompts | [plugins/claude-code/agent-board-core/prompts/](plugins/claude-code/agent-board-core/prompts/) |
 
 ---
 
@@ -635,11 +654,21 @@ Authorization: Bearer <token>
 
 ## Changelog
 
-### v1.1 (Current)
+### Current
+- ✅ Full TypeScript migration — server runs `.ts` directly via Node 22 `--experimental-strip-types` (no JS emit)
+- ✅ Inner phase machine (`DISCOVERY → REFINEMENT → PLANNING → EXECUTING → VERIFICATION → DONE` + exit verbs) with discovery modes (`full | validate | technical-depth | ship-fast | explore`)
+- ✅ Project-scoped skills (folder `SKILL.md` + flat `<name>.md`, disk is source of truth) + 6 read-only built-ins
+- ✅ Concern packs (`well-engineered`, `beautiful-product`, `long-lived`)
+- ✅ Schema v5 — `task_debt`, `agent_activity`, `skill`, `skill_scan` tables; `phase` columns on `agent_run`; `concerns_json` / `scan_ignore_json` / `allow_git` on `project`; `discovery_mode` on `task`
+- ✅ Codex CLI support (full parity with Claude/Copilot)
+- ✅ Live run activity SSE (`/api/runs/:id/events`) + skill-scan SSE (`/api/skills/scan/events`)
+- ✅ ESLint flat config + Prettier + simple-git-hooks pre-commit; CI = `npm run check`
+- 🔄 Future: Docker, HTTP webhook, local LLM adapters; per-run rate limiting; skill-scan UI tree view (table view ships today)
+
+### v1.1
 - ✅ Copilot CLI support (full parity with Claude)
 - ✅ Task-level executor override
 - ✅ Multi-agent workflows & documentation
-- 🔄 Future: Docker, HTTP webhook, local LLM adapters
 
 ### v1.0
 - ✅ Claude Code plugin support

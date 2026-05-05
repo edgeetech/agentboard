@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+
 import { api } from '../api';
-import { TaskDetailPanel } from '../features/board/TaskDetailPanel';
 import { ProjectNotFound } from '../components/ProjectNotFound';
+import { TaskDetailPanel } from '../features/board/TaskDetailPanel';
 import { useDetailView } from '../hooks/useDetailView';
 
 export function TaskDetailPage() {

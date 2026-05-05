@@ -1,24 +1,31 @@
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import type {
+  DragEndEvent,
+  DragStartEvent} from "@dnd-kit/core";
 import {
   DndContext,
-  DragEndEvent,
   DragOverlay,
-  DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,
   useDraggable,
   useDroppable,
 } from "@dnd-kit/core";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useSearchParams } from "react-router-dom";
+
 import { api } from "../../api";
+import { SearchIcon } from "../../components/SearchIcon";
+import { useTaskActiveState } from "../../hooks/useActiveStates";
+import { useDetailView } from "../../hooks/useDetailView";
+
+import { ActivityPulse } from "./ActivityPulse";
+import { iconForStatus, WorkingDots } from "./ColumnIcons";
 import { CreateTaskModal } from "./CreateTaskModal";
 import { TaskDetailPanel } from "./TaskDetailPanel";
-import { useDetailView } from "../../hooks/useDetailView";
-import { SearchIcon } from "../../components/SearchIcon";
-import { iconForStatus, WorkingDots } from "./ColumnIcons";
+
+
 
 type ViewMode = "board" | "list";
 const VIEW_MODE_KEY = "ab.board.viewMode";
@@ -33,7 +40,7 @@ function useViewMode(): [ViewMode, (v: ViewMode) => void] {
   return [mode, set];
 }
 
-type Project = {
+interface Project {
   id: string;
   code: string;
   name: string;
@@ -44,9 +51,9 @@ type Project = {
   max_parallel: number;
   agent_provider: "claude" | "github_copilot";
   version: number;
-};
+}
 
-type Task = {
+interface Task {
   id: string;
   code: string;
   title: string;
@@ -55,7 +62,7 @@ type Task = {
   rework_count: number;
   updated_at?: string;
   has_active_run?: number | boolean;
-};
+}
 
 const COLUMNS_WF1 = [
   "todo",
@@ -106,14 +113,14 @@ export function Board({ project }: { project: Project }) {
 
   useEffect(() => {
     if (errorMsg) {
-      const timer = setTimeout(() => setErrorMsg(null), 5000);
-      return () => clearTimeout(timer);
+      const timer = setTimeout(() => { setErrorMsg(null); }, 5000);
+      return () => { clearTimeout(timer); };
     }
   }, [errorMsg]);
 
   useEffect(() => {
-    const id = setTimeout(() => setSearchDebounced(searchInput.trim()), 250);
-    return () => clearTimeout(id);
+    const id = setTimeout(() => { setSearchDebounced(searchInput.trim()); }, 250);
+    return () => { clearTimeout(id); };
   }, [searchInput]);
 
   // Support ?open=<code> query param (used when swapping from page → panel).
@@ -239,7 +246,7 @@ export function Board({ project }: { project: Project }) {
             <SearchIcon />
             <input
               value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              onChange={(e) => { setSearchInput(e.target.value); }}
               placeholder={t("board.search", "Search tasks…")}
               aria-label='Search tasks'
             />
@@ -264,7 +271,7 @@ export function Board({ project }: { project: Project }) {
           <div className='view-toggle'>
             <button
               className={viewMode === "board" ? "active" : ""}
-              onClick={() => setViewMode("board")}
+              onClick={() => { setViewMode("board"); }}
               title='Board view'
             >
               <svg
@@ -302,7 +309,7 @@ export function Board({ project }: { project: Project }) {
             </button>
             <button
               className={viewMode === "list" ? "active" : ""}
-              onClick={() => setViewMode("list")}
+              onClick={() => { setViewMode("list"); }}
               title='List view'
             >
               <svg
@@ -340,7 +347,7 @@ export function Board({ project }: { project: Project }) {
             </button>
           </div>
           <div className='action-group'>
-            <button className='primary' onClick={() => setCreating(true)}>
+            <button className='primary' onClick={() => { setCreating(true); }}>
               + {t("board.new_task")}
             </button>
           </div>
@@ -378,7 +385,7 @@ export function Board({ project }: { project: Project }) {
                   <DraggableCard
                     key={task.id}
                     task={task}
-                    onClick={() => openTask(task.code)}
+                    onClick={() => { openTask(task.code); }}
                   />
                 ))}
               </DroppableColumn>
@@ -391,13 +398,13 @@ export function Board({ project }: { project: Project }) {
         </DndContext>
       )}
 
-      {creating && <CreateTaskModal onClose={() => setCreating(false)} />}
+      {creating && <CreateTaskModal onClose={() => { setCreating(false); }} />}
       {selected && (
         <TaskDetailPanel
           taskCode={selected}
           workflow={project.workflow_type}
           variant='drawer'
-          onClose={() => setSelected(null)}
+          onClose={() => { setSelected(null); }}
           onSwapVariant={() => {
             setDetailView("page");
             navigate(
@@ -436,7 +443,7 @@ function DroppableColumn({
       ref={setNodeRef}
       className={`column col-${status}` + (isOver ? " drop-hint" : "")}
     >
-      <h2 onClick={() => onToggleSort(id)} style={{ cursor: 'pointer' }}>
+      <h2 onClick={() => { onToggleSort(id); }} style={{ cursor: 'pointer' }}>
         <span className='col-icon-wrap'>{iconForStatus(status)}</span>
         <span className='col-label'>{label}</span>
         <span className='count'>{count}</span>
@@ -490,6 +497,7 @@ function CardView({
   const { t } = useTranslation();
   const attention = needsAttention(task);
   const role = (task.assignee_role || "").toLowerCase();
+  const activeState = useTaskActiveState(task.id);
   const live =
     task.status === "agent_working" || task.status === "agent_review";
   const cls = [
@@ -525,8 +533,9 @@ function CardView({
         ) : (
           <span className='muted'>—</span>
         )}
-        {!!task.has_active_run && <WorkingDots />}
+        {!!task.has_active_run && !activeState?.phase && <WorkingDots />}
       </div>
+      <ActivityPulse state={activeState} />
     </div>
   );
 }
@@ -633,7 +642,7 @@ function TaskListView({
                     <button
                       className='icon-btn'
                       title={t("common.view", "View detail")}
-                      onClick={() => onOpen(task.code)}
+                      onClick={() => { onOpen(task.code); }}
                     >
                       <svg
                         width='15'

@@ -13,5 +13,5 @@ export function useDetailView(): [DetailView, (v: DetailView) => void] {
   useEffect(() => {
     try { localStorage.setItem(KEY, view); } catch {}
   }, [view]);
-  return [view, useCallback((v: DetailView) => setView(v), [])];
+  return [view, useCallback((v: DetailView) => { setView(v); }, [])];
 }

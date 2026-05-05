@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useParams } from 'react-router-dom';
+
 import { api } from '../api';
 import { EventTooltip, categoryOf } from '../features/sessions/EventTooltip';
 
@@ -19,7 +20,7 @@ function projectName(dir: string | null | undefined) {
 function eventDesc(t: (k: string, opts?: any) => string, type: string): string {
   if (!type) return '';
   const key = `sessions.event_desc.${type}`;
-  const v = t(key, { defaultValue: '' }) as string;
+  const v = t(key, { defaultValue: '' });
   if (!v || v === key) return '';
   return v;
 }
@@ -65,7 +66,7 @@ export function SessionDetailPage() {
   if (q.isError) return (
     <div className="empty-state">
       <h3>{t('sessions.detail_error', 'Could not load session')}</h3>
-      <p className="muted">{String((q.error as Error)?.message || '')}</p>
+      <p className="muted">{String((q.error)?.message || '')}</p>
       <p><Link to="/sessions">← {t('nav.sessions', 'Sessions')}</Link></p>
     </div>
   );
@@ -86,7 +87,7 @@ export function SessionDetailPage() {
             <CopySessionContextButton meta={meta} enrich={data?.enrich ?? null} />
           )}
           {meta?.session_id && (
-            <ResumeCliButton sessionId={meta.session_id} repoPath={meta.project_dir} />
+            <ResumeCliButton sessionId={meta.session_id} repoPath={meta.project_dir} provider={data?.provider} />
           )}
           <Link to="/sessions"><button className="ghost" type="button">← {t('nav.sessions', 'Sessions')}</button></Link>
         </div>
@@ -169,7 +170,7 @@ export function SessionDetailPage() {
               {truncated && (
                 <button
                   className="ghost"
-                  onClick={() => setExpanded(x => ({ ...x, [e.id]: !x[e.id] }))}
+                  onClick={() => { setExpanded(x => ({ ...x, [e.id]: !x[e.id] })); }}
                   aria-expanded={isOpen ? true : false}
                   style={{ padding: '2px 8px', fontSize: 11 }}
                 >
@@ -185,7 +186,7 @@ export function SessionDetailPage() {
         <section style={{ marginTop: '1.25rem' }}>
           <button
             className="ghost"
-            onClick={() => setShowResume(s => !s)}
+            onClick={() => { setShowResume(s => !s); }}
             aria-expanded={showResume}
           >
             {showResume ? '▾' : '▸'} {t('sessions.resume', 'Resume snapshot')}
@@ -214,7 +215,7 @@ function ExpandableRole({ text }: { text: string }) {
         <button
           type="button"
           className="linkish"
-          onClick={() => setOpen(v => !v)}
+          onClick={() => { setOpen(v => !v); }}
           aria-expanded={open}
         >
           {open ? t('common.less', 'see less') : t('common.more', 'see more…')}
@@ -229,7 +230,7 @@ function SummaryPane({ enrich }: {
     firstPrompt: string | null;
     intent: string | null;
     role: string | null;
-    topFiles: Array<{ path: string; count: number }>;
+    topFiles: { path: string; count: number }[];
     planFiles: string[];
   };
 }) {
@@ -304,19 +305,20 @@ function SummaryPane({ enrich }: {
 }
 
 function ResumeCliButton({
-  sessionId, repoPath,
-}: { sessionId: string; repoPath: string | null | undefined }) {
+  sessionId, repoPath, provider = 'claude',
+}: { sessionId: string; repoPath: string | null | undefined; provider?: 'claude' | 'github_copilot' | 'codex' | null }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   // PowerShell 5 doesn't support `&&`; `;` works in bash / PS5+.
+  const bin = provider === 'codex' ? 'codex resume' : 'claude --resume';
   const cmd = repoPath
-    ? `cd "${repoPath}"; claude --resume ${sessionId}`
-    : `claude --resume ${sessionId}`;
+    ? `cd "${repoPath}"; ${bin} ${sessionId}`
+    : `${bin} ${sessionId}`;
   async function copy() {
     try {
       await navigator.clipboard.writeText(cmd);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      setTimeout(() => { setCopied(false); }, 1800);
     } catch { /* clipboard blocked */ }
   }
   return (
@@ -339,7 +341,7 @@ function CopySessionContextButton({
     firstPrompt: string | null;
     intent: string | null;
     role: string | null;
-    topFiles: Array<{ path: string; count: number }>;
+    topFiles: { path: string; count: number }[];
     planFiles: string[];
   } | null;
 }) {
@@ -381,7 +383,7 @@ function CopySessionContextButton({
     try {
       await navigator.clipboard.writeText(buildContext());
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      setTimeout(() => { setCopied(false); }, 1800);
     } catch { /* clipboard blocked */ }
   }
 

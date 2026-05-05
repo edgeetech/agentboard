@@ -24,12 +24,15 @@
     "more": "ver más…",
     "less": "ver menos",
     "clear": "Limpiar",
-    "copied": "Copiado ✓"
+    "copied": "Copiado ✓",
+    "remove": "Eliminar",
+    "view": "Ver detalle"
   },
   "prompt": {
     "copy": "Copiar",
     "missing": "Aún no hay archivo de prompt para este {{kind}}.",
-    "not_found": "Prompt no encontrado"
+    "not_found": "Prompt no encontrado",
+    "show": "Mostrar prompt"
   },
   "nav": {
     "board": "Tablero",
@@ -44,8 +47,8 @@
     "active": "Proyecto activo",
     "pick_project": "Elige un proyecto…",
     "new_project": "Nuevo proyecto…",
-    "collapse": "Contraer barra lateral ([)",
-    "expand": "Expandir barra lateral ([)"
+    "collapse": "Contraer ([)",
+    "expand": "Expandir ([)"
   },
   "foot": {
     "connected": "Conectado",
@@ -64,12 +67,15 @@
     "repo_path": "Ruta del repositorio",
     "repo_hint": "Ruta absoluta. Worker edita archivos bajo este directorio.",
     "agent_provider": "Elige qué motor usar para ejecutar agentes",
-    "agent_provider_claude": "Claude (SDK de Anthropic)",
-    "agent_provider_github_copilot": "GitHub CoPilot",
+  "agent_provider_claude": "Claude (SDK de Anthropic)",
+  "agent_provider_github_copilot": "GitHub CoPilot",
+  "agent_provider_codex": "Codex CLI",
     "auto_dispatch_pm": "Despachar PM automáticamente al crear tarea",
     "max_parallel": "Ejecuciones paralelas máx.",
     "max_parallel_hint": "1–3. Ejecuciones concurrentes de agentes para este proyecto.",
-    "version_mismatch": "El proyecto se modificó en otro lugar — recarga y reintenta."
+    "version_mismatch": "El proyecto se modificó en otro lugar — recarga y reintenta.",
+    "scan_ignore": "Omitir estas carpetas",
+    "scan_ignore_hint": "Una por línea. Un nombre de carpeta (p. ej. `legacy`) o una ruta dentro del repo (p. ej. `Tax/__archived_maintenance`). Los predeterminados como `node_modules`, `bin`, `vendor` siempre se omiten."
   },
   "wizard": {
     "header": "Crea tu primer proyecto",
@@ -98,7 +104,14 @@
     "classic": "Clásico",
     "needs_attention": "Necesita atención",
     "search": "Buscar tareas…",
-    "powered_by": "impulsado por"
+    "powered_by": "impulsado por",
+    "no_tasks": "Aún no hay tareas.",
+    "col_code": "#",
+    "col_title": "Título",
+    "col_status": "Estado",
+    "col_assignee": "Asignado",
+    "col_cost": "Coste",
+    "col_actions": "Acciones"
   },
   "task": {
     "title": "Título",
@@ -130,7 +143,30 @@
     "open_page": "Abrir como página",
     "open_panel": "Abrir como panel",
     "view_page": "Vista completa",
-    "view_panel": "Vista panel"
+    "view_panel": "Vista panel",
+    "agent_runs": "Ejecuciones",
+    "files": "Archivos",
+    "add_comment": "Añadir comentario",
+    "add_comment_placeholder": "Añade orientación para agentes activos o futuros…",
+    "run_agent": "Ejecutar Agente",
+    "run_agent_role": "Rol del agente",
+    "run_agent_busy": "Ejecución ya encolada/activa",
+    "resume_copied": "Copiado — pega en terminal"
+  },
+  "files": {
+    "label": "Rutas de archivo",
+    "drop_hint": "Arrastra archivos aquí o haz clic para buscar",
+    "drop_sub": "El nombre se rellena automáticamente — edítalo para indicar la ruta completa",
+    "path_placeholder": "/ruta/absoluta/al/archivo",
+    "add_path": "Añadir ruta",
+    "save_paths": "Guardar rutas"
+  },
+  "phase": {
+    "label": "Fase",
+    "live": "● en vivo",
+    "replay": "○ repetición",
+    "no_activity": "Aún no hay actividad.",
+    "debt": "Deuda"
   },
   "skills": {
     "title": "Habilidades",
@@ -145,7 +181,22 @@
     "emblem_hint": "Monograma de 1–3 caracteres mostrado en la tarjeta.",
     "description": "Descripción",
     "tags": "Etiquetas",
-    "tags_hint": "Separadas por coma — ej. reviewer, pytest, default."
+    "tags_hint": "Separadas por coma — ej. reviewer, pytest, default.",
+    "scan_btn": "Volver a escanear",
+    "scanning": "Escaneando… {{count}} encontradas",
+    "last_scan": "Último escaneo: {{when}}",
+    "scan_failed": "Escaneo fallido: {{error}}",
+    "empty_with_path": "No se encontraron habilidades en `{{path}}`. Asegúrate de que tu proyecto tenga archivos `.claude/skills/<nombre>/SKILL.md`.",
+    "dir_chip_label": "Ubicación",
+    "view_flat": "Plano",
+    "view_tree": "Árbol",
+    "view_tree_coming": "Vista de árbol — próximamente",
+    "body": "Cuerpo",
+    "body_hint": "Cuerpo markdown de SKILL.md. Las ediciones se escriben en disco.",
+    "allowed_tools": "Herramientas permitidas",
+    "file_path": "Archivo",
+    "builtin": "Integrada",
+    "builtin_readonly": "Habilidad integrada — solo lectura."
   },
   "personas": {
     "title": "Personas",
@@ -183,6 +234,10 @@
     "empty_body": "context-mode aún no ha escrito ninguna base de datos de sesiones. Dir esperado:",
     "unavail_title": "Adaptador SQLite no disponible",
     "error_title": "No se pueden leer las sesiones",
+    "filter_source": "Filtrar por origen",
+    "source_all": "Todas",
+    "source_agentboard": "Agentboard",
+    "source_cli": "CLI / Otro",
     "total_sessions": "Sesiones",
     "total_events": "Eventos",
     "avg_duration": "Duración media",

@@ -17,12 +17,15 @@ CREATE TABLE IF NOT EXISTS project (
   workflow_type     TEXT NOT NULL CHECK (workflow_type IN ('WF1','WF2')),
   repo_path         TEXT NOT NULL,
   max_parallel      INTEGER NOT NULL DEFAULT 1 CHECK (max_parallel BETWEEN 1 AND 3),
-  agent_provider    TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot')),
+  agent_provider    TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot','codex')),
+  scan_ignore_json  TEXT NOT NULL DEFAULT '[]',
   version           INTEGER NOT NULL DEFAULT 0,
   deleted_at        TEXT,
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL
 );
+-- NOTE: scan_ignore_json added via idempotent ALTER in src/db.ts MIGRATIONS for existing DBs:
+-- ALTER TABLE project ADD COLUMN scan_ignore_json TEXT NOT NULL DEFAULT '[]';
 
 -- workflow_type immutable after create
 DROP TRIGGER IF EXISTS project_workflow_immutable;
@@ -43,7 +46,8 @@ CREATE TABLE IF NOT EXISTS task (
   status                   TEXT NOT NULL CHECK (status IN ('todo','agent_working','agent_review','human_approval','done')),
   assignee_role            TEXT CHECK (assignee_role IN ('pm','worker','reviewer','human')),
   rework_count             INTEGER NOT NULL DEFAULT 0,
-  agent_provider_override  TEXT CHECK (agent_provider_override IN ('claude', 'github_copilot', NULL)),
+  agent_provider_override  TEXT CHECK (agent_provider_override IN ('claude', 'github_copilot', 'codex', NULL)),
+  workspace_path           TEXT,
   version                  INTEGER NOT NULL DEFAULT 0,
   deleted_at               TEXT,
   created_at               TEXT NOT NULL,
@@ -154,5 +158,65 @@ CREATE TABLE IF NOT EXISTS tracker_issue (
   UNIQUE(project_id, tracker_kind, external_id)
 );
 
+-- noskills-style inner phase machine (per-run). Outer task FSM stays untouched.
+-- These columns/tables are created on fresh DBs; idempotent migrations in db.mjs
+-- apply the same shape to existing DBs.
+
+CREATE TABLE IF NOT EXISTS task_debt (
+  id              TEXT PRIMARY KEY,
+  task_id         TEXT NOT NULL REFERENCES task(id),
+  run_id          TEXT REFERENCES agent_run(id),
+  description     TEXT NOT NULL,
+  carried_count   INTEGER NOT NULL DEFAULT 0,
+  resolved_at     TEXT,
+  created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_debt_open ON task_debt(task_id) WHERE resolved_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS agent_activity (
+  id          TEXT PRIMARY KEY,
+  run_id      TEXT NOT NULL REFERENCES agent_run(id),
+  task_id     TEXT NOT NULL REFERENCES task(id),
+  kind        TEXT NOT NULL,
+  payload     TEXT NOT NULL DEFAULT '{}',
+  at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_activity_run ON agent_activity(run_id, at);
+CREATE INDEX IF NOT EXISTS idx_agent_activity_task ON agent_activity(task_id, at DESC);
+
+CREATE TABLE IF NOT EXISTS skill (
+  id TEXT PRIMARY KEY,
+  project_code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  emblem TEXT NOT NULL DEFAULT '',
+  tags_json TEXT NOT NULL DEFAULT '[]',
+  rel_dir TEXT NOT NULL,
+  rel_path TEXT NOT NULL,
+  layout TEXT NOT NULL CHECK (layout IN ('folder','file')),
+  allowed_tools_json TEXT NOT NULL DEFAULT '[]',
+  scanned_at TEXT NOT NULL,
+  deleted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS skill_project_idx ON skill(project_code, deleted_at);
+CREATE INDEX IF NOT EXISTS skill_reldir_idx ON skill(project_code, rel_dir);
+
+CREATE TABLE IF NOT EXISTS skill_scan (
+  id TEXT PRIMARY KEY,
+  project_code TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','failed')),
+  started_at TEXT,
+  ended_at TEXT,
+  found_count INTEGER NOT NULL DEFAULT 0,
+  added_count INTEGER NOT NULL DEFAULT 0,
+  updated_count INTEGER NOT NULL DEFAULT 0,
+  removed_count INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  trigger TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS skill_scan_project_idx ON skill_scan(project_code, status);
+CREATE INDEX IF NOT EXISTS skill_scan_created_idx ON skill_scan(project_code, created_at DESC);
+
 -- schema_version seed (app upserts on init)
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '3');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '5');

@@ -1,20 +1,21 @@
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+
 import { api } from './api';
 import { AppShell } from './components/AppShell';
+import { SetupWizard } from './features/board/SetupWizard';
+import { recallLastProject } from './hooks/useCurrentProjectCode';
+import { useProjectCode } from './hooks/useProjectCode';
 import { BoardPage } from './pages/BoardPage';
-import { SkillsPage } from './pages/SkillsPage';
-import { SkillDetailPage } from './pages/SkillDetailPage';
 import { PersonasPage } from './pages/PersonasPage';
-import { RoleDetailPage } from './pages/RoleDetailPage';
 import { ProjectPage } from './pages/ProjectPage';
+import { RoleDetailPage } from './pages/RoleDetailPage';
+import { SessionDetailPage } from './pages/SessionDetailPage';
+import { SessionsPage } from './pages/SessionsPage';
+import { SkillDetailPage } from './pages/SkillDetailPage';
+import { SkillsPage } from './pages/SkillsPage';
 import { TaskDetailPage } from './pages/TaskDetailPage';
 import { ThemePage } from './pages/ThemePage';
-import { SessionsPage } from './pages/SessionsPage';
-import { SessionDetailPage } from './pages/SessionDetailPage';
-import { SetupWizard } from './features/board/SetupWizard';
-import { useProjectCode } from './hooks/useProjectCode';
-import { recallLastProject } from './hooks/useCurrentProjectCode';
 
 /** Outlet wrapper that keeps the api module's per-tab projectCode in sync. */
 function ProjectScoped() {
@@ -32,7 +33,7 @@ function RootRedirect() {
   }
   const lastCode = recallLastProject();
   const hasLast = lastCode && list.data?.projects?.some((p: any) => p.code === lastCode.toUpperCase());
-  const code = (hasLast ? lastCode!.toUpperCase() : null)
+  const code = (hasLast ? lastCode.toUpperCase() : null)
     || active.data?.project?.code
     || list.data?.projects?.[0]?.code;
   if (code) return <Navigate to={`/projects/${code}`} replace />;

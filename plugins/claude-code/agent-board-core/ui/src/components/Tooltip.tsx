@@ -1,5 +1,6 @@
-import {
-  ReactNode, useEffect, useLayoutEffect, useRef, useState,
+import type {
+  ReactNode} from 'react';
+import { useEffect, useLayoutEffect, useRef, useState,
 } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -30,7 +31,7 @@ export function Tooltip({
 
   function open() {
     if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setVisible(true), delay);
+    timer.current = window.setTimeout(() => { setVisible(true); }, delay);
   }
   function close() {
     if (timer.current) { window.clearTimeout(timer.current); timer.current = null; }

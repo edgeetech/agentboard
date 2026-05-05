@@ -1,0 +1,35 @@
+{
+  "id": "beautiful-product",
+  "title": "Beautiful product",
+  "description": "Push on information hierarchy, interaction states, accessibility, and design-system alignment for UI work.",
+  "phases": {
+    "DISCOVERY": {
+      "reminders": [
+        "What is the primary user goal on this surface?",
+        "What states must be designed: empty, loading, error, partial, success?"
+      ],
+      "reviewDimensions": ["user goal", "state coverage"]
+    },
+    "PLANNING": {
+      "reminders": [
+        "Reuse design system primitives before introducing new ones.",
+        "Plan keyboard-only and screen-reader paths."
+      ],
+      "reviewDimensions": ["design-system reuse", "a11y plan"]
+    },
+    "EXECUTING": {
+      "reminders": [
+        "Match focus order to visual order.",
+        "Don't ship a spinner when you can ship a useful skeleton."
+      ],
+      "reviewDimensions": ["focus order", "loading affordance"]
+    },
+    "VERIFICATION": {
+      "reminders": [
+        "Tab through the surface; record any focus traps.",
+        "Run the surface at 200% zoom and at min supported width."
+      ],
+      "reviewDimensions": ["keyboard trace", "responsive proof"]
+    }
+  }
+}

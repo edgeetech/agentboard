@@ -1,0 +1,42 @@
+{
+  "id": "long-lived",
+  "title": "Long-lived",
+  "description": "Push on architecture analysis, failure modes, deployment safety, and migration cost for code that will live for years.",
+  "phases": {
+    "DISCOVERY": {
+      "reminders": [
+        "Who else depends on this surface today? Will they need to migrate?",
+        "What is the rollback plan if this ships broken?"
+      ],
+      "reviewDimensions": ["downstream impact", "rollback"]
+    },
+    "REFINEMENT": {
+      "reminders": [
+        "Backwards-compat: which callers must keep working unchanged?",
+        "Data shape: is this schema decision reversible?"
+      ],
+      "reviewDimensions": ["compat", "schema reversibility"]
+    },
+    "PLANNING": {
+      "reminders": [
+        "Prefer additive over replacing; deprecate before delete.",
+        "Stage risky changes behind a flag if blast radius is wide."
+      ],
+      "reviewDimensions": ["additive design", "rollout staging"]
+    },
+    "EXECUTING": {
+      "reminders": [
+        "Don't introduce new shared mutable state.",
+        "If you touch a load-bearing module, leave it more documented than you found it — only when WHY is non-obvious."
+      ],
+      "reviewDimensions": ["coupling", "doc-debt"]
+    },
+    "VERIFICATION": {
+      "reminders": [
+        "Run the migration on a copy of prod-shape data.",
+        "Verify the rollback path actually rolls back."
+      ],
+      "reviewDimensions": ["migration proof", "rollback proof"]
+    }
+  }
+}

@@ -12,6 +12,21 @@ pnpm-lock.yaml
 
 # Build output — UI dist IS committed (shipped with plugin; see note below).
 # agent-board-core/ui/dist/  # keep committed; zero-install distribution
+# Server-side TS runs via Node 22 strip-types directly; no JS emit needed.
+agent-board-core/dist/
+agent-board-core/**/*.d.ts.map
+agent-board-core/**/*.js.map
+agent-board-core/server.js
+agent-board-core/server.d.ts
+agent-board-core/check-runs.js
+agent-board-core/check-runs.d.ts
+agent-board-core/bin/*.js
+agent-board-core/bin/*.d.ts
+agent-board-core/src/**/*.js
+agent-board-core/src/**/*.d.ts
+!agent-board-core/src/vite-env.d.ts
+!agent-board-core/ui/src/vite-env.d.ts
+!agent-board-core/ui/dist/**/*.js
 
 # Editors / IDE
 .vscode/

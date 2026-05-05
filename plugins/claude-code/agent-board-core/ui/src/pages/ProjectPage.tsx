@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
+
 import { api } from '../api';
 import { AgentProviderIcon } from '../components/AgentProviderIcon';
+
+type AgentProvider = 'claude' | 'github_copilot' | 'codex';
 
 export function ProjectPage() {
   const { t } = useTranslation();
@@ -24,7 +27,9 @@ export function ProjectPage() {
   const [description, setDesc] = useState('');
   const [repoPath, setRepoPath] = useState('');
   const [maxPar, setMaxPar] = useState<number>(2);
-  const [agentProvider, setAgentProvider] = useState<'claude' | 'github_copilot'>('claude');
+  const [agentProvider, setAgentProvider] = useState<AgentProvider>('claude');
+  const [scanIgnore, setScanIgnore] = useState<string[]>([]);
+  const [scanIgnoreText, setScanIgnoreText] = useState('');
   const [saved, setSaved] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,6 +39,9 @@ export function ProjectPage() {
     setRepoPath(project.repo_path);
     setMaxPar(project.max_parallel);
     setAgentProvider(project.agent_provider || 'claude');
+    const ig: string[] = Array.isArray(project.scan_ignore_json) ? project.scan_ignore_json : [];
+    setScanIgnore(ig);
+    setScanIgnoreText(ig.join('\n'));
   }, [project?.version]);
 
   const mut = useMutation({
@@ -45,6 +53,7 @@ export function ProjectPage() {
           repo_path: repoPath.trim(),
           max_parallel: Number(maxPar),
           agent_provider: agentProvider,
+          scan_ignore_json: scanIgnore,
         })
       : Promise.reject(new Error('no project')),
     onSuccess: () => {
@@ -52,7 +61,7 @@ export function ProjectPage() {
       qc.invalidateQueries({ queryKey: ['active-project'] });
       qc.invalidateQueries({ queryKey: ['projects-list'] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
-      setTimeout(() => setSaved(null), 2500);
+      setTimeout(() => { setSaved(null); }, 2500);
     },
   });
 
@@ -66,12 +75,16 @@ export function ProjectPage() {
     );
   }
 
+  const projectScanIgnore: string[] = Array.isArray(project.scan_ignore_json)
+    ? project.scan_ignore_json
+    : [];
   const dirty =
     name.trim() !== project.name ||
     description.trim() !== (project.description || '') ||
     repoPath.trim() !== project.repo_path ||
     Number(maxPar) !== project.max_parallel ||
-    agentProvider !== (project.agent_provider || 'claude');
+    agentProvider !== (project.agent_provider || 'claude') ||
+    scanIgnore.join('\n') !== projectScanIgnore.join('\n');
 
   return (
     <>
@@ -104,15 +117,15 @@ export function ProjectPage() {
           </label>
           <label>
             {t('settings.name')}
-            <input value={name} onChange={e => setName(e.target.value)} required />
+            <input value={name} onChange={e => { setName(e.target.value); }} required />
           </label>
           <label>
             {t('settings.description')}
-            <textarea value={description} onChange={e => setDesc(e.target.value)} rows={3} />
+            <textarea value={description} onChange={e => { setDesc(e.target.value); }} rows={3} />
           </label>
           <label>
             {t('settings.repo_path')}
-            <input value={repoPath} onChange={e => setRepoPath(e.target.value)} required />
+            <input value={repoPath} onChange={e => { setRepoPath(e.target.value); }} required />
             <small className="muted">{t('settings.repo_hint')}</small>
           </label>
           <label>
@@ -120,7 +133,7 @@ export function ProjectPage() {
             <input
               type="number" min={1} max={3}
               value={maxPar}
-              onChange={e => setMaxPar(parseInt(e.target.value, 10) || 1)}
+              onChange={e => { setMaxPar(parseInt(e.target.value, 10) || 1); }}
             />
             <small className="muted">{t('settings.max_parallel_hint')}</small>
           </label>
@@ -130,7 +143,7 @@ export function ProjectPage() {
                <button
                  type="button"
                  className={`agent-toggle-item ${agentProvider === 'claude' ? 'active' : ''}`}
-                 onClick={() => setAgentProvider('claude')}
+                 onClick={() => { setAgentProvider('claude'); }}
                  title="Claude (Anthropic SDK)"
                >
                  <AgentProviderIcon provider="claude" size="lg" tooltip={false} />
@@ -138,13 +151,37 @@ export function ProjectPage() {
                <button
                  type="button"
                  className={`agent-toggle-item ${agentProvider === 'github_copilot' ? 'active' : ''}`}
-                 onClick={() => setAgentProvider('github_copilot')}
+                 onClick={() => { setAgentProvider('github_copilot'); }}
                  title="GitHub Copilot"
                >
                  <AgentProviderIcon provider="github_copilot" size="lg" tooltip={false} />
                </button>
+               <button
+                 type="button"
+                 className={`agent-toggle-item ${agentProvider === 'codex' ? 'active' : ''}`}
+                 onClick={() => { setAgentProvider('codex'); }}
+                 title="Codex CLI"
+               >
+                 <AgentProviderIcon provider="codex" size="lg" tooltip={false} />
+               </button>
              </div>
            </fieldset>
+          <label>
+            {t('settings.scan_ignore', 'Skip these folders')}
+            <textarea
+              value={scanIgnoreText}
+              onChange={e => {
+                const v = e.target.value;
+                setScanIgnoreText(v);
+                setScanIgnore(
+                  v.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#')),
+                );
+              }}
+              placeholder={'legacy\nTax/__archived_maintenance\n# comments are ok'}
+              rows={5}
+            />
+            <small className="muted">{t('settings.scan_ignore_hint')}</small>
+          </label>
 
           <div className="form-actions">
             <button
@@ -156,10 +193,9 @@ export function ProjectPage() {
             </button>
             {saved && <span className="muted" role="status">{saved}</span>}
           </div>
-          {mut.isError && <div className="err">{(mut.error as Error).message}</div>}
+          {mut.isError && <div className="err">{(mut.error).message}</div>}
         </div>
       </form>
     </>
   );
 }
-

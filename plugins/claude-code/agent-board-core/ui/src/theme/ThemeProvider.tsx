@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 export type Scheme = 'light' | 'dark';
 export type Palette =
@@ -16,13 +17,13 @@ const PALETTE_IDS: readonly Palette[] = [
   'default', 'edgeetech', 'primer', 'mono', 'neon', 'warm', 'pastel', 'jewel', 'vibrant',
 ];
 
-type Ctx = {
+interface Ctx {
   scheme: Scheme;
   palette: Palette;
   setScheme: (s: Scheme) => void;
   setPalette: (p: Palette) => void;
   toggle: () => void;
-};
+}
 
 const ThemeContext = createContext<Ctx | null>(null);
 const KEY_SCHEME = 'ab.theme';
@@ -58,7 +59,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(KEY_PALETTE, palette); } catch {}
   }, [palette]);
 
-  const toggle = useCallback(() => setScheme(s => (s === 'dark' ? 'light' : 'dark')), []);
+  const toggle = useCallback(() => { setScheme(s => (s === 'dark' ? 'light' : 'dark')); }, []);
 
   return (
     <ThemeContext.Provider value={{ scheme, palette, setScheme, setPalette, toggle }}>

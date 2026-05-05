@@ -1,8 +1,9 @@
 import claudeLogo from '../assets/claude-logo.svg';
+import codexLogo from '../assets/codex-logo.svg';
 import copilotLogo from '../assets/copilot-logo.svg';
 
 interface AgentProviderIconProps {
-  provider: 'claude' | 'github_copilot';
+  provider: 'claude' | 'github_copilot' | 'codex';
   size?: 'sm' | 'md' | 'lg';
   tooltip?: boolean;
 }
@@ -15,10 +16,12 @@ export function AgentProviderIcon({ provider, size = 'md', tooltip = true }: Age
   };
 
   const dimensions = sizes[size];
-  const logoSrc = provider === 'claude' ? claudeLogo : copilotLogo;
+  const logoSrc = provider === 'claude' ? claudeLogo : provider === 'codex' ? codexLogo : copilotLogo;
   const title = provider === 'claude'
     ? 'Claude (Anthropic SDK)'
-    : 'GitHub Copilot';
+    : provider === 'codex'
+      ? 'Codex CLI'
+      : 'GitHub Copilot';
 
   return (
     <img

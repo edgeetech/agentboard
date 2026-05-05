@@ -1,0 +1,31 @@
+// Root tsconfig — base options inherited by src/tsconfig.json (the active
+// project) and test/tsconfig.json. Server runtime invokes `.ts` files
+// directly via Node 22's experimental strip-types; no JS emit is needed.
+// `npm run build` runs typecheck + UI vite build, not tsc emit.
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "checkJs": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*.ts", "server.ts", "check-runs.ts", "bin/**/*.ts"],
+  "exclude": ["node_modules", "dist", "ui", "test"]
+}

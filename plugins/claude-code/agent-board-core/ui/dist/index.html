@@ -13,18 +13,31 @@
         try {
           var t = localStorage.getItem('ab.theme');
           if (t !== 'light' && t !== 'dark') {
-            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            t =
+              window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
           }
           document.documentElement.setAttribute('data-theme', t);
           var p = localStorage.getItem('ab.palette');
-          var valid = ['default','edgeetech','primer','mono','neon','warm','pastel','jewel','vibrant'];
+          var valid = [
+            'default',
+            'edgeetech',
+            'primer',
+            'mono',
+            'neon',
+            'warm',
+            'pastel',
+            'jewel',
+            'vibrant',
+          ];
           if (valid.indexOf(p) === -1) p = 'edgeetech';
           document.documentElement.setAttribute('data-palette', p);
         } catch (e) {}
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-jO88MKhe.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DEBvE95o.css">
+    <script type="module" crossorigin src="/assets/index-DPtk9CvK.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DZD-LHA_.css">
   </head>
   <body>
     <div id="root"></div>

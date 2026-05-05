@@ -24,13 +24,16 @@
     "more": "see more…",
     "less": "see less",
     "clear": "Clear",
-    "copied": "Copied ✓"
+    "copied": "Copied ✓",
+    "remove": "Remove",
+    "view": "View detail"
   },
   "catalog": { "local_note": "Stored locally in this browser until the server adds a catalog API." },
   "prompt": {
     "copy": "Copy",
     "missing": "No prompt file for this {{kind}} yet.",
-    "not_found": "Prompt not found"
+    "not_found": "Prompt not found",
+    "show": "Show prompt"
   },
   "nav": {
     "board": "Board",
@@ -45,8 +48,8 @@
     "active": "Active project",
     "pick_project": "Pick a project…",
     "new_project": "New project…",
-    "collapse": "Collapse sidebar ([)",
-    "expand": "Expand sidebar ([)"
+    "collapse": "Collapse ([)",
+    "expand": "Expand ([)"
   },
   "sessions": {
     "title": "Sessions",
@@ -56,6 +59,10 @@
     "empty_body": "context-mode has not written any session databases yet. Expected dir:",
     "unavail_title": "SQLite adapter unavailable",
     "error_title": "Could not read sessions",
+    "filter_source": "Filter by source",
+    "source_all": "All",
+    "source_agentboard": "Agentboard",
+    "source_cli": "CLI / Other",
     "total_sessions": "Sessions",
     "total_events": "Events",
     "avg_duration": "Avg duration",
@@ -166,12 +173,15 @@
     "repo_path": "Repository path",
     "repo_hint": "Absolute path. Worker edits files under this directory.",
     "agent_provider": "Choose which agent engine to use for spawning agents",
-    "agent_provider_claude": "Claude (Anthropic SDK)",
-    "agent_provider_github_copilot": "GitHub CoPilot",
+  "agent_provider_claude": "Claude (Anthropic SDK)",
+  "agent_provider_github_copilot": "GitHub CoPilot",
+  "agent_provider_codex": "Codex CLI",
     "auto_dispatch_pm": "Auto-dispatch PM on new task",
     "max_parallel": "Max parallel runs",
     "max_parallel_hint": "1–3. Concurrent agent runs for this project.",
-    "version_mismatch": "Project was modified elsewhere — reload and retry."
+    "version_mismatch": "Project was modified elsewhere — reload and retry.",
+    "scan_ignore": "Skip these folders",
+    "scan_ignore_hint": "One per line. Either a folder name (e.g. `legacy`) or a path under the repo (e.g. `Tax/__archived_maintenance`). Defaults like `node_modules`, `bin`, `vendor` are always skipped."
   },
   "wizard": {
     "header": "Create your first project",
@@ -200,7 +210,14 @@
     "classic": "Classic",
     "needs_attention": "Needs attention",
     "search": "Search tasks…",
-    "powered_by": "powered by"
+    "powered_by": "powered by",
+    "no_tasks": "No tasks yet.",
+    "col_code": "#",
+    "col_title": "Title",
+    "col_status": "Status",
+    "col_assignee": "Assignee",
+    "col_cost": "Cost",
+    "col_actions": "Actions"
   },
   "skills": {
     "title": "Skills",
@@ -215,7 +232,22 @@
     "emblem_hint": "1–3 character monogram shown on the card.",
     "description": "Description",
     "tags": "Tags",
-    "tags_hint": "Comma-separated — e.g. reviewer, pytest, default."
+    "tags_hint": "Comma-separated — e.g. reviewer, pytest, default.",
+    "scan_btn": "Rescan",
+    "scanning": "Scanning… {{count}} found",
+    "last_scan": "Last scan: {{when}}",
+    "scan_failed": "Scan failed: {{error}}",
+    "empty_with_path": "No skills found in `{{path}}`. Make sure your project has `.claude/skills/<name>/SKILL.md` files.",
+    "dir_chip_label": "Location",
+    "view_flat": "Flat",
+    "view_tree": "Tree",
+    "view_tree_coming": "Tree view — coming soon",
+    "body": "Body",
+    "body_hint": "Markdown body of SKILL.md. Edits are written back to disk.",
+    "allowed_tools": "Allowed tools",
+    "file_path": "File",
+    "builtin": "Built-in",
+    "builtin_readonly": "Built-in skill — read-only."
   },
   "personas": {
     "title": "Personas",
@@ -265,6 +297,45 @@
     "resume_live_hint": "Agent is still running — resuming will fork its session. Command copied to clipboard.",
     "copy_context": "Copy context",
     "copy_context_hint": "Copies task context as markdown — paste into a fresh `claude` session in the project directory to pick up where the agent left off.",
-    "cost": "Cost"
+    "cost": "Cost",
+    "open_page": "Open as page",
+    "open_panel": "Open as panel",
+    "agent_runs": "Agent Runs",
+    "files": "Files",
+    "add_comment": "Add comment",
+    "add_comment_placeholder": "Add guidance for active or future agents…",
+    "run_agent": "Run Agent",
+    "run_agent_role": "Agent role",
+    "run_agent_busy": "Run already queued/active",
+    "resume_copied": "Copied — paste in terminal"
+  },
+  "files": {
+    "label": "File paths",
+    "drop_hint": "Drop files here or click to browse",
+    "drop_sub": "File name is pre-filled — edit to provide the full path",
+    "path_placeholder": "/absolute/path/to/file",
+    "add_path": "Add file path",
+    "save_paths": "Save paths"
+  },
+  "roles": {
+    "title": "Roles",
+    "subtitle": "Agent personas that act on your tasks.",
+    "search": "Search roles…",
+    "new": "New role",
+    "empty_title": "No matches",
+    "empty_body": "Try a different search term.",
+    "detail_subtitle": "Edit this agent persona and the skills it is allowed to use.",
+    "name": "Name",
+    "emblem": "Emblem",
+    "description": "Description",
+    "skills": "Skills",
+    "skills_hint": "Tap to toggle. These appear on the role card and influence dispatch."
+  },
+  "phase": {
+    "label": "Phase",
+    "live": "● live",
+    "replay": "○ replay",
+    "no_activity": "No activity yet.",
+    "debt": "Debt"
   }
 }

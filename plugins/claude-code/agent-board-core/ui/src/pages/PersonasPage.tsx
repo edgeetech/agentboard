@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { loadRoles } from '../data/catalog';
+import { Link } from 'react-router-dom';
+
 import { SearchIcon } from '../components/SearchIcon';
+import { loadRoles } from '../data/catalog';
 
 export function PersonasPage() {
   const { t } = useTranslation();
@@ -34,7 +35,7 @@ export function PersonasPage() {
               <SearchIcon />
               <input
                 value={q}
-                onChange={e => setQ(e.target.value)}
+                onChange={e => { setQ(e.target.value); }}
                 placeholder={t('personas.search', 'Search personas…')}
                 aria-label="Search personas"
               />

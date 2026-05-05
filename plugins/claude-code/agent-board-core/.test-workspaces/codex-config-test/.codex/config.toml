@@ -1,0 +1,13 @@
+
+model = "gpt-5.4"
+
+[mcp_servers.abrun]
+url = "http://127.0.0.1:3000/mcp"
+bearer_token_env_var = "AGENTBOARD_RUN_BEARER"
+
+[mcp_servers.bridge]
+command = "uvx"
+args = ["mcp-atlassian"]
+
+[mcp_servers.bridge.env]
+JIRA_URL = "https://example.atlassian.net"

@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
+
 import { api } from '../api';
+import { ProjectNotFound } from '../components/ProjectNotFound';
 import { Board } from '../features/board/Board';
 import { SetupWizard } from '../features/board/SetupWizard';
-import { ProjectNotFound } from '../components/ProjectNotFound';
 
 export function BoardPage() {
   const { projectCode } = useParams<{ projectCode: string }>();
