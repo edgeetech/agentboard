@@ -340,10 +340,24 @@ export function transitionTask(db: DbHandle, {
     const cur = getTask(db, task_id);
     if (!cur) return { ok: false, status: 404, reason: 'not found' };
 
-    const check = canTransition(workflow_type, cur.status, to_status, to_assignee, by_role);
-    if (!check.ok) return { ok: false, status: 400, reason: check.reason ?? 'transition denied' };
-
-    const prevs = allowedPrevStatuses(workflow_type, to_status);
+    let prevs: TaskStatus[];
+    if (by_role === 'human') {
+      const running = db
+        .prepare(`SELECT 1 FROM agent_run WHERE task_id=? AND status='running' LIMIT 1`)
+        .get(task_id);
+      if (running !== undefined && running !== null) {
+        return {
+          ok: false,
+          status: 409,
+          reason: 'agent run active for this task; cancel running run before override',
+        };
+      }
+      prevs = [cur.status];
+    } else {
+      const check = canTransition(workflow_type, cur.status, to_status, to_assignee, by_role);
+      if (!check.ok) return { ok: false, status: 400, reason: check.reason ?? 'transition denied' };
+      prevs = allowedPrevStatuses(workflow_type, to_status);
+    }
     const placeholders = prevs.map(() => '?').join(',');
 
     // rework counter: incremented when assignee transitions to 'worker'
