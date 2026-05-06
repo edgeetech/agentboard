@@ -1104,6 +1104,154 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
 }
 .empty-state h3 { color: var(--text); margin-bottom: 0.4rem; }
 
+.skills-tree {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.skills-tree-list,
+.skills-tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.skills-tree-children {
+  border-left: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent);
+  margin-left: 1.15rem;
+}
+
+.skills-tree-item + .skills-tree-item {
+  border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.skills-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 58px;
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  text-decoration: none;
+  text-align: left;
+}
+
+.skills-tree-row:hover {
+  background: var(--surface-alt);
+}
+
+.skills-tree-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.skills-tree-branch {
+  border-radius: 0;
+  color: var(--text);
+}
+
+.skills-tree-leaf {
+  border-radius: 0;
+}
+
+.skills-tree-caret {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 0.16s ease, color 0.16s ease;
+}
+
+.skills-tree-caret.open {
+  color: var(--accent);
+  transform: rotate(90deg);
+}
+
+.skills-tree-emblem {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: var(--bg-alt);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.skills-tree-copy {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.skills-tree-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.skills-tree-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.skills-tree-path {
+  font-family: var(--mono);
+}
+
+.skills-tree-badge {
+  background: var(--bg-alt);
+  color: var(--text-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.skills-tree-tags {
+  display: inline-flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.skills-tree-tags .tag,
+.skills-tree-meta .tag {
+  background: var(--bg-alt);
+  color: var(--text-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+@media (max-width: 840px) {
+  .skills-tree-row {
+    min-height: 54px;
+    gap: 0.6rem;
+  }
+
+  .skills-tree-tags {
+    display: none;
+  }
+}
+
 /* Entity preview (skill/role detail) */
 .entity-card-preview {
   display: flex; align-items: center; gap: 0.85rem;

@@ -386,11 +386,19 @@ export async function handleTasks(
       json(res, 400, { error: 'title required' });
       return;
     }
-    const task = createTask(db, {
+    const ALLOWED_ROLES = ['pm', 'worker', 'reviewer', 'human'] as const;
+    type AssigneeRoleStr = (typeof ALLOWED_ROLES)[number];
+    const rawAssignee = rawBody.assignee_role;
+    let assignee_role: AssigneeRoleStr | null = null;
+    if (typeof rawAssignee === 'string' && (ALLOWED_ROLES as readonly string[]).includes(rawAssignee)) {
+      assignee_role = rawAssignee as AssigneeRoleStr;
+    }
+    const result = createTask(db, {
       title,
       ...(typeof rawBody.description === 'string' ? { description: rawBody.description } : {}),
+      ...(assignee_role !== null ? { assignee_role } : {}),
     });
-    json(res, 201, { task });
+    json(res, 201, { task: result.task, runId: result.runId });
     return true;
   }
 

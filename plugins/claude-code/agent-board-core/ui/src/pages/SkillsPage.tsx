@@ -1,13 +1,148 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
 import type { SkillScanEvent } from '../api';
-import { api, getProjectCode } from '../api';
+import type { SkillTreeBranchNode, SkillTreeNode } from './skillsTree';
+import { api, getProjectCode, type ApiSkill } from '../api';
 import { SearchIcon } from '../components/SearchIcon';
 import { useCurrentProject } from '../hooks/useCurrentProjectCode';
 import { useSkillScanEvents } from '../hooks/useSkillScanEvents';
+import { buildSkillsTree, collectExpandedBranchIds } from './skillsTree';
+
+type SkillsViewMode = 'flat' | 'tree';
+
+const VIEW_STORAGE_KEY = 'agentboard.skills.view';
+
+function expandedStorageKey(projectCode: string | null): string {
+  return `agentboard.skills.tree.expanded:${projectCode ?? 'global'}`;
+}
+
+function loadViewMode(): SkillsViewMode {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === 'tree' ? 'tree' : 'flat';
+  } catch {
+    return 'flat';
+  }
+}
+
+function loadExpandedBranches(projectCode: string | null): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(expandedStorageKey(projectCode));
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function saveExpandedBranches(projectCode: string | null, expanded: Record<string, boolean>): void {
+  try {
+    localStorage.setItem(expandedStorageKey(projectCode), JSON.stringify(expanded));
+  } catch {}
+}
+
+function countVisibleTags(tags: string[]): string[] {
+  return tags.slice(0, 3);
+}
+
+function TreeBranch(props: {
+  branch: SkillTreeBranchNode;
+  depth: number;
+  isExpanded: (id: string, depth: number) => boolean;
+  onToggle: (id: string) => void;
+}) {
+  const { branch, depth, isExpanded, onToggle } = props;
+  const open = isExpanded(branch.id, depth);
+  return (
+    <li className="skills-tree-item">
+      <button
+        type="button"
+        className="skills-tree-row skills-tree-branch"
+        aria-expanded={open}
+        onClick={() => { onToggle(branch.id); }}
+        style={{ paddingLeft: `${0.85 + depth * 1.1}rem` }}
+      >
+        <span className={'skills-tree-caret' + (open ? ' open' : '')} aria-hidden>›</span>
+        <span className="skills-tree-copy">
+          <span className="skills-tree-name">{branch.label}</span>
+          <span className="skills-tree-meta">
+            <span className="skills-tree-path">{branch.path}</span>
+          </span>
+        </span>
+        <span className="skills-tree-badge" aria-label={`${branch.skillCount} skills`}>
+          {branch.skillCount}
+        </span>
+      </button>
+      {open && (
+        <ul className="skills-tree-children">
+          {branch.children.map((node) => (
+            <TreeNode
+              key={node.id}
+              node={node}
+              depth={depth + 1}
+              isExpanded={isExpanded}
+              onToggle={onToggle}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function TreeLeaf(props: { skill: ApiSkill; path: string; depth: number }) {
+  const { skill, path, depth } = props;
+  return (
+    <li className="skills-tree-item">
+      <Link
+        to={`/skills/${skill.id}`}
+        className="skills-tree-row skills-tree-leaf"
+        style={{ paddingLeft: `${0.85 + depth * 1.1}rem` }}
+      >
+        <span className="skills-tree-emblem">{skill.emblem || '··'}</span>
+        <span className="skills-tree-copy">
+          <span className="skills-tree-name">{skill.name}</span>
+          <span className="skills-tree-meta">
+            <span className="skills-tree-path">{path}</span>
+            {skill.id.startsWith('builtin:') && <span className="tag">Built-in</span>}
+          </span>
+        </span>
+        {skill.tags.length > 0 && (
+          <span className="skills-tree-tags" aria-hidden>
+            {countVisibleTags(skill.tags).map((tag) => (
+              <span key={tag} className="tag">{tag}</span>
+            ))}
+          </span>
+        )}
+      </Link>
+    </li>
+  );
+}
+
+function TreeNode(props: {
+  node: SkillTreeNode;
+  depth: number;
+  isExpanded: (id: string, depth: number) => boolean;
+  onToggle: (id: string) => void;
+}) {
+  const { node, depth, isExpanded, onToggle } = props;
+  return node.kind === 'branch'
+    ? (
+        <TreeBranch
+          branch={node}
+          depth={depth}
+          isExpanded={isExpanded}
+          onToggle={onToggle}
+        />
+      )
+    : <TreeLeaf skill={node.skill} path={node.path} depth={depth} />;
+}
 
 function relativeTime(iso: string): string {
   const t = new Date(iso).getTime();
@@ -31,11 +166,27 @@ export function SkillsPage() {
   const repoPath: string = project?.repo_path ?? '';
 
   const [search, setSearch] = useState('');
-  const [view, setView] = useState<'flat' | 'tree'>('flat');
+  const deferredSearch = useDeferredValue(search.trim());
+  const [view, setView] = useState<SkillsViewMode>(loadViewMode);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => loadExpandedBranches(projectCode));
+
+  useEffect(() => {
+    setExpanded(loadExpandedBranches(projectCode));
+  }, [projectCode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, view);
+    } catch {}
+  }, [view]);
+
+  useEffect(() => {
+    saveExpandedBranches(projectCode, expanded);
+  }, [expanded, projectCode]);
 
   const skillsQ = useQuery({
-    queryKey: ['skills', projectCode, search],
-    queryFn: () => api.listSkills({ search: search || undefined }),
+    queryKey: ['skills', projectCode, deferredSearch],
+    queryFn: () => api.listSkills({ search: deferredSearch || undefined }),
   });
   const scanQ = useQuery({
     queryKey: ['skills-scan-latest', projectCode],
@@ -64,6 +215,20 @@ export function SkillsPage() {
 
   const isScanning = scanQ.data?.status === 'running' || scanQ.data?.status === 'queued';
   const skills = skillsQ.data?.skills ?? [];
+  const tree = useMemo(() => buildSkillsTree(skills), [skills]);
+  const forcedExpanded = useMemo(
+    () => (deferredSearch ? collectExpandedBranchIds(tree) : new Set<string>()),
+    [deferredSearch, tree],
+  );
+
+  function toggleBranch(id: string) {
+    setExpanded((current) => ({ ...current, [id]: !(current[id] ?? false) }));
+  }
+
+  function isExpanded(id: string, depth: number): boolean {
+    if (deferredSearch) return forcedExpanded.has(id);
+    return expanded[id] ?? depth === 0;
+  }
 
   return (
     <>
@@ -110,9 +275,8 @@ export function SkillsPage() {
                 type="button"
                 role="tab"
                 aria-selected={view === 'tree'}
-                className="ghost"
-                disabled
-                title={t('skills.view_tree_coming', 'Tree view — coming soon')}
+                className={'ghost' + (view === 'tree' ? ' active' : '')}
+                onClick={() => { setView('tree'); }}
               >
                 {t('skills.view_tree', 'Tree')}
               </button>
@@ -141,22 +305,38 @@ export function SkillsPage() {
           </p>
         </div>
       ) : (
-        <div className="entity-grid">
-          {skills.map(s => (
-            <Link key={s.id} to={`/skills/${s.id}`} className="entity-card">
-              <div className="emblem">{s.emblem}</div>
-              <h3>{s.name}</h3>
-              <p>{s.description}</p>
-              <div className="tags">
-                <span className="tag" title={t('skills.dir_chip_label', 'Location')}>{s.relDir}</span>
-                {s.id.startsWith('builtin:') && (
-                  <span className="tag">{t('skills.builtin', 'Built-in')}</span>
-                )}
-                {s.tags.map(tag => <span key={tag} className="tag">{tag}</span>)}
-              </div>
-            </Link>
-          ))}
-        </div>
+        view === 'tree' ? (
+          <div className="skills-tree" role="tree" aria-label={t('skills.title', 'Skills')}>
+            <ul className="skills-tree-list">
+              {tree.map((node) => (
+                <TreeNode
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  isExpanded={isExpanded}
+                  onToggle={toggleBranch}
+                />
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className="entity-grid">
+            {skills.map(s => (
+              <Link key={s.id} to={`/skills/${s.id}`} className="entity-card">
+                <div className="emblem">{s.emblem}</div>
+                <h3>{s.name}</h3>
+                <p>{s.description}</p>
+                <div className="tags">
+                  <span className="tag" title={t('skills.dir_chip_label', 'Location')}>{s.relDir}</span>
+                  {s.id.startsWith('builtin:') && (
+                    <span className="tag">{t('skills.builtin', 'Built-in')}</span>
+                  )}
+                  {s.tags.map(tag => <span key={tag} className="tag">{tag}</span>)}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )
       )}
     </>
   );

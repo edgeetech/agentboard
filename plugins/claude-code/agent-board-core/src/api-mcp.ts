@@ -309,6 +309,17 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
       const run_token = randomBytes(24).toString('hex');
       const ok = claimRun(db, run_id, run_token, null, null);
       if (!ok) throw new Error('claim CAS failed');
+      if (existing.role === 'reviewer') {
+        setRunPhase(db, run_id, {
+          phase: 'VERIFICATION' as Phase,
+          appendHistoryEntry: {
+            from: 'DISCOVERY',
+            to: 'VERIFICATION',
+            by: 'reviewer',
+            at: isoNow(),
+          },
+        });
+      }
       return { run_token, task_id: existing.task_id };
     }
 

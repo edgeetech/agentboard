@@ -210,7 +210,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     for (const h of handlers) {
       const done = await h(req, res, url);
       if (done !== null && done !== undefined && done !== false) return;
+      if (res.headersSent) return;
     }
+    if (res.headersSent) return;
 
     json(res, 404, { error: 'not found', path: p });
   } catch (e) {
@@ -255,11 +257,18 @@ const shutdownScanWorkers = (): void => {
 process.once('SIGINT', shutdownScanWorkers);
 process.once('SIGTERM', shutdownScanWorkers);
 
-const onListenError = (err: NodeJS.ErrnoException): void => {
+const onListening = (): void => {
   server.removeListener('error', onListenError);
+  onReady();
+};
+
+const onListenError = (err: NodeJS.ErrnoException): void => {
+  server.removeListener('listening', onListening);
   if (err.code === 'EADDRINUSE' && requestedPort !== 0) {
     console.warn(`[server] port ${requestedPort} in use; falling back to OS-chosen port`);
-    server.listen(0, '127.0.0.1', onReady);
+    server.once('error', onListenError);
+    server.once('listening', onListening);
+    server.listen(0, '127.0.0.1');
   } else {
     console.error('[server] listen failed:', err);
     process.exit(1);
@@ -267,10 +276,8 @@ const onListenError = (err: NodeJS.ErrnoException): void => {
 };
 
 server.once('error', onListenError);
-server.listen(requestedPort, '127.0.0.1', () => {
-  server.removeListener('error', onListenError);
-  onReady();
-});
+server.once('listening', onListening);
+server.listen(requestedPort, '127.0.0.1');
 
 // Idle shutdown: no API hit for 10 minutes → exit.
 setInterval((): void => {

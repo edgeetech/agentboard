@@ -94,6 +94,50 @@ export async function handleActivity(
     return true;
   }
 
+  // GET /api/projects/active-states  → board-wide map { task_code: RunActiveState }
+  if (p === '/api/projects/active-states' && req.method === 'GET') {
+    const active = await getActiveDb();
+    if (!active) {
+      const buf = Buffer.from(JSON.stringify({ states: {} }));
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': buf.length });
+      res.end(buf);
+      return true;
+    }
+    interface ActiveStateRow {
+      task_id: string;
+      task_code: string;
+      run_id: string | null;
+      run_status: string | null;
+      phase: string | null;
+      last_kind: string | null;
+      last_at: string | null;
+      debt_count: number;
+    }
+    const rows = active.db
+      .prepare(
+        `SELECT
+           t.id          AS task_id,
+           t.code        AS task_code,
+           r.id          AS run_id,
+           r.status      AS run_status,
+           r.phase       AS phase,
+           (SELECT kind FROM agent_activity WHERE run_id = r.id ORDER BY at DESC LIMIT 1) AS last_kind,
+           (SELECT at   FROM agent_activity WHERE run_id = r.id ORDER BY at DESC LIMIT 1) AS last_at,
+           (SELECT COUNT(*) FROM task_debt WHERE task_id = t.id AND resolved_at IS NULL)  AS debt_count
+         FROM task t
+         LEFT JOIN agent_run r
+           ON r.id = (SELECT id FROM agent_run WHERE task_id = t.id ORDER BY queued_at DESC LIMIT 1)
+         WHERE t.status != 'done'`,
+      )
+      .all() as ActiveStateRow[];
+    const states: Record<string, ActiveStateRow> = {};
+    for (const row of rows) states[row.task_id] = row;
+    const buf = Buffer.from(JSON.stringify({ states }));
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': buf.length });
+    res.end(buf);
+    return true;
+  }
+
   // GET /api/tasks/:id/activity?limit=N  → recent activity for a task card
   const taskMatch = /^\/api\/tasks\/([^/]+)\/activity$/.exec(p);
   if (taskMatch && req.method === 'GET') {
