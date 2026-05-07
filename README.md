@@ -120,6 +120,8 @@ Nine screens in one image — board, task creation, run detail with cost + ACs, 
 
 AgentBoard routes tasks to the right **executor** — Claude SDK, Codex CLI, Copilot CLI, or future agents — based on project/task configuration. See [AGENTS.md § Executor Lifecycle](AGENTS.md#5-executor-lifecycle) for full details.
 
+> **Building on top of AgentBoard?** All board reads/writes go through the local HTTP API at `http://localhost:<port>` (port + bearer token in `~/.agentboard/config.json`). The canonical endpoint reference — tasks, projects, costs, tracker, skills, runs, logs, sessions — is **[AGENTS.md → Reference: HTTP API Endpoints](AGENTS.md#reference-http-api-endpoints-canonical)**. Agent role prompts (PM / Worker / Reviewer) point at the same table; do **not** open the SQLite DBs under `~/.agentboard/projects/*.db` directly.
+
 ```
    Your AI agent platform
              │  (stdio MCP — read-only board + approve/reject)

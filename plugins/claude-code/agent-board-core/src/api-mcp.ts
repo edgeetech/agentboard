@@ -319,6 +319,16 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
             at: isoNow(),
           },
         });
+      } else if (existing.role === 'pm') {
+        setRunPhase(db, run_id, {
+          phase: 'REFINEMENT' as Phase,
+          appendHistoryEntry: {
+            from: 'DISCOVERY',
+            to: 'REFINEMENT',
+            by: 'pm',
+            at: isoNow(),
+          },
+        });
       }
       return { run_token, task_id: existing.task_id };
     }

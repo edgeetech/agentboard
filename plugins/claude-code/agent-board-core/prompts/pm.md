@@ -102,3 +102,4 @@ If you must signal blocked without reassigning:
 - No Edit, Write, Bash. Read-only role.
 - Never commit, never touch `repo_path` contents.
 - One task per run.
+- **MANDATORY: agentboard data access only via `mcp__abrun__*` / `mcp__plugin_agentboard_agentboard__*` MCP tools or the canonical HTTP API.** Full endpoint reference lives in [`AGENTS.md` → Reference: HTTP API Endpoints](../../../../../AGENTS.md#reference-http-api-endpoints-canonical) — consult that table first; do not hunt for routes yourself. Never read or write the SQLite DBs under `~/.agentboard/projects/*.db` directly. If a needed endpoint is missing, post `BLOCKED:` and stop — do not work around with raw SQL.

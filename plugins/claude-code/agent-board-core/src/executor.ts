@@ -350,7 +350,7 @@ async function tryClaimAndRun(
     prompt: promptBody,
     systemPrompt,
     cwd: workspacePath,
-    maxTurns: 60,
+    maxTurns: 10,
     allowedTools: allowlistFor(run.role),
     mcpServers,
     ...(sdkHooks !== undefined ? { hooks: sdkHooks } : {}),

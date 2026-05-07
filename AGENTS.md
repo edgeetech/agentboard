@@ -584,47 +584,115 @@ tail -f ~/.agentboard/logs/<run_id>.jsonl | jq .
 
 ---
 
-### Reference: API Endpoints
+### Reference: HTTP API Endpoints (canonical)
 
-#### Dispatch Task with Executor Override
-```
-PATCH /api/tasks/:id/transition
-Content-Type: application/json
-Authorization: Bearer <token>
+> **MANDATORY for all roles** (PM / Worker / Reviewer): every agentboard data read or write **must** go through these HTTP endpoints (or the equivalent `mcp__abrun__*` / `mcp__plugin_agentboard_agentboard__*` MCP tools). **Never** open `~/.agentboard/projects/*.db` SQLite files directly — bypasses CAS/version checks, postflight hooks, audit trail, and SSE broadcasts. If a needed endpoint is missing, post a `BLOCKED:` comment and stop; do not work around with raw SQL.
 
-{
-  "toStatus": "assigned",
-  "byRole": "human",
-  "executorOverride": "github_copilot"
-}
-```
+**Server:** `http://localhost:<port>` — `port` and `token` in `~/.agentboard/config.json`.
+**Auth:** `Authorization: Bearer <token>` on every request (also accepted as cookie `ab_token`).
+**Active project scope:** routes that omit `:code` resolve against `config.json.active_project_code`. Use `/api/projects/:code/...` to target a specific project explicitly.
 
-**Response:**
-```json
-{
-  "task": {..., "status": "assigned"},
-  "run": {"id": "run_123", "status": "queued", "provider": "github_copilot"}
-}
-```
+Source of truth: handlers under `plugins/claude-code/agent-board-core/src/api-*.ts`. Route table for tasks lives at [`api-tasks.ts:303`](plugins/claude-code/agent-board-core/src/api-tasks.ts#L303).
 
----
+#### Tasks (active project)
 
-#### Get Task with Execution History
-```
-GET /api/tasks/:id
-Authorization: Bearer <token>
-```
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET    | `/api/tasks?search=` | List tasks |
+| POST   | `/api/tasks` | Create task. Body: `{ title, description?, assignee_role? }` (`assignee_role` ∈ `pm\|worker\|reviewer\|human`) |
+| GET    | `/api/tasks/:id` | Task + comments + recent runs (id = code like `DEMO-67` or ULID) |
+| DELETE | `/api/tasks/:id` | Soft-delete task |
+| POST   | `/api/tasks/:id/transition` | State-machine transition. Body: `{ toStatus, byRole, executorOverride? }` |
+| POST   | `/api/tasks/:id/dispatch` | Manually dispatch a role |
+| POST   | `/api/tasks/:id/retry-from-worker` | Re-queue worker run |
+| POST   | `/api/tasks/:id/run-agent` | Spawn agent run |
+| POST   | `/api/tasks/:id/comments` | Append comment. Body: `{ body, author_role? }` |
+| GET    | `/api/tasks/:id/cost` | Per-task run cost rollup |
+| GET    | `/api/tasks/:id/activity?limit=N` | Recent `agent_activity` rows |
+| POST   | `/api/tasks/:id/file-paths` | Attach file path to task |
+| DELETE | `/api/tasks/:id/file-paths/:fpId` | Remove file path |
+| GET    | `/api/board/cost` | Board-wide cost rollup |
 
-**Response includes:**
-```json
-{
-  "task": {...},
-  "runs": [
-    {"id": "run_1", "provider": "github_copilot", "model": "copilot-pro", "status": "succeeded", "cost_usd": 0.15},
-    {"id": "run_2", "provider": "claude", "model": "opus-4.7", "status": "failed", "cost_usd": 0.0},
-    ...
-  ]
-}
+#### Tasks (explicit project)
+
+Same routes as above, prefixed with `/api/projects/:code` (e.g. `GET /api/projects/DEMO/tasks`, `POST /api/projects/DEMO/tasks/DEMO-67/comments`). Use this form when no project is active or you must avoid clobbering the active project.
+
+#### Projects
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET    | `/api/projects/active` | Currently active project |
+| PATCH  | `/api/projects/active` | Switch active project. Body: `{ code }` |
+| GET    | `/api/projects/list` | All projects |
+| GET    | `/api/projects/suggest-code?name=` | Suggest a free 2–7 char code |
+| POST   | `/api/projects` | Create project. Body: `{ code, name, workflow_type: "WF1"\|"WF2", repo_path, description?, agent_provider? }` |
+| GET    | `/api/projects/active-states` | Per-task `{ run_id, run_status, phase, last_kind, last_at, debt_count }` map |
+
+#### Costs
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET    | `/api/projects/:code/costs` | Last 100 runs with model + cost |
+| GET    | `/api/projects/:code/costs/total` | `{ all_time, last_7d, last_30d, uncosted_runs }` |
+
+#### Skills
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET    | `/api/skills?search=&dir=` | Project skills + built-ins |
+| GET    | `/api/skills/dirs` | Distinct skill source dirs |
+| GET    | `/api/skills/scan/latest` | Latest scan result |
+| GET    | `/api/skills/scan/events` | Live scan SSE stream |
+| POST   | `/api/skills/scan` | Trigger rescan. Body: `{ trigger }` |
+
+#### External issue tracker (Jira etc.)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET    | `/api/projects/:code/tracker` | Tracker config |
+| POST   | `/api/projects/:code/tracker` | Create/update config. Body: `{ provider, base_url?, project_key?, api_token? }` |
+| POST   | `/api/projects/:code/tracker/enable` | Enable polling |
+| POST   | `/api/projects/:code/tracker/disable` | Disable polling |
+| POST   | `/api/projects/:code/tracker/sync` | Force one-shot poll, returns `{ issues_fetched }` |
+| GET    | `/api/projects/:code/tracker/issues` | Cached candidate issues |
+
+#### Runs, logs, sessions, prompts
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET    | `/api/runs/:id/events` | SSE: live run activity stream |
+| GET    | `/api/runs/:id/activity` | JSON: full run activity history |
+| GET    | `/api/logs/:run_id` | NDJSON: stream-json log dump (Content-Type `application/x-ndjson`) |
+| GET    | `/api/sessions` | All recorded interactive sessions |
+| GET    | `/api/sessions/:hash/events/:sessionId` | Session events |
+| GET    | `/api/prompts/:kind/:id` | Resolve role prompt source (e.g. `/api/prompts/role/worker`) |
+
+#### MCP gateway
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST   | `/mcp` | HTTP-MCP entry for spawned agents (`abrun` namespace). Use `mcp__abrun__*` tools rather than calling this directly. |
+
+#### Common flows
+
+```http
+# Create task with no assignee (dedupe handled by caller)
+POST /api/tasks
+{ "title": "HUBUI-2164 MTDfIT Design Spike", "description": "Imported from Jira ..." }
+→ 201 { "task": { "code": "DEMO-83", ... }, "runId": null }
+
+# Append worker comment
+POST /api/tasks/DEMO-67/comments
+{ "body": "DEV_COMPLETED\n...", "author_role": "worker" }
+→ 201 { "comment": { ... } }
+
+# Dispatch with executor override
+POST /api/tasks/DEMO-67/transition
+{ "toStatus": "assigned", "byRole": "human", "executorOverride": "github_copilot" }
+
+# Get task with runs history
+GET /api/tasks/DEMO-67
+→ 200 { "task": {...}, "comments": [...], "runs": [...] }
 ```
 
 ---
