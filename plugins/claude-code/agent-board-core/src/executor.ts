@@ -5,7 +5,9 @@ import { readFileSync, statSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { TokenUsage } from './agent-runner.ts';
+import { parseAgentConfig, resolveRoleConfig } from './agent-config.ts';
 import { emitActivity } from './api-activity.ts';
+import { executeCouncilRun } from './council-runner.ts';
 import type { DbHandle } from './db.ts';
 import { agentboardBus } from './event-bus.ts';
 import { logPath } from './paths.ts';
@@ -143,10 +145,26 @@ async function tryClaimAndRun(
     return;
   }
 
-  // Resolve effective executor provider: task override > project default > 'claude'
-  const rawProvider: 'claude' | 'github_copilot' | 'codex' =
-    task.agent_provider_override ?? project.agent_provider;
-  const effectiveProvider = rawProvider;
+  // Resolve effective role config: per-role agent_config_json takes precedence,
+  // then legacy task.agent_provider_override / project.agent_provider, finally 'claude'.
+  // A run-level session_provider_override (set by manual dispatch with a specific
+  // provider pick) trumps everything for this single run.
+  const taskCfg = parseAgentConfig(task.agent_config_json);
+  const projectCfg = parseAgentConfig(project.agent_config_json);
+  const roleCfgResolved = resolveRoleConfig(run.role, {
+    taskConfig: taskCfg,
+    projectConfig: projectCfg,
+    legacyTaskOverride: task.agent_provider_override,
+    legacyProjectProvider: project.agent_provider,
+  });
+  const roleCfg = run.session_provider_override
+    ? { type: 'single' as const, provider: run.session_provider_override }
+    : roleCfgResolved;
+  const effectiveProvider: 'claude' | 'github_copilot' | 'codex' =
+    roleCfg.type === 'single'
+      ? roleCfg.provider
+      : (roleCfg.members[roleCfg.members.length - 1] as 'claude' | 'github_copilot' | 'codex');
+  const isCouncil = roleCfg.type === 'council';
 
   const run_token = randomBytes(24).toString('hex');
   const stdoutPath = logPath(run.id);
@@ -228,7 +246,7 @@ async function tryClaimAndRun(
     });
   }
 
-  if (effectiveProvider === 'claude') {
+  if (!isCouncil && effectiveProvider === 'claude') {
     const claude_session_id = randomUUID();
     setRunSessionRef(db, run.id, { provider: 'claude', sessionId: claude_session_id });
     maybeRegisterInteractiveHistory(
@@ -276,8 +294,10 @@ async function tryClaimAndRun(
 
   // Build noskills PreToolUse hooks (Claude SDK shape). Reports every tool
   // attempt to abrun.record_tool, blocks per phase policy.
+  // Hooks only attach for single-claude runs; council members manage their own
+  // session lifetime per member.
   const sdkHooks =
-    effectiveProvider === 'claude'
+    !isCouncil && effectiveProvider === 'claude'
       ? buildSdkHooks({
           runToken: run_token,
           mcpUrl: `http://127.0.0.1:${port}/mcp`,
@@ -325,8 +345,6 @@ async function tryClaimAndRun(
     }
   };
 
-  const provider = providerFor(effectiveProvider);
-
   const baseOpts: ProviderRuntimeContext = {
     runId: run.id,
     role: run.role,
@@ -346,7 +364,25 @@ async function tryClaimAndRun(
   };
 
   try {
-    const result = await provider.run(baseOpts);
+    const result = isCouncil
+      ? await executeCouncilRun(db, {
+          parentRunId: run.id,
+          taskId: task.id,
+          baseOpts,
+          config: roleCfg as Extract<typeof roleCfg, { type: 'council' }>,
+          buildMemberBasePrompt: (childId, childToken) =>
+            buildRolePrompt(
+              run.role,
+              task,
+              project,
+              childId,
+              childToken,
+              comments,
+              task.prompt_template ?? undefined,
+              skillsForPrompt,
+            ),
+        })
+      : await providerFor(effectiveProvider).run(baseOpts);
 
     if (result.sessionRef !== null && result.sessionRef !== undefined) {
       try {

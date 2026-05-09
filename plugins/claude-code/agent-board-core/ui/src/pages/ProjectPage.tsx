@@ -4,9 +4,23 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import { api } from '../api';
-import { AgentProviderIcon } from '../components/AgentProviderIcon';
+import type { AgentConfig, AgentProvider } from '../api';
+import { AgentConfigEditor } from '../components/AgentConfigEditor';
 
-type AgentProvider = 'claude' | 'github_copilot' | 'codex';
+function parseProjectAgentConfig(raw: unknown): AgentConfig {
+  if (raw == null) return {};
+  if (typeof raw === 'string') {
+    if (raw.trim() === '') return {};
+    try {
+      const v = JSON.parse(raw) as AgentConfig;
+      return v && typeof v === 'object' ? v : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof raw === 'object') return raw as AgentConfig;
+  return {};
+}
 
 export function ProjectPage() {
   const { t } = useTranslation();
@@ -28,6 +42,7 @@ export function ProjectPage() {
   const [repoPath, setRepoPath] = useState('');
   const [maxPar, setMaxPar] = useState<number>(2);
   const [agentProvider, setAgentProvider] = useState<AgentProvider>('claude');
+  const [agentConfig, setAgentConfig] = useState<AgentConfig>({});
   const [scanIgnore, setScanIgnore] = useState<string[]>([]);
   const [scanIgnoreText, setScanIgnoreText] = useState('');
   const [saved, setSaved] = useState<string | null>(null);
@@ -39,6 +54,7 @@ export function ProjectPage() {
     setRepoPath(project.repo_path);
     setMaxPar(project.max_parallel);
     setAgentProvider(project.agent_provider || 'claude');
+    setAgentConfig(parseProjectAgentConfig(project.agent_config_json));
     const ig: string[] = Array.isArray(project.scan_ignore_json) ? project.scan_ignore_json : [];
     setScanIgnore(ig);
     setScanIgnoreText(ig.join('\n'));
@@ -53,6 +69,7 @@ export function ProjectPage() {
           repo_path: repoPath.trim(),
           max_parallel: Number(maxPar),
           agent_provider: agentProvider,
+          agent_config_json: Object.keys(agentConfig).length > 0 ? agentConfig : null,
           scan_ignore_json: scanIgnore,
         })
       : Promise.reject(new Error('no project')),
@@ -78,12 +95,14 @@ export function ProjectPage() {
   const projectScanIgnore: string[] = Array.isArray(project.scan_ignore_json)
     ? project.scan_ignore_json
     : [];
+  const projectAgentConfig = parseProjectAgentConfig(project.agent_config_json);
   const dirty =
     name.trim() !== project.name ||
     description.trim() !== (project.description || '') ||
     repoPath.trim() !== project.repo_path ||
     Number(maxPar) !== project.max_parallel ||
     agentProvider !== (project.agent_provider || 'claude') ||
+    JSON.stringify(agentConfig) !== JSON.stringify(projectAgentConfig) ||
     scanIgnore.join('\n') !== projectScanIgnore.join('\n');
 
   return (
@@ -138,34 +157,13 @@ export function ProjectPage() {
               />
               <small className="muted">{t('settings.max_parallel_hint')}</small>
             </label>
-            <fieldset>
-              <legend>{t('settings.agent_provider')}</legend>
-              <div className="agent-provider-toggle">
-                <button
-                  type="button"
-                  className={`agent-toggle-item ${agentProvider === 'claude' ? 'active' : ''}`}
-                  onClick={() => { setAgentProvider('claude'); }}
-                  title="Claude (Anthropic SDK)"
-                >
-                  <AgentProviderIcon provider="claude" size="lg" tooltip={false} />
-                </button>
-                <button
-                  type="button"
-                  className={`agent-toggle-item ${agentProvider === 'github_copilot' ? 'active' : ''}`}
-                  onClick={() => { setAgentProvider('github_copilot'); }}
-                  title="GitHub Copilot"
-                >
-                  <AgentProviderIcon provider="github_copilot" size="lg" tooltip={false} />
-                </button>
-                <button
-                  type="button"
-                  className={`agent-toggle-item ${agentProvider === 'codex' ? 'active' : ''}`}
-                  onClick={() => { setAgentProvider('codex'); }}
-                  title="Codex CLI"
-                >
-                  <AgentProviderIcon provider="codex" size="lg" tooltip={false} />
-                </button>
-              </div>
+            <fieldset className="project-field-wide">
+              <legend>{t('settings.agent_config', 'Agent configuration')}</legend>
+              <AgentConfigEditor
+                value={agentConfig}
+                onChange={setAgentConfig}
+                fallbackProvider={agentProvider}
+              />
             </fieldset>
             <label className="project-field-wide">
               {t('settings.scan_ignore', 'Skip these folders')}

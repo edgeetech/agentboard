@@ -88,18 +88,33 @@ Key files:
 
 ### Multi-Agent Support
 
-**Status:** ✅ Stable. Claude, Codex CLI, and Copilot CLI all production-ready.
+**Status:** ✅ Stable. Claude, Codex CLI, and Copilot CLI all production-ready, with per-role configuration and a council persona on top.
 
 ```
-project.agent_provider          = 'claude' | 'codex' | 'github_copilot'
-task.agent_provider_override    = 'claude' | 'codex' | 'github_copilot' | NULL
+project.agent_provider          = 'claude' | 'codex' | 'github_copilot'   (legacy default)
+project.agent_config_json       = AgentConfig JSON                         (per-role, optional)
+task.agent_provider_override    = 'claude' | 'codex' | 'github_copilot' | NULL  (legacy, task-wide)
+task.agent_config_json          = AgentConfig JSON                         (per-role, optional)
+agent_run.session_provider_override = AgentProvider | NULL                 (one-shot manual pick)
+agent_run.parent_run_id, member_index, council_size, cost_breakdown_json   (council bookkeeping)
 ```
 
-- Resolution: `task.agent_provider_override ?? project.agent_provider ?? 'claude'`
-- Schema: columns, migrations, validation
-- API: project POST/PATCH, task `executor_override` parameter
-- Cost computation for Claude, Codex, and Copilot models
-- Tests covering executor resolution, cost computation, copilot runner, codex config
+`AgentConfig` shape (validated by Zod in `src/agent-config.ts`):
+
+```jsonc
+{
+  "pm":       { "type": "single", "provider": "claude" },
+  "worker":   { "type": "single", "provider": "github_copilot" },
+  "reviewer": { "type": "council", "members": ["claude", "codex", "github_copilot"] }
+}
+```
+
+- **Resolution** (`resolveRoleConfig` in `src/agent-config.ts`): per-run override → task config[role] → project config[role] → legacy task override → legacy project default → `'claude'`. Each role resolves independently.
+- **Council** (`src/council-runner.ts`): 2–5 ordered members, round-robin, last member synthesises, fail-fast, members exempt from `max_parallel` (`runningCount` filters `parent_run_id IS NULL`). Postflight skips non-final members via `isNonFinalCouncilMember()` in `src/postflight.ts`.
+- **Manual dispatch** (`POST /api/tasks/:id/run-agent`, `dispatch_task` MCP): accepts `provider` (one-shot single override) or `use_council` (force the role's council). Mutually exclusive. Manual dispatch also flips `task.assignee_role` and adjusts `task.status` immediately (worker → agent_working, reviewer → agent_review).
+- **Schema migrations** in `src/db.ts` (idempotent `ALTER TABLE` with PRAGMA-guarded fallback in `migrateAgentConfigColumns`).
+- **Cost** for Claude, Codex, Copilot models. Council parent `cost_usd` = sum of members; `cost_breakdown_json` records per-member detail.
+- Tests covering resolution, council fan-out, postflight skip, copilot runner, codex config.
 
 ### Inner Phase Machine
 
@@ -169,16 +184,31 @@ Both Claude and Copilot agents must satisfy same postflight rules.
 
 ### Task-Level Override
 
+Two ways to override at the task level:
+
+**Per-role config** (persisted across runs):
+
 ```typescript
-// When manually dispatching a task
-PATCH /api/tasks/:id/transition
+PATCH /api/tasks/:id    // (or set on task creation)
 {
-  role: 'worker',
-  executor_override: 'github_copilot'   // 'claude' | 'codex' | 'github_copilot'
+  agent_config_json: {
+    worker: { type: 'single', provider: 'github_copilot' },
+    reviewer: { type: 'council', members: ['claude', 'codex'] }
+  }
 }
 ```
 
-The `executor_override` is persisted in `task.agent_provider_override` and resolved at spawn time.
+**One-shot manual dispatch** (single run only):
+
+```typescript
+POST /api/tasks/:id/run-agent
+{
+  role: 'worker',
+  provider: 'github_copilot'   // OR use_council: true (mutually exclusive)
+}
+```
+
+`provider` lands on `agent_run.session_provider_override` and forces a single-provider run, bypassing any council. `use_council: true` forces the role's resolved council. Manual dispatch also flips `task.assignee_role` and `task.status` (worker → agent_working, reviewer → agent_review) immediately.
 
 ### TypeScript everywhere
 

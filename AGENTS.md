@@ -216,13 +216,41 @@ Override the project default for a single task dispatch. Useful for:
 
 ### Resolution Order
 
-When dispatching a task, the system determines which executor to use in this order:
+When dispatching a task, the system determines which executor to use for the dispatched role in this order:
 
 ```
-1. Task agent_provider_override (if set)
-2. Project agent_provider (if set)
-3. Default: 'claude'
+1. Run-level session_provider_override   (one-shot manual pick on the run row)
+2. Task agent_config_json[role]          (per-task per-role config)
+3. Project agent_config_json[role]       (per-project per-role config)
+4. Task agent_provider_override          (legacy task-wide override)
+5. Project agent_provider                (legacy project-wide default)
+6. Default: 'claude'
 ```
+
+Each role (`pm`, `worker`, `reviewer`) resolves independently. The same task can run a Worker via Copilot and a Reviewer via a Council of three providers.
+
+Per-role configs use this shape:
+
+```jsonc
+{
+  "pm":       { "type": "single", "provider": "claude" },
+  "worker":   { "type": "single", "provider": "github_copilot" },
+  "reviewer": {
+    "type": "council",
+    "members": ["claude", "codex", "github_copilot"]
+  }
+}
+```
+
+### Council persona (multi-agent role)
+
+A role can be configured as a *council* of 2–5 ordered members. Members run **round-robin**: each member receives the standard role prompt plus an injected `Council Mode — Member k of N` header and a summary of the prior debate. The **last member is the synthesiser** — it produces the canonical role artefacts (`DEV_COMPLETED` / `REVIEW_VERDICT` / etc.) and finishes the run. Intermediate members do not finish; their comments are tagged `[COUNCIL k/N <provider>]`.
+
+- Members must satisfy `2 ≤ length ≤ 5`. Duplicates are allowed (e.g. `["claude","claude"]` for ensemble runs).
+- **Fail-fast:** any member failure aborts the council; a `COUNCIL_FAILED:` system comment is posted; the task stays in its current state for human retry.
+- **Cost / book-keeping:** each member is its own `agent_run` row linked to the parent via `parent_run_id` and `member_index`. The parent's `cost_usd` is the sum of members; `cost_breakdown_json` records the per-member breakdown.
+- **`max_parallel` exemption:** council members do not count against the project's parallel-run budget — the parent counts as a single run.
+- **Manual dispatch:** the task detail panel and the `dispatch_task` MCP tool accept `use_council: true` (force the role's configured council) or `provider: <claude|codex|github_copilot>` (one-shot single override that bypasses the council). The two are mutually exclusive.
 
 **Example:**
 - Project default: Claude

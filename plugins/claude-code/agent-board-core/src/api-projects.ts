@@ -11,6 +11,7 @@ import { dataDir, projectDbPath, trashDir } from './paths.ts';
 import { validateCode, suggestCode } from './project-code.ts';
 import { openOrCreate, listProjectDbs, getDb, getActiveDb, closeDb } from './project-registry.ts';
 import { createProject, getProject, updateProject } from './repo.ts';
+import { validateAgentConfigInput, stringifyAgentConfig } from './agent-config.ts';
 import { latestScan, recordScan, type ScanTrigger } from './skill-repo.ts';
 import { ensureSkillScanWorker } from './skill-scan-runtime.ts';
 
@@ -314,6 +315,17 @@ export async function handleProjects(
         json(res, 400, { error: 'agent_provider must be "claude", "github_copilot", or "codex"' });
         return;
       }
+    }
+    if ('agent_config_json' in patch) {
+      const rawCfg = patch.agent_config_json;
+      const v = validateAgentConfigInput(
+        typeof rawCfg === 'object' && rawCfg !== null ? rawCfg : (rawCfg as string | null),
+      );
+      if (!v.ok) {
+        json(res, 400, { error: `agent_config_json invalid: ${v.error}` });
+        return;
+      }
+      patch.agent_config_json = stringifyAgentConfig(v.value);
     }
     if ('auto_dispatch_pm' in patch) {
       delete patch.auto_dispatch_pm;

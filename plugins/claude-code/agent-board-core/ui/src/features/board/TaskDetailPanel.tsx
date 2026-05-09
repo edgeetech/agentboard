@@ -37,6 +37,9 @@ export function TaskDetailPanel({
   const [tab, setTab] = useState<'files' | 'comments' | 'agent_runs'>('agent_runs');
   const [elapsedTimes, setElapsedTimes] = useState<Record<string, number>>({});
   const [runAgentRole, setRunAgentRole] = useState<'pm' | 'worker' | 'reviewer'>('worker');
+  const [runAgentProvider, setRunAgentProvider] = useState<
+    'default' | 'claude' | 'github_copilot' | 'codex' | 'council'
+  >('default');
   const [commentDraft, setCommentDraft] = useState('');
 
   const projectCode = getProjectCode();
@@ -80,7 +83,15 @@ export function TaskDetailPanel({
     onSuccess: () => { invalidate(); onClose?.(); },
   });
   const runAgent = useMutation({
-    mutationFn: (role: 'pm' | 'worker' | 'reviewer') => api.runAgent(taskCode, role),
+    mutationFn: (input: {
+      role: 'pm' | 'worker' | 'reviewer';
+      providerChoice: 'default' | 'claude' | 'github_copilot' | 'codex' | 'council';
+    }) => {
+      const opts: { provider?: 'claude' | 'github_copilot' | 'codex'; use_council?: boolean } = {};
+      if (input.providerChoice === 'council') opts.use_council = true;
+      else if (input.providerChoice !== 'default') opts.provider = input.providerChoice;
+      return api.runAgent(taskCode, input.role, opts);
+    },
     onSuccess: invalidate,
     onError: (err: any) => { alert(err?.message || 'Run agent failed'); },
   });
@@ -237,7 +248,7 @@ export function TaskDetailPanel({
         {tab === 'comments' && (
           <section role="tabpanel">
             <ul className="comments">
-              {comments.map((c: any) => (
+              {[...comments].reverse().map((c: any) => (
                 <li key={c.id} className={`comment author-${c.author_role}`}>
                   <div className="author">{t(`role.${c.author_role}`)}</div>
                   <pre>{c.body}</pre>
@@ -313,8 +324,74 @@ export function TaskDetailPanel({
         )}
       </div>
 
-      <footer className="detail-foot">
-        <div className="actions">
+      {variant === 'drawer' ? (
+        <footer className="detail-foot">
+          <div className="actions">
+            {task.status === 'human_approval' && (
+              <>
+                <button className="primary" onClick={() => { approve.mutate(); }}>{t('task.approve')}</button>
+                <button onClick={() => { setRejectOpen(true); }}>{t('task.reject')}</button>
+              </>
+            )}
+            {(() => {
+              const hasActiveRun = (agent_runs ?? []).some(
+                (r: any) => r.status === 'queued' || r.status === 'running'
+              );
+              return (
+                <span className="run-agent-group" style={{ display: 'inline-flex', gap: '0.25rem', alignItems: 'center' }}>
+                  <select
+                    value={runAgentRole}
+                    onChange={(e) => { setRunAgentRole(e.target.value as 'pm' | 'worker' | 'reviewer'); }}
+                    disabled={runAgent.isPending || hasActiveRun}
+                    aria-label={t('task.run_agent_role', 'Agent role')}
+                  >
+                    <option value="pm">{t('role.pm', 'PM')}</option>
+                    <option value="worker">{t('role.worker', 'Worker')}</option>
+                    <option value="reviewer">{t('role.reviewer', 'Reviewer')}</option>
+                  </select>
+                  <select
+                    value={runAgentProvider}
+                    onChange={(e) => {
+                      setRunAgentProvider(
+                        e.target.value as 'default' | 'claude' | 'github_copilot' | 'codex' | 'council',
+                      );
+                    }}
+                    disabled={runAgent.isPending || hasActiveRun}
+                    aria-label={t('task.run_agent_provider', 'Provider')}
+                    title={t('task.run_agent_provider', 'Provider')}
+                  >
+                    <option value="default">{t('task.run_agent_provider_default', 'Use role default')}</option>
+                    <option value="claude">Claude</option>
+                    <option value="github_copilot">Copilot</option>
+                    <option value="codex">Codex</option>
+                    <option value="council">{t('task.run_agent_provider_council', 'Council (role config)')}</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => { runAgent.mutate({ role: runAgentRole, providerChoice: runAgentProvider }); }}
+                    disabled={runAgent.isPending || hasActiveRun}
+                    title={hasActiveRun ? t('task.run_agent_busy', 'Run already queued/active') : ''}
+                  >
+                    {t('task.run_agent', 'Run Agent')}
+                  </button>
+                </span>
+              );
+            })()}
+            <CopyContextButton task={task} project={project} comments={comments} />
+            <button
+              className="danger"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => {
+                if (confirm(t('common.confirm_delete', { code: task.code }))) del.mutate();
+              }}
+            >
+              {t('common.delete')}
+            </button>
+          </div>
+        </footer>
+      ) : (
+        /* Inline / page variant — fixed bar always visible at viewport bottom */
+        <div className="detail-form-actions">
           {task.status === 'human_approval' && (
             <>
               <button className="primary" onClick={() => { approve.mutate(); }}>{t('task.approve')}</button>
@@ -337,9 +414,26 @@ export function TaskDetailPanel({
                   <option value="worker">{t('role.worker', 'Worker')}</option>
                   <option value="reviewer">{t('role.reviewer', 'Reviewer')}</option>
                 </select>
+                <select
+                  value={runAgentProvider}
+                  onChange={(e) => {
+                    setRunAgentProvider(
+                      e.target.value as 'default' | 'claude' | 'github_copilot' | 'codex' | 'council',
+                    );
+                  }}
+                  disabled={runAgent.isPending || hasActiveRun}
+                  aria-label={t('task.run_agent_provider', 'Provider')}
+                  title={t('task.run_agent_provider', 'Provider')}
+                >
+                  <option value="default">{t('task.run_agent_provider_default', 'Use role default')}</option>
+                  <option value="claude">Claude</option>
+                  <option value="github_copilot">Copilot</option>
+                  <option value="codex">Codex</option>
+                  <option value="council">{t('task.run_agent_provider_council', 'Council (role config)')}</option>
+                </select>
                 <button
                   type="button"
-                  onClick={() => { runAgent.mutate(runAgentRole); }}
+                  onClick={() => { runAgent.mutate({ role: runAgentRole, providerChoice: runAgentProvider }); }}
                   disabled={runAgent.isPending || hasActiveRun}
                   title={hasActiveRun ? t('task.run_agent_busy', 'Run already queued/active') : ''}
                 >
@@ -359,7 +453,7 @@ export function TaskDetailPanel({
             {t('common.delete')}
           </button>
         </div>
-      </footer>
+      )}
 
       {rejectOpen && (
         <div className="modal-overlay" onClick={() => { setRejectOpen(false); }}>

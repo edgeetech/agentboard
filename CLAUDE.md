@@ -110,7 +110,7 @@ Assignee reassigns within `agent_working` also require a prefixed comment (`REWO
 
 Claude Code spawning specifics in `src/executor.ts`:
 
-1. Drains `queued` runs respecting `project.max_parallel` (default 1, cap 3).
+1. Drains `queued` runs respecting `project.max_parallel` (default 1, cap 3). Council members are exempt — `runningCount()` filters `parent_run_id IS NULL`, so a council counts as one running run regardless of member count.
 2. For each: pre-check `repo_path` exists → open stdout/stderr log fds → write tmp MCP config with `run_token` Bearer → **select executor** (Claude or Copilot) based on `task.agent_provider_override ?? project.agent_provider ?? 'claude'` → `spawn` detached process with `--strict-mcp-config --allowedTools <per-role> --permission-mode acceptEdits --output-format stream-json --max-turns 60`.
 3. On child exit: parse `logs/<run_id>.jsonl` for `model` (system.init event) + `usage` (per message.usage), compute cost via `src/pricing.ts`, stamp `agent_run.cost_usd` + `cost_version`.
 4. Reaper every 60s marks `running` runs as `failed` when `last_heartbeat_at` is older than 15min (each MCP call bumps heartbeat).
@@ -123,9 +123,17 @@ Claude Code implementation specifics:
 
 **Provider Resolution in tryClaimAndRun()**
 
-- `src/executor.ts::tryClaimAndRun()` resolves effective provider after task lookup: `task.agent_provider_override ?? project.agent_provider ?? 'claude'`
-- Branches to `AgentRunner` (Claude Agent SDK via `@anthropic-ai/claude-agent-sdk`), `CodexRunner` (Codex CLI subprocess), or `CopilotRunner` (Copilot SDK via `@github/copilot-sdk`)
-- All implementations return same contract: `{status, sessionId, usage, model, totalCostUsd, error, errorKind}`
+- `src/executor.ts::tryClaimAndRun()` resolves the effective role configuration via `resolveRoleConfig()` from `src/agent-config.ts`. Precedence:
+  1. `agent_run.session_provider_override` — one-shot manual override (forces single provider for this run only).
+  2. `task.agent_config_json[role]` — per-task per-role config.
+  3. `project.agent_config_json[role]` — per-project per-role config.
+  4. `task.agent_provider_override` — legacy task-wide override.
+  5. `project.agent_provider` — legacy project default.
+  6. Final fallback: `'claude'`.
+- Each role (pm / worker / reviewer) resolves independently. The same task can dispatch worker via Copilot and reviewer via a council.
+- If the resolved config is `{ type: 'single', provider }`, the executor calls `providerFor(provider).run(baseOpts)` (`AgentRunner` / `CodexRunner` / `CopilotRunner`).
+- If `{ type: 'council', members: [...] }`, the executor delegates to `executeCouncilRun()` in `src/council-runner.ts`.
+- All single-provider runners return the same contract: `{status, sessionId, usage, model, totalCostUsd, error, errorKind}`. The council runner returns the same shape (synthesised from the last member).
 
 **CopilotRunner Implementation (SDK-Based)**
 
@@ -146,6 +154,28 @@ Claude Code implementation specifics:
 - If a project selects `'github_copilot'` but Copilot CLI unavailable: task dispatch fails with error (surfaced in UI)
 - User can switch project to `'claude'` or ensure Copilot CLI installed
 - Future: auto-fallback to Claude (deferred to v1.2)
+
+### Council persona (multi-agent role)
+
+A role can be configured as a *council* of 2–5 ordered members, each potentially a different provider. Lives in `src/council-runner.ts`.
+
+- **Activation:** the resolved role config has `type: 'council'`. Member order is fixed at config time; the **last member** is the synthesiser.
+- **Round-robin debate:** members run sequentially. Member *k* receives the standard role prompt, an injected `## Council Mode — Member k of N` block, and a `## Prior Council Debate` summary. Full prior comments stay in the task history for context.
+- **Synthesiser:** the last member produces canonical role artefacts (`DEV_COMPLETED` / `REVIEW_VERDICT` / `ENRICHMENT_SUMMARY`) and calls `finish_run`. Intermediate members must not call `finish_run` and prefix their comments with `[COUNCIL k/N <provider>]`.
+- **Bookkeeping:** each member is its own `agent_run` row with `parent_run_id` and `member_index`; the parent row carries `council_size = N` and aggregate `cost_usd` (sum of children, broken down in `cost_breakdown_json`).
+- **Postflight:** `isNonFinalCouncilMember()` in `src/postflight.ts` skips required-comment / phase-gate checks for non-final members. The synthesiser is gated normally.
+- **Fail-fast:** any member error aborts the council. The parent run is marked `failed`, a `COUNCIL_FAILED:` system comment is posted, no further members run.
+- **`max_parallel` exemption:** `runningCount()` filters `parent_run_id IS NULL`, so council members do **not** consume the project's parallel-run budget — a council counts as one running run regardless of size.
+- **Persona docs:** `prompts/council.md` describes the persona for human readers and is served via `GET /api/prompts/role/council`. The runner does not load this file — it generates the per-member augmentation in code.
+
+### Manual dispatch (Run Agent button / `dispatch_task` MCP)
+
+`POST /api/tasks/:id/run-agent` (and the `dispatch_task` stdio MCP tool) accept the standard `role` plus two optional fields:
+
+- `provider` — one-shot single-provider override for this dispatch only. Stored on `agent_run.session_provider_override`. Bypasses any council configuration.
+- `use_council` — forces a council using the role's resolved config. Returns 422 if the role does not resolve to a council. Mutually exclusive with `provider`.
+
+Manual dispatch also flips `task.assignee_role` to the dispatched role and adjusts `task.status` immediately (`worker → agent_working`, `reviewer → agent_review`, `pm` keeps current status). The state-machine is bypassed for this update so it does not double-enqueue via auto-dispatch; a `task_history` row is still written when status changes.
 
 ### Security model
 

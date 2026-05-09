@@ -29,6 +29,7 @@ export interface ProjectRow {
   repo_path: string;
   max_parallel: number;
   agent_provider: 'claude' | 'github_copilot' | 'codex';
+  agent_config_json: string | null;
   concerns_json: string;
   allow_git: number;
   scan_ignore_json: string;
@@ -54,6 +55,7 @@ export interface TaskRow {
   assignee_role: AssigneeRole | null;
   rework_count: number;
   agent_provider_override: 'claude' | 'github_copilot' | 'codex' | null;
+  agent_config_json: string | null;
   workspace_path: string | null;
   discovery_mode: 'full' | 'validate' | 'technical-depth' | 'ship-fast' | 'explore';
   prompt_template?: string | null;
@@ -92,6 +94,11 @@ export interface AgentRunRow {
   phase: Phase;
   phase_state_json: string;
   phase_history_json: string;
+  parent_run_id: string | null;
+  member_index: number | null;
+  council_size: number | null;
+  session_provider_override: AgentProvider | null;
+  cost_breakdown_json: string;
 }
 
 export interface CommentRow {
@@ -216,7 +223,7 @@ export function updateProject(
   patch: ProjectPatch,
   expectedVersion: number,
 ): { ok: boolean; project?: ProjectRow; reason?: string } {
-  const allowed: (keyof Omit<ProjectRow, 'scan_ignore_json'>)[] = ['name', 'description', 'repo_path', 'max_parallel', 'agent_provider', 'deleted_at'];
+  const allowed: (keyof Omit<ProjectRow, 'scan_ignore_json'>)[] = ['name', 'description', 'repo_path', 'max_parallel', 'agent_provider', 'agent_config_json', 'deleted_at'];
   const sets: string[] = [];
   const args: unknown[] = [];
   for (const k of allowed) {
@@ -326,15 +333,51 @@ export function createTask(
 
 /**
  * Enqueue an agent run. Returns run ID.
+ * Optional opts support manual provider override and council member rows.
  */
-export function enqueueRun(db: DbHandle, task_id: string, role: RunRole): string {
+export interface EnqueueRunOpts {
+  session_provider_override?: AgentProvider | null;
+  parent_run_id?: string | null;
+  member_index?: number | null;
+  council_size?: number | null;
+}
+
+export function enqueueRun(
+  db: DbHandle,
+  task_id: string,
+  role: RunRole,
+  opts: EnqueueRunOpts = {},
+): string {
   const id = ulid();
   const now = isoNow();
   db.prepare(`
-    INSERT INTO agent_run(id, task_id, role, status, queued_at)
-    VALUES (?, ?, ?, 'queued', ?)
-  `).run(id, task_id, role, now);
+    INSERT INTO agent_run(
+      id, task_id, role, status, queued_at,
+      session_provider_override, parent_run_id, member_index, council_size
+    )
+    VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    task_id,
+    role,
+    now,
+    opts.session_provider_override ?? null,
+    opts.parent_run_id ?? null,
+    opts.member_index ?? null,
+    opts.council_size ?? null,
+  );
   return id;
+}
+
+export function getAgentRun(db: DbHandle, run_id: string): AgentRunRow | undefined {
+  const row = db.prepare(`SELECT * FROM agent_run WHERE id=?`).get(run_id);
+  if (row === undefined || row === null) return undefined;
+  return asRun(row);
+}
+
+export function listCouncilMembers(db: DbHandle, parent_run_id: string): AgentRunRow[] {
+  const rows = db.prepare(`SELECT * FROM agent_run WHERE parent_run_id=? ORDER BY member_index ASC`).all(parent_run_id);
+  return (rows as unknown[]).map(asRun);
 }
 
 /**
@@ -501,8 +544,10 @@ export function listQueuedRunsForProject(db: DbHandle): AgentRunRow[] {
 }
 
 export function runningCount(db: DbHandle): number {
+  // Council members spawned by a parent count as part of the parent — only
+  // top-level (parent_run_id IS NULL) running rows hit max_parallel.
   const row = db.prepare(`
-    SELECT COUNT(*) as cnt FROM agent_run WHERE status IN ('running')
+    SELECT COUNT(*) as cnt FROM agent_run WHERE status='running' AND parent_run_id IS NULL
   `).get() as { cnt: number } | undefined;
   return row?.cnt ?? 0;
 }

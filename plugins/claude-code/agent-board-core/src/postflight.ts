@@ -17,6 +17,20 @@ export interface TaskLike {
  * Worker/reviewer runs must reach phase=DONE before they can mark succeeded.
  * pm runs are exempt (they don't run the phase loop; they only enrich tasks).
  */
+/**
+ * Council members that are NOT the synthesizer (last member) skip postflight —
+ * the synthesizer is the one responsible for posting canonical role artifacts.
+ */
+export function isNonFinalCouncilMember(run: {
+  parent_run_id?: string | null;
+  member_index?: number | null;
+  council_size?: number | null;
+}): boolean {
+  if (!run.parent_run_id) return false;
+  if (run.member_index == null || run.council_size == null) return false;
+  return run.member_index < run.council_size - 1;
+}
+
 export function checkPhaseGate(role: RunRole, runPhase: Phase | null | undefined): string | null {
   if (role === 'pm') return null;
   if (runPhase === 'DONE') return null;

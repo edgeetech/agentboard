@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS project (
   repo_path         TEXT NOT NULL,
   max_parallel      INTEGER NOT NULL DEFAULT 1 CHECK (max_parallel BETWEEN 1 AND 3),
   agent_provider    TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot','codex')),
+  agent_config_json TEXT,
   scan_ignore_json  TEXT NOT NULL DEFAULT '[]',
   version           INTEGER NOT NULL DEFAULT 0,
   deleted_at        TEXT,
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS task (
   assignee_role            TEXT CHECK (assignee_role IN ('pm','worker','reviewer','human')),
   rework_count             INTEGER NOT NULL DEFAULT 0,
   agent_provider_override  TEXT CHECK (agent_provider_override IN ('claude', 'github_copilot', 'codex', NULL)),
+  agent_config_json        TEXT,
   workspace_path           TEXT,
   version                  INTEGER NOT NULL DEFAULT 0,
   deleted_at               TEXT,
@@ -95,7 +97,12 @@ CREATE TABLE IF NOT EXISTS agent_run (
   queued_at              TEXT NOT NULL,
   started_at             TEXT,
   ended_at               TEXT,
-  prompt_template        TEXT
+  prompt_template        TEXT,
+  parent_run_id          TEXT REFERENCES agent_run(id),
+  member_index           INTEGER,
+  council_size           INTEGER,
+  session_provider_override TEXT CHECK (session_provider_override IS NULL OR session_provider_override IN ('claude','github_copilot','codex')),
+  cost_breakdown_json    TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_run_running      ON agent_run(status, last_heartbeat_at);
@@ -103,6 +110,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_run_task_queued  ON agent_run(task_id, queu
 CREATE INDEX IF NOT EXISTS idx_task_status_live       ON task(status) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_comment_task           ON comment(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_agent_run_cost         ON agent_run(task_id, ended_at) WHERE status IN ('succeeded','failed','blocked','cancelled');
+CREATE INDEX IF NOT EXISTS idx_agent_run_parent       ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS task_attachment (
   id          TEXT PRIMARY KEY,
@@ -219,4 +227,4 @@ CREATE INDEX IF NOT EXISTS skill_scan_project_idx ON skill_scan(project_code, st
 CREATE INDEX IF NOT EXISTS skill_scan_created_idx ON skill_scan(project_code, created_at DESC);
 
 -- schema_version seed (app upserts on init)
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '5');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '6');

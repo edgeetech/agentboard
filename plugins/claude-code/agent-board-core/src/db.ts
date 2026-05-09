@@ -154,7 +154,7 @@ const MIGRATIONS: Migration[] = [
     status                 TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','failed','blocked','cancelled')),
     token                  TEXT,
     pid                    INTEGER,
-    session_provider       TEXT CHECK (session_provider IN ('claude','github_copilot','codex', NULL)),
+    session_provider       TEXT CHECK (session_provider IS NULL OR session_provider IN ('claude','github_copilot','codex')),
     session_id             TEXT,
     claude_session_id      TEXT,
     error                  TEXT,
@@ -190,7 +190,7 @@ const MIGRATIONS: Migration[] = [
     why: 'noskills discovery mode per task' },
   { sql: `ALTER TABLE agent_run ADD COLUMN phase TEXT NOT NULL DEFAULT 'DISCOVERY' CHECK (phase IN ('DISCOVERY','REFINEMENT','PLANNING','EXECUTING','VERIFICATION','DONE'))`,
     why: 'noskills inner phase per run' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN session_provider TEXT CHECK (session_provider IN ('claude','github_copilot','codex', NULL))`,
+  { sql: `ALTER TABLE agent_run ADD COLUMN session_provider TEXT CHECK (session_provider IS NULL OR session_provider IN ('claude','github_copilot','codex'))`,
     why: 'provider-neutral session provider compatibility field' },
   { sql: `ALTER TABLE agent_run ADD COLUMN session_id TEXT`,
     why: 'provider-neutral session id compatibility field' },
@@ -266,6 +266,27 @@ const MIGRATIONS: Migration[] = [
   { sql: `INSERT INTO meta(key, value) VALUES ('schema_version', '5')
           ON CONFLICT(key) DO UPDATE SET value='5' WHERE meta.value < '5'`,
     why: 'bump schema_version to 5 for skill+scan tables and project.scan_ignore_json' },
+
+  // --- v6: per-role agent config + council persona ---
+  { sql: `ALTER TABLE project ADD COLUMN agent_config_json TEXT`,
+    why: 'per-role agent provider config (single or council) at project level' },
+  { sql: `ALTER TABLE task ADD COLUMN agent_config_json TEXT`,
+    why: 'per-role agent provider config override at task level' },
+  { sql: `ALTER TABLE agent_run ADD COLUMN parent_run_id TEXT`,
+    why: 'council parent run reference for member runs (FK omitted; SQLite ALTER ADD COLUMN restriction)' },
+  { sql: `ALTER TABLE agent_run ADD COLUMN member_index INTEGER`,
+    why: 'council member 0-based debate position' },
+  { sql: `ALTER TABLE agent_run ADD COLUMN council_size INTEGER`,
+    why: 'council size on parent row (NULL for non-council)' },
+  { sql: `ALTER TABLE agent_run ADD COLUMN session_provider_override TEXT CHECK (session_provider_override IS NULL OR session_provider_override IN ('claude','github_copilot','codex'))`,
+    why: 'one-shot manual provider override for a single run' },
+  { sql: `ALTER TABLE agent_run ADD COLUMN cost_breakdown_json TEXT NOT NULL DEFAULT '{}'`,
+    why: 'per-member cost breakdown for council parent rows' },
+  { sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_parent ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL`,
+    why: 'fast lookup of council member rows by parent' },
+  { sql: `INSERT INTO meta(key, value) VALUES ('schema_version', '6')
+          ON CONFLICT(key) DO UPDATE SET value='6' WHERE meta.value < '6'`,
+    why: 'bump schema_version to 6 for per-role agent config + council' },
 ];
 
 function applyMigrations(db: DbHandle): void {
@@ -275,6 +296,25 @@ function applyMigrations(db: DbHandle): void {
   try { migrateProjectAgentProviderCheck(db); } catch { /* ignore */ }
   try { migrateTaskProviderOverrideCheck(db); } catch { /* ignore */ }
   try { migrateProjectScanIgnoreJson(db); } catch { /* ignore */ }
+  try { migrateAgentConfigColumns(db); } catch (e) { console.warn('[db] v6 column migrate:', (e as Error).message); }
+}
+
+function migrateAgentConfigColumns(db: DbHandle): void {
+  const ensure = (table: string, col: string, ddl: string): void => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (cols.some((c) => c.name === col)) return;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  };
+  ensure('project', 'agent_config_json', 'agent_config_json TEXT');
+  ensure('task', 'agent_config_json', 'agent_config_json TEXT');
+  ensure('agent_run', 'parent_run_id', 'parent_run_id TEXT');
+  ensure('agent_run', 'member_index', 'member_index INTEGER');
+  ensure('agent_run', 'council_size', 'council_size INTEGER');
+  ensure('agent_run', 'session_provider_override', 'session_provider_override TEXT');
+  ensure('agent_run', 'cost_breakdown_json', `cost_breakdown_json TEXT NOT NULL DEFAULT '{}'`);
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_run_parent ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL`);
+  } catch { /* ignore */ }
 }
 
 function migrateProjectScanIgnoreJson(db: DbHandle): void {
