@@ -27,6 +27,13 @@
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session/posttooluse.mjs\"" }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session/precompact.mjs\"" }
+        ]
+      }
     ]
   }
 }
