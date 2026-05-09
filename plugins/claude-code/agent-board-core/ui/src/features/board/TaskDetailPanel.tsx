@@ -289,11 +289,11 @@ export function TaskDetailPanel({
                     {run.status === 'running' && run.started_at && (
                       <span className="elapsed-time">⏱ {formatElapsed(elapsedTimes[run.id] ?? 0)}</span>
                     )}
-                    {run.claude_session_id && (
+                    {(run.session_id ?? run.claude_session_id) && (
                       <ResumeRunButton
-                        sessionId={run.claude_session_id}
+                        sessionId={run.session_id ?? run.claude_session_id}
                         repoPath={project?.repo_path}
-                        provider={task?.agent_provider_override ?? project?.agent_provider ?? 'claude'}
+                        provider={run.session_provider ?? task?.agent_provider_override ?? project?.agent_provider ?? 'claude'}
                       />
                     )}
                   </div>

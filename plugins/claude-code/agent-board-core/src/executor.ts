@@ -1,22 +1,19 @@
 // Executor: drains queued runs, executes via Claude Agent SDK or Copilot CLI, reaps orphans.
 
 import { randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, readFileSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync, statSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { TokenUsage } from './agent-runner.ts';
-import { AgentRunner } from './agent-runner.ts';
 import { emitActivity } from './api-activity.ts';
-import { CodexRunner } from './codex-runner.ts';
-import { CopilotRunner } from './copilot-runner.ts';
 import type { DbHandle } from './db.ts';
 import { agentboardBus } from './event-bus.ts';
 import { logPath } from './paths.ts';
 import { recordActivity, setRunPhase } from './phase-repo.ts';
 import { checkPostflight } from './postflight.ts';
 import { computeCost } from './pricing.ts';
+import { maybeRegisterInteractiveHistory, providerFor } from './provider-registry.ts';
+import type { ProviderRuntimeContext, SdkMcpServer } from './provider-runtime.ts';
 import { getDb, listProjectDbs } from './project-registry.ts';
 import type { SkillContext } from './prompt-builder.ts';
 import { buildRolePrompt, renderSystemPrompt } from './prompt-builder.ts';
@@ -35,6 +32,7 @@ import {
   reapOrphans,
   runningCount,
   setRunCost,
+  setRunSessionRef,
 } from './repo.ts';
 import { scheduleRetry } from './retry-manager.ts';
 import { buildSdkHooks } from './run-hooks.ts';
@@ -45,38 +43,6 @@ import { isoNow } from './time.ts';
 import { allowlistFor } from './tool-allowlist.ts';
 import { inheritedUserMcpServers } from './user-mcps.ts';
 import { workspaceManager } from './workspace-manager.ts';
-
-/** SDK-style MCP server descriptor (http or stdio). */
-interface SdkMcpServer {
-  type?: string;
-  url?: string;
-  command?: string;
-  args?: unknown[];
-  env?: Record<string, string>;
-  cwd?: string;
-  headers?: Record<string, string>;
-  tools?: string[];
-  bearer_token_env_var?: string;
-}
-
-/** Combined runner options — superset of AgentRunner / CopilotRunner / CodexRunner options. */
-export interface RunnerOptions {
-  runId: string;
-  role: string;
-  prompt: string;
-  systemPrompt: string;
-  cwd: string;
-  maxTurns: number;
-  allowedTools: string;
-  mcpServers: Record<string, SdkMcpServer>;
-  hooks?: Record<string, unknown>;
-  abortController: AbortController;
-  rateLimiter: RateLimitTracker;
-  sessionLog: ReturnType<typeof sessionLogger.createSessionLog>;
-  serverToken: string;
-  serverPort: number;
-  onEvent: (eventName: string, detail: Record<string, unknown>) => void;
-}
 
 /** Parameters for startExecutor. */
 export interface ExecutorParams {
@@ -89,7 +55,7 @@ const rateLimiter = new RateLimitTracker();
 
 const REAPER_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_REAPER_TIMEOUT_MS ?? '120000', 10);
 const REAPER_SWEEP_MS = parseInt(process.env.AGENTBOARD_REAPER_SWEEP_MS ?? '60000', 10);
-const DEFAULT_MAX_TURNS = parseInt(process.env.AGENTBOARD_MAX_TURNS ?? '10', 10);
+const DEFAULT_MAX_TURNS = parseInt(process.env.AGENTBOARD_MAX_TURNS ?? '60', 10);
 
 let started = false;
 
@@ -264,15 +230,13 @@ async function tryClaimAndRun(
 
   if (effectiveProvider === 'claude') {
     const claude_session_id = randomUUID();
-    db.prepare(`UPDATE agent_run SET claude_session_id=? WHERE id=?`).run(
+    setRunSessionRef(db, run.id, { provider: 'claude', sessionId: claude_session_id });
+    maybeRegisterInteractiveHistory(
+      'claude',
       claude_session_id,
-      run.id,
+      project.repo_path,
+      `agentboard ${run.role} run — ${task.code}`,
     );
-    registerWithClaudeHistory({
-      sessionId: claude_session_id,
-      projectPath: project.repo_path,
-      display: `agentboard ${run.role} run — ${task.code}`,
-    });
   }
 
   const abortController = new AbortController();
@@ -353,10 +317,7 @@ async function tryClaimAndRun(
       detail.subtype === 'init' &&
       typeof detail.session_id === 'string'
     ) {
-      db.prepare(`UPDATE agent_run SET claude_session_id=? WHERE id=?`).run(
-        detail.session_id,
-        run.id,
-      );
+      setRunSessionRef(db, run.id, { provider: 'claude', sessionId: detail.session_id });
     }
     // Forward rate-limit stall events to the bus
     if (eventName === 'run.rate-limited') {
@@ -364,10 +325,9 @@ async function tryClaimAndRun(
     }
   };
 
-  // Create appropriate runner based on effective provider
-  let runner: AgentRunner | CopilotRunner | CodexRunner;
+  const provider = providerFor(effectiveProvider);
 
-  const baseOpts: RunnerOptions = {
+  const baseOpts: ProviderRuntimeContext = {
     runId: run.id,
     role: run.role,
     prompt: promptBody,
@@ -385,23 +345,15 @@ async function tryClaimAndRun(
     onEvent,
   };
 
-  if (effectiveProvider === 'github_copilot') {
-    runner = new CopilotRunner(baseOpts);
-  } else if (effectiveProvider === 'codex') {
-    runner = new CodexRunner(baseOpts);
-  } else {
-    runner = new AgentRunner(baseOpts);
-  }
-
   try {
-    const result = await runner.run();
+    const result = await provider.run(baseOpts);
 
-    if (typeof result.sessionId === 'string' && result.sessionId.length > 0) {
+    if (result.sessionRef !== null && result.sessionRef !== undefined) {
       try {
-        db.prepare(`UPDATE agent_run SET claude_session_id=? WHERE id=?`).run(
-          result.sessionId,
-          run.id,
-        );
+        setRunSessionRef(db, run.id, {
+          provider: result.sessionRef.provider,
+          sessionId: result.sessionRef.sessionId,
+        });
       } catch (e) {
         logErr(e);
       }
@@ -579,43 +531,4 @@ function loadRolePromptBody(role: string): string {
 
 function logErr(e: unknown): void {
   console.error('[executor]', (e as Error | null)?.stack ?? e);
-}
-
-interface ClaudeHistoryEntry {
-  sessionId: string;
-  projectPath: string;
-  display: string;
-}
-
-/**
- * Register this run's session in Claude's interactive history index
- * (`~/.claude/history.jsonl`). Headless `-p` mode saves the session JSONL
- * but does NOT write a history entry, so `claude --resume <id>` reports
- * "No conversation found". Writing one line here makes the session
- * appear in the `/resume` picker and work with `--resume`.
- *
- * Best-effort: any error (file missing, permissions, etc.) is logged and
- * swallowed — the agent run itself already succeeded by this point.
- */
-function registerWithClaudeHistory({ sessionId, projectPath, display }: ClaudeHistoryEntry): void {
-  try {
-    // Claude stores project paths with OS-native separators. Normalize forward
-    // slashes back to backslashes on Windows so the picker groups this session
-    // under the right project.
-    const osPath = process.platform === 'win32' ? projectPath.replace(/\//g, '\\') : projectPath;
-    const entry =
-      JSON.stringify({
-        display,
-        pastedContents: {},
-        timestamp: Date.now(),
-        project: osPath,
-        sessionId,
-      }) + '\n';
-    appendFileSync(join(homedir(), '.claude', 'history.jsonl'), entry);
-  } catch (e) {
-    console.warn(
-      '[executor] could not register with claude history:',
-      (e as Error | null)?.message ?? String(e),
-    );
-  }
 }

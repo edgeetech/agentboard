@@ -8,6 +8,7 @@ import { canTransition, allowedPrevStatuses } from './state-machine.ts';
 import { isoNow } from './time.ts';
 import type {
   ActorRole,
+  AgentProvider,
   AssigneeRole,
   Phase,
   RunRole,
@@ -69,6 +70,8 @@ export interface AgentRunRow {
   status: RunStatus;
   token: string | null;
   pid: number | null;
+  session_provider: AgentProvider | null;
+  session_id: string | null;
   claude_session_id: string | null;
   error: string | null;
   logs_path: string | null;
@@ -139,6 +142,11 @@ export interface CostData {
   };
   cost_usd?: number;
   cost_version?: number;
+}
+
+export interface RunSessionRefInput {
+  provider: AgentProvider;
+  sessionId: string;
 }
 
 /* ─── HELPERS ───────────────────────────────────────────────────────────── */
@@ -541,6 +549,14 @@ export function setRunCost(db: DbHandle, run_id: string, costData: CostData): vo
     cost_version ?? PRICING_VERSION,
     run_id,
   );
+}
+
+export function setRunSessionRef(db: DbHandle, run_id: string, session: RunSessionRefInput): void {
+  db.prepare(`
+    UPDATE agent_run
+    SET session_provider=?, session_id=?, claude_session_id=?
+    WHERE id=?
+  `).run(session.provider, session.sessionId, session.sessionId, run_id);
 }
 
 export function finishRun(
