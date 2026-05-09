@@ -1,0 +1,33 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEX_PLUGIN_ROOT}/bin/ensure-server.mjs\" --silent" }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEX_PLUGIN_ROOT}/hooks/session/sessionstart.mjs\"" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEX_PLUGIN_ROOT}/hooks/session/userpromptsubmit.mjs\"" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEX_PLUGIN_ROOT}/hooks/session/posttooluse.mjs\"" }
+        ]
+      }
+    ]
+  }
+}

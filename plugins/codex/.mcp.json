@@ -1,0 +1,10 @@
+{
+  "mcp_servers": {
+    "agentboard": {
+      "command": "node",
+      "args": [
+        "${CODEX_PLUGIN_ROOT}/mcp/agentboard.mjs"
+      ]
+    }
+  }
+}
