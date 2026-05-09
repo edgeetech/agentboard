@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "node \"__HOOK_RUNNER__\" --event sessionStart",
+        "powershell": "node \"__HOOK_RUNNER__\" --event sessionStart",
+        "timeoutSec": 15
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "bash": "node \"__HOOK_RUNNER__\" --event userPromptSubmitted",
+        "powershell": "node \"__HOOK_RUNNER__\" --event userPromptSubmitted",
+        "timeoutSec": 10
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "node \"__HOOK_RUNNER__\" --event postToolUse",
+        "powershell": "node \"__HOOK_RUNNER__\" --event postToolUse",
+        "timeoutSec": 15
+      }
+    ]
+  }
+}
