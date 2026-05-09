@@ -116,7 +116,7 @@ export function SkillDetailPage() {
       </div>
 
       <div className={'detail-with-aside' + (bodyOpen ? '' : ' no-aside')}>
-      <form className="form-card" onSubmit={onSave}>
+      <form id="skill-detail-form" className="form-card" onSubmit={onSave}>
         <div className="entity-card-preview" aria-hidden>
           <div className="emblem">{emblem || '··'}</div>
           <div>
@@ -160,21 +160,6 @@ export function SkillDetailPage() {
             <span className="tag" title={existing.absPath}>{existing.absPath}</span>
           </div>
 
-          <div className="form-actions">
-            {isBuiltin ? (
-              <span className="muted" role="status">
-                {t('skills.builtin_readonly', 'Built-in skill — read-only.')}
-              </span>
-            ) : (
-              <>
-                <button type="submit" className="primary" disabled={!dirty || !name.trim() || update.isPending}>
-                  {t('common.save')}
-                </button>
-                {saved && <span className="muted" role="status">{saved}</span>}
-                {update.isError && <span className="err">{(update.error as Error).message}</span>}
-              </>
-            )}
-          </div>
         </div>
       </form>
       {bodyOpen && (
@@ -244,6 +229,27 @@ export function SkillDetailPage() {
           </div>
         </aside>
       )}
+      </div>
+      {/* Fixed save bar — always visible at viewport bottom */}
+      <div className="detail-form-actions">
+        {isBuiltin ? (
+          <span className="muted" role="status">
+            {t('skills.builtin_readonly', 'Built-in skill — read-only.')}
+          </span>
+        ) : (
+          <>
+            <button
+              form="skill-detail-form"
+              type="submit"
+              className="primary"
+              disabled={!dirty || !name.trim() || update.isPending}
+            >
+              {t('common.save')}
+            </button>
+            {saved && <span className="muted" role="status">{saved}</span>}
+            {update.isError && <span className="err">{(update.error as Error).message}</span>}
+          </>
+        )}
       </div>
     </>
   );

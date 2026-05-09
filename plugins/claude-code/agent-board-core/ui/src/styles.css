@@ -947,13 +947,14 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--radius-lg); padding: 1.5rem 1.75rem;
   max-width: 560px; width: 92%; box-shadow: var(--shadow-lg);
+  max-height: 90vh; display: flex; flex-direction: column;
 }
-.modal h2 { margin-top: 0; margin-bottom: 1rem; }
-.modal form { display: grid; gap: 0.75rem; }
+.modal h2 { margin-top: 0; margin-bottom: 1rem; flex-shrink: 0; }
+.modal form { display: grid; gap: 0.75rem; overflow-y: auto; min-height: 0; flex: 1; }
 .modal label { display: grid; gap: 0.3rem; font-weight: 700; font-size: 13px; }
 .modal input, .modal textarea, .modal select { width: 100%; }
 .modal textarea { resize: vertical; min-height: 96px; font-family: inherit; }
-.modal .actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.modal .actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; position: sticky; bottom: 0; background: var(--surface); padding-bottom: 0.25rem; }
 .modal fieldset { border: 0; padding: 0; margin: 0; }
 .modal legend { font-weight: 700; font-size: 13px; margin-bottom: 0.5rem; padding: 0; }
 .radio-group { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -1008,6 +1009,145 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
 .form-card .form-actions {
   display: flex; gap: 0.6rem; align-items: center;
   padding-top: 0.5rem; border-top: 1px solid var(--line);
+}
+
+/* ─── Project page: viewport-pinned save footer ──────────────────────── */
+
+.project-page {
+  /* Plain flow — let app-main scroll if needed.
+     The save footer is fixed so it's always reachable. */
+}
+
+.project-form {
+  width: min(100%, 1040px);
+  max-width: none;
+  padding: 0; /* reset form-card's default padding; .project-form-scroll owns its own */
+  /* Removed inner-scroll layout; footer is fixed instead */
+}
+
+/* Body of the form — scrolls with the document; extra bottom clearance
+   prevents content hiding behind the fixed footer bar. */
+.project-form-scroll {
+  padding: 1.5rem 1.75rem;
+  padding-bottom: 5rem; /* clear the fixed save-footer */
+}
+
+.project-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 1.25rem;
+  align-content: start;
+}
+
+.project-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.project-field-wide {
+  grid-column: 1 / -1;
+}
+
+/* Fixed save bar — always visible at the bottom of the viewport.
+   left: var(--side-w) keeps it right of the sidebar; the CSS variable
+   updates automatically when the sidebar collapses. */
+.project-form-actions {
+  position: fixed;
+  bottom: 0;
+  left: var(--side-w);
+  right: 0;
+  z-index: 20;
+  padding: 0.85rem 1.75rem;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 16px -8px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.project-form-actions .err {
+  margin-left: auto;
+}
+
+/* On narrow screens the sidebar disappears, so the bar spans full width */
+@media (max-width: 840px) {
+  .project-form {
+    width: 100%;
+  }
+
+  .project-form-actions {
+    left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .project-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-field-wide {
+    grid-column: auto;
+  }
+
+  .project-form-scroll,
+  .project-form-actions {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .project-form-actions .err {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
+
+/* Fixed save bar for Skill / Role (persona) detail pages — same pattern as
+   .project-form-actions so the Save button is always pinned to the viewport
+   bottom regardless of form height. */
+.detail-form-actions {
+  position: fixed;
+  bottom: 0;
+  left: var(--side-w);
+  right: 0;
+  z-index: 20;
+  padding: 0.85rem 1.75rem;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 16px -8px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.detail-form-actions .err {
+  margin-left: auto;
+}
+
+/* Add bottom padding to the scrollable area so content isn't hidden behind the bar */
+.detail-with-aside .form-card {
+  padding-bottom: 5rem;
+}
+
+@media (max-width: 840px) {
+  .detail-form-actions {
+    left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .detail-form-actions {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .detail-form-actions .err {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
 }
 
 /* ------- Agent provider toggle (icon-based selection) ------- */

@@ -14,7 +14,7 @@ import { CopilotRunner } from './copilot-runner.ts';
 import type { DbHandle } from './db.ts';
 import { agentboardBus } from './event-bus.ts';
 import { logPath } from './paths.ts';
-import { recordActivity } from './phase-repo.ts';
+import { recordActivity, setRunPhase } from './phase-repo.ts';
 import { checkPostflight } from './postflight.ts';
 import { computeCost } from './pricing.ts';
 import { getDb, listProjectDbs } from './project-registry.ts';
@@ -41,6 +41,7 @@ import { buildSdkHooks } from './run-hooks.ts';
 import { sessionLogger } from './session-logger.ts';
 import { listSkills } from './skill-repo.ts';
 import { Supervisor } from './supervisor.ts';
+import { isoNow } from './time.ts';
 import { allowlistFor } from './tool-allowlist.ts';
 import { inheritedUserMcpServers } from './user-mcps.ts';
 import { workspaceManager } from './workspace-manager.ts';
@@ -88,6 +89,7 @@ const rateLimiter = new RateLimitTracker();
 
 const REAPER_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_REAPER_TIMEOUT_MS ?? '120000', 10);
 const REAPER_SWEEP_MS = parseInt(process.env.AGENTBOARD_REAPER_SWEEP_MS ?? '60000', 10);
+const DEFAULT_MAX_TURNS = parseInt(process.env.AGENTBOARD_MAX_TURNS ?? '10', 10);
 
 let started = false;
 
@@ -238,6 +240,27 @@ async function tryClaimAndRun(
     console.warn('[executor] claim lost for', run.id);
     return;
   }
+  if (run.role === 'reviewer') {
+    setRunPhase(db, run.id, {
+      phase: 'VERIFICATION',
+      appendHistoryEntry: {
+        from: 'DISCOVERY',
+        to: 'VERIFICATION',
+        by: 'reviewer',
+        at: isoNow(),
+      },
+    });
+  } else if (run.role === 'pm') {
+    setRunPhase(db, run.id, {
+      phase: 'REFINEMENT',
+      appendHistoryEntry: {
+        from: 'DISCOVERY',
+        to: 'REFINEMENT',
+        by: 'pm',
+        at: isoNow(),
+      },
+    });
+  }
 
   if (effectiveProvider === 'claude') {
     const claude_session_id = randomUUID();
@@ -350,7 +373,7 @@ async function tryClaimAndRun(
     prompt: promptBody,
     systemPrompt,
     cwd: workspacePath,
-    maxTurns: 10,
+    maxTurns: DEFAULT_MAX_TURNS,
     allowedTools: allowlistFor(run.role),
     mcpServers,
     ...(sdkHooks !== undefined ? { hooks: sdkHooks } : {}),
@@ -372,6 +395,17 @@ async function tryClaimAndRun(
 
   try {
     const result = await runner.run();
+
+    if (typeof result.sessionId === 'string' && result.sessionId.length > 0) {
+      try {
+        db.prepare(`UPDATE agent_run SET claude_session_id=? WHERE id=?`).run(
+          result.sessionId,
+          run.id,
+        );
+      } catch (e) {
+        logErr(e);
+      }
+    }
 
     // Always record cost/usage when we have it — even if the run row was
     // already moved to 'failed' (e.g. by the reaper). Otherwise an orphaned

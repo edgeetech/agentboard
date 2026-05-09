@@ -310,10 +310,15 @@ function ResumeCliButton({
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   // PowerShell 5 doesn't support `&&`; `;` works in bash / PS5+.
-  const bin = provider === 'codex' ? 'codex resume' : 'claude --resume';
+  const bin =
+    provider === 'codex'
+      ? 'codex resume'
+      : provider === 'github_copilot'
+        ? 'gh copilot -- --resume='
+        : 'claude --resume';
   const cmd = repoPath
-    ? `cd "${repoPath}"; ${bin} ${sessionId}`
-    : `${bin} ${sessionId}`;
+    ? `cd "${repoPath}"; ${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`
+    : `${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`;
   async function copy() {
     try {
       await navigator.clipboard.writeText(cmd);

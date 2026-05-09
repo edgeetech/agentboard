@@ -293,6 +293,7 @@ export function TaskDetailPanel({
                       <ResumeRunButton
                         sessionId={run.claude_session_id}
                         repoPath={project?.repo_path}
+                        provider={task?.agent_provider_override ?? project?.agent_provider ?? 'claude'}
                       />
                     )}
                   </div>
@@ -445,13 +446,23 @@ function RoleAvatar({ role, label }: { role: string; label: string }) {
 }
 
 function ResumeRunButton({
-  sessionId, repoPath,
-}: { sessionId: string; repoPath: string | null | undefined }) {
+  sessionId, repoPath, provider = 'claude',
+}: {
+  sessionId: string;
+  repoPath: string | null | undefined;
+  provider?: 'claude' | 'github_copilot' | 'codex' | null;
+}) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const bin =
+    provider === 'codex'
+      ? 'codex resume'
+      : provider === 'github_copilot'
+        ? 'gh copilot -- --resume='
+        : 'claude --resume';
   const cmd = repoPath
-    ? `cd "${repoPath}"; claude --resume ${sessionId}`
-    : `claude --resume ${sessionId}`;
+    ? `cd "${repoPath}"; ${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`
+    : `${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`;
   async function copy() {
     try {
       await navigator.clipboard.writeText(cmd);

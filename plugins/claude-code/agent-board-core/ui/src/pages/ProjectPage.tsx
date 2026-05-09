@@ -87,7 +87,7 @@ export function ProjectPage() {
     scanIgnore.join('\n') !== projectScanIgnore.join('\n');
 
   return (
-    <>
+    <div className="project-page">
       <div className="page-head">
         <div className="title">
           <h1>
@@ -101,101 +101,102 @@ export function ProjectPage() {
       </div>
 
       <form
-        className="form-card"
+        className="form-card project-form"
         onSubmit={(e) => { e.preventDefault(); if (dirty) mut.mutate(); }}
       >
-        <div className="form-grid">
-          <label>
-            {t('settings.code')}
-            <input value={project.code} disabled />
-            <small className="muted">{t('settings.code_locked')}</small>
-          </label>
-          <label>
-            {t('settings.workflow')}
-            <input value={project.workflow_type} disabled />
-            <small className="muted">{t('settings.workflow_locked')}</small>
-          </label>
-          <label>
-            {t('settings.name')}
-            <input value={name} onChange={e => { setName(e.target.value); }} required />
-          </label>
-          <label>
-            {t('settings.description')}
-            <textarea value={description} onChange={e => { setDesc(e.target.value); }} rows={3} />
-          </label>
-          <label>
-            {t('settings.repo_path')}
-            <input value={repoPath} onChange={e => { setRepoPath(e.target.value); }} required />
-            <small className="muted">{t('settings.repo_hint')}</small>
-          </label>
-          <label>
-            {t('settings.max_parallel')}
-            <input
-              type="number" min={1} max={3}
-              value={maxPar}
-              onChange={e => { setMaxPar(parseInt(e.target.value, 10) || 1); }}
-            />
-            <small className="muted">{t('settings.max_parallel_hint')}</small>
-          </label>
-           <fieldset>
-             <legend>{t('settings.agent_provider')}</legend>
-             <div className="agent-provider-toggle">
-               <button
-                 type="button"
-                 className={`agent-toggle-item ${agentProvider === 'claude' ? 'active' : ''}`}
-                 onClick={() => { setAgentProvider('claude'); }}
-                 title="Claude (Anthropic SDK)"
-               >
-                 <AgentProviderIcon provider="claude" size="lg" tooltip={false} />
-               </button>
-               <button
-                 type="button"
-                 className={`agent-toggle-item ${agentProvider === 'github_copilot' ? 'active' : ''}`}
-                 onClick={() => { setAgentProvider('github_copilot'); }}
-                 title="GitHub Copilot"
-               >
-                 <AgentProviderIcon provider="github_copilot" size="lg" tooltip={false} />
-               </button>
-               <button
-                 type="button"
-                 className={`agent-toggle-item ${agentProvider === 'codex' ? 'active' : ''}`}
-                 onClick={() => { setAgentProvider('codex'); }}
-                 title="Codex CLI"
-               >
-                 <AgentProviderIcon provider="codex" size="lg" tooltip={false} />
-               </button>
-             </div>
-           </fieldset>
-          <label>
-            {t('settings.scan_ignore', 'Skip these folders')}
-            <textarea
-              value={scanIgnoreText}
-              onChange={e => {
-                const v = e.target.value;
-                setScanIgnoreText(v);
-                setScanIgnore(
-                  v.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#')),
-                );
-              }}
-              placeholder={'legacy\nTax/__archived_maintenance\n# comments are ok'}
-              rows={5}
-            />
-            <small className="muted">{t('settings.scan_ignore_hint')}</small>
-          </label>
-
-          <div className="form-actions">
-            <button
-              type="submit"
-              className="primary"
-              disabled={!dirty || mut.isPending || !name.trim() || !repoPath.trim()}
-            >
-              {t('common.save')}
-            </button>
-            {saved && <span className="muted" role="status">{saved}</span>}
+        <div className="project-form-scroll">
+          <div className="form-grid project-form-grid">
+            <label>
+              {t('settings.code')}
+              <input value={project.code} disabled />
+              <small className="muted">{t('settings.code_locked')}</small>
+            </label>
+            <label>
+              {t('settings.workflow')}
+              <input value={project.workflow_type} disabled />
+              <small className="muted">{t('settings.workflow_locked')}</small>
+            </label>
+            <label>
+              {t('settings.name')}
+              <input value={name} onChange={e => { setName(e.target.value); }} required />
+            </label>
+            <label className="project-field-wide">
+              {t('settings.description')}
+              <textarea value={description} onChange={e => { setDesc(e.target.value); }} rows={3} />
+            </label>
+            <label className="project-field-wide">
+              {t('settings.repo_path')}
+              <input value={repoPath} onChange={e => { setRepoPath(e.target.value); }} required />
+              <small className="muted">{t('settings.repo_hint')}</small>
+            </label>
+            <label>
+              {t('settings.max_parallel')}
+              <input
+                type="number" min={1} max={3}
+                value={maxPar}
+                onChange={e => { setMaxPar(parseInt(e.target.value, 10) || 1); }}
+              />
+              <small className="muted">{t('settings.max_parallel_hint')}</small>
+            </label>
+            <fieldset>
+              <legend>{t('settings.agent_provider')}</legend>
+              <div className="agent-provider-toggle">
+                <button
+                  type="button"
+                  className={`agent-toggle-item ${agentProvider === 'claude' ? 'active' : ''}`}
+                  onClick={() => { setAgentProvider('claude'); }}
+                  title="Claude (Anthropic SDK)"
+                >
+                  <AgentProviderIcon provider="claude" size="lg" tooltip={false} />
+                </button>
+                <button
+                  type="button"
+                  className={`agent-toggle-item ${agentProvider === 'github_copilot' ? 'active' : ''}`}
+                  onClick={() => { setAgentProvider('github_copilot'); }}
+                  title="GitHub Copilot"
+                >
+                  <AgentProviderIcon provider="github_copilot" size="lg" tooltip={false} />
+                </button>
+                <button
+                  type="button"
+                  className={`agent-toggle-item ${agentProvider === 'codex' ? 'active' : ''}`}
+                  onClick={() => { setAgentProvider('codex'); }}
+                  title="Codex CLI"
+                >
+                  <AgentProviderIcon provider="codex" size="lg" tooltip={false} />
+                </button>
+              </div>
+            </fieldset>
+            <label className="project-field-wide">
+              {t('settings.scan_ignore', 'Skip these folders')}
+              <textarea
+                value={scanIgnoreText}
+                onChange={e => {
+                  const v = e.target.value;
+                  setScanIgnoreText(v);
+                  setScanIgnore(
+                    v.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#')),
+                  );
+                }}
+                placeholder={'legacy\nTax/__archived_maintenance\n# comments are ok'}
+                rows={5}
+              />
+              <small className="muted">{t('settings.scan_ignore_hint')}</small>
+            </label>
           </div>
+        </div>
+        <div className="form-actions project-form-actions">
+          <button
+            type="submit"
+            className="primary"
+            disabled={!dirty || mut.isPending || !name.trim() || !repoPath.trim()}
+          >
+            {t('common.save')}
+          </button>
+          {saved && <span className="muted" role="status">{saved}</span>}
           {mut.isError && <div className="err">{(mut.error).message}</div>}
         </div>
       </form>
-    </>
+    </div>
   );
 }

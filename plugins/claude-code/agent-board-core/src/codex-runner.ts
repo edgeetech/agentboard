@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 import type { RunResult, TokenUsage, SessionLog } from './agent-runner.ts';
 import { buildChildEnv } from './child-env.ts';
@@ -30,6 +31,7 @@ export interface CodexRunnerOptions {
   runId: string;
   role: string;
   prompt: string;
+  systemPrompt: string;
   cwd: string;
   abortController: AbortController;
   onEvent?: (eventName: string, detail: Record<string, unknown>) => void;
@@ -108,6 +110,7 @@ export class CodexRunner {
   private async execute(): Promise<RunResult> {
     const {
       prompt,
+      systemPrompt,
       cwd,
       abortController,
       runId,
@@ -192,17 +195,23 @@ export class CodexRunner {
       '--json',
       '--output-last-message',
       lastMessagePath,
-      '-a',
-      'never',
+      '--dangerously-bypass-approvals-and-sandbox',
       '-C',
       cwd,
       ...configArgs,
     ];
 
-    const child = spawn('codex', args, {
+    const fullPrompt =
+      systemPrompt.trim().length > 0
+        ? `${systemPrompt}\n\n---\n\n${prompt}`
+        : prompt;
+
+    const launch = resolveCodexLaunch(env, args);
+    const child = spawn(launch.command, launch.args, {
       cwd,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
     });
     this.sessionId = `codex:${runId}`;
     result.sessionId = this.sessionId;
@@ -237,7 +246,7 @@ export class CodexRunner {
       sessionLog?.error({ runId, stderr: chunk.slice(0, 500) }, 'Codex stderr');
     });
 
-    child.stdin.write(prompt);
+    child.stdin.write(fullPrompt);
     child.stdin.end();
 
     const exitCode = await new Promise<number | null>((resolve, reject) => {
@@ -319,6 +328,28 @@ export class CodexRunner {
       }
     }
   }
+}
+
+function resolveCodexLaunch(
+  env: Record<string, string>,
+  args: string[],
+): { command: string; args: string[] } {
+  if (process.platform !== 'win32') return { command: 'codex', args };
+
+  const appData = env.APPDATA ?? join(homedir(), 'AppData', 'Roaming');
+  const npmDir = join(appData, 'npm');
+  const cmdShim = join(npmDir, 'codex.cmd');
+  if (existsSync(cmdShim)) {
+    const codexJs = join(npmDir, 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
+    if (existsSync(codexJs)) {
+      const bundledNode = join(dirname(cmdShim), 'node.exe');
+      const nodeBin = existsSync(bundledNode) ? bundledNode : process.execPath;
+      return { command: nodeBin, args: [codexJs, ...args] };
+    }
+  }
+  const exeShim = join(appData, 'npm', 'codex.exe');
+  if (existsSync(exeShim)) return { command: exeShim, args };
+  return { command: 'codex', args };
 }
 
 function looksFinalEvent(obj: Record<string, unknown>): boolean {
