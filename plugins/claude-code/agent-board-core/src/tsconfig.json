@@ -6,6 +6,6 @@
     "rootDir": "..",
     "types": ["node"]
   },
-  "include": ["**/*.ts", "../server.ts", "../check-runs.ts", "../bin/**/*.ts", "../test/**/*.ts"],
+  "include": ["**/*.ts", "../server.ts", "../bin/**/*.ts", "../test/**/*.ts"],
   "exclude": []
 }
