@@ -8,13 +8,14 @@
  *   1. ~/.copilot/mcp-config.json — merge agentboard MCP server entry.
  *      (Path overridable via COPILOT_HOME.)
  *   2. <target-repo>/.github/hooks/agentboard.json — drop hook config that
- *      runs ./hooks/session/hook-runner.mjs on sessionStart, postToolUse,
+ *      runs ./hooks/session/hook-runner.ts on sessionStart, postToolUse,
  *      and userPromptSubmitted.
  *   3. <target-repo>/AGENTS.md — append a stanza describing the agentboard
  *      MCP tools so Copilot's prompt context picks it up. (Optional.)
  *
  * Usage:
- *   node plugins/copilot/install.mjs [--repo /path/to/repo] [--no-agents-md]
+ *   node --experimental-strip-types --no-warnings plugins/copilot/install.ts \
+ *        [--repo /path/to/repo] [--no-agents-md] [--dry-run]
  *
  * Defaults:
  *   --repo defaults to process.cwd().
@@ -25,34 +26,46 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
-function atomicWrite(path, contents) {
+interface MCPEntry {
+  command: string;
+  args?: unknown[];
+  env?: Record<string, string>;
+  [k: string]: unknown;
+}
+
+interface MCPConfig {
+  mcpServers: Record<string, MCPEntry>;
+  [k: string]: unknown;
+}
+
+function atomicWrite(path: string, contents: string): void {
   const tmp = path + ".tmp";
   writeFileSync(tmp, contents, "utf-8");
   renameSync(tmp, path);
 }
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const PLUGIN_ROOT = HERE;
-const REPO_ROOT = resolve(HERE, "..", "..");
-const HOOK_RUNNER = resolve(PLUGIN_ROOT, "hooks", "session", "hook-runner.mjs");
-const SHARED_MCP = resolve(REPO_ROOT, "plugins", "claude-code", "mcp", "agentboard.mjs");
+const HERE: string = dirname(fileURLToPath(import.meta.url));
+const PLUGIN_ROOT: string = HERE;
+const REPO_ROOT: string = resolve(HERE, "..", "..");
+const HOOK_RUNNER: string = resolve(PLUGIN_ROOT, "hooks", "session", "hook-runner.ts");
+const SHARED_MCP: string = resolve(REPO_ROOT, "plugins", "claude-code", "mcp", "agentboard.mjs");
 
-function arg(name, def) {
+function arg(name: string, def: string | boolean): string | boolean {
   const i = process.argv.indexOf(`--${name}`);
   if (i === -1) return def;
-  if (process.argv[i + 1] && !process.argv[i + 1].startsWith("--")) return process.argv[i + 1];
+  const next = process.argv[i + 1];
+  if (typeof next === "string" && !next.startsWith("--")) return next;
   return true;
 }
 
-const targetRepo = resolve(arg("repo", process.cwd()));
-// --no-agents-md is a pure boolean flag; presence disables the AGENTS.md step.
-const writeAgentsMd = !process.argv.includes("--no-agents-md");
-const dryRun = process.argv.includes("--dry-run");
-const copilotHome = process.env.COPILOT_HOME || join(homedir(), ".copilot");
-const mcpConfigPath = join(copilotHome, "mcp-config.json");
-const repoHooksDir = join(targetRepo, ".github", "hooks");
-const repoHookFile = join(repoHooksDir, "agentboard.json");
-const agentsMdPath = join(targetRepo, "AGENTS.md");
+const targetRepo: string = resolve(String(arg("repo", process.cwd())));
+const writeAgentsMd: boolean = !process.argv.includes("--no-agents-md");
+const dryRun: boolean = process.argv.includes("--dry-run");
+const copilotHome: string = process.env.COPILOT_HOME || join(homedir(), ".copilot");
+const mcpConfigPath: string = join(copilotHome, "mcp-config.json");
+const repoHooksDir: string = join(targetRepo, ".github", "hooks");
+const repoHookFile: string = join(repoHooksDir, "agentboard.json");
+const agentsMdPath: string = join(targetRepo, "AGENTS.md");
 
 console.log("agentboard — Copilot CLI installer");
 console.log(`  plugin root : ${PLUGIN_ROOT}`);
@@ -74,16 +87,17 @@ let changed = 0;
 // 1. MCP config merge — best-effort; failures don't abort the rest.
 try {
   mkdirSync(copilotHome, { recursive: true });
-  let cfg = { mcpServers: {} };
+  let cfg: MCPConfig = { mcpServers: {} };
   let parseFailed = false;
   if (existsSync(mcpConfigPath)) {
     try {
-      cfg = JSON.parse(readFileSync(mcpConfigPath, "utf-8"));
-      if (!cfg || typeof cfg !== "object") cfg = { mcpServers: {} };
-      if (!cfg.mcpServers || typeof cfg.mcpServers !== "object") cfg.mcpServers = {};
+      const parsed = JSON.parse(readFileSync(mcpConfigPath, "utf-8")) as Partial<MCPConfig>;
+      cfg = (parsed && typeof parsed === "object")
+        ? { ...parsed, mcpServers: (parsed.mcpServers && typeof parsed.mcpServers === "object") ? parsed.mcpServers : {} }
+        : { mcpServers: {} };
     } catch (e) {
       console.error(
-        `[!] could not parse existing ${mcpConfigPath} (${e?.message ?? e}). ` +
+        `[!] could not parse existing ${mcpConfigPath} (${(e as Error)?.message ?? e}). ` +
           `Skipping MCP merge so the file is not overwritten.`,
       );
       parseFailed = true;
@@ -91,12 +105,14 @@ try {
   }
   if (!parseFailed) {
     const cur = cfg.mcpServers.agentboard;
-    const argsArr = Array.isArray(cur?.args) ? cur.args : [];
-    // Looser idempotency: keep user's extra args/env, only rewrite when the
-    // command or first arg drifts from what we expect.
-    const same = cur && cur.command === "node" && argsArr[0] === SHARED_MCP;
+    const argsArr: unknown[] = Array.isArray(cur?.args) ? cur.args : [];
+    const same = !!cur && cur.command === "node" && argsArr[0] === SHARED_MCP;
     if (!same) {
-      cfg.mcpServers.agentboard = { ...(cur ?? {}), command: "node", args: [SHARED_MCP, ...argsArr.slice(1)] };
+      cfg.mcpServers.agentboard = {
+        ...(cur ?? { command: "node" }),
+        command: "node",
+        args: [SHARED_MCP, ...argsArr.slice(1)],
+      };
       const out = JSON.stringify(cfg, null, 2) + "\n";
       if (dryRun) {
         console.log(`[dry-run] would write agentboard entry to ${mcpConfigPath}`);
@@ -110,7 +126,7 @@ try {
     }
   }
 } catch (e) {
-  console.error(`[!] mcp-config step failed: ${e?.message ?? e}`);
+  console.error(`[!] mcp-config step failed: ${(e as Error)?.message ?? e}`);
 }
 
 // 2. Repo hook config drop
@@ -137,7 +153,7 @@ try {
     changed++;
   }
 } catch (e) {
-  console.error(`[!] hook drop step failed: ${e?.message ?? e}`);
+  console.error(`[!] hook drop step failed: ${(e as Error)?.message ?? e}`);
 }
 
 // 3. AGENTS.md appendix
@@ -167,7 +183,7 @@ if (writeAgentsMd) {
       console.log(`[=] ${agentsMdPath} already mentions agentboard`);
     }
   } catch (e) {
-    console.error(`[!] AGENTS.md step failed: ${e?.message ?? e}`);
+    console.error(`[!] AGENTS.md step failed: ${(e as Error)?.message ?? e}`);
   }
 }
 
@@ -176,5 +192,5 @@ console.log(changed > 0 ? `done — ${changed} file(s) modified.` : "done — no
 console.log("");
 console.log("Next:");
 console.log("  • Restart Copilot CLI so it re-reads ~/.copilot/mcp-config.json.");
-console.log("  • Boot the agentboard server once: node plugins/claude-code/bin/ensure-server.ts");
+console.log("  • Boot the agentboard server once: node --experimental-strip-types plugins/claude-code/bin/ensure-server.ts");
 console.log("  • In Copilot CLI, /mcp should now list `agentboard` tools.");

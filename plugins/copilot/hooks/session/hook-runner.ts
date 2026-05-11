@@ -23,13 +23,13 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const CLAUDE_HOOKS = resolve(HERE, "..", "..", "..", "claude-code", "hooks", "session");
+const HERE: string = dirname(fileURLToPath(import.meta.url));
+const CLAUDE_HOOKS: string = resolve(HERE, "..", "..", "..", "claude-code", "hooks", "session");
 
-const eventIdx = process.argv.indexOf("--event");
-const event = eventIdx > -1 ? process.argv[eventIdx + 1] : "";
+const eventIdx: number = process.argv.indexOf("--event");
+const event: string = eventIdx > -1 ? (process.argv[eventIdx + 1] ?? "") : "";
 
-const TARGETS = {
+const TARGETS: Record<string, string> = {
   sessionStart: "sessionstart.mjs",
   postToolUse: "posttooluse.mjs",
   userPromptSubmitted: "userpromptsubmit.mjs",
@@ -37,11 +37,10 @@ const TARGETS = {
 
 const target = TARGETS[event];
 if (!target) {
-  // Unknown event — silent no-op so misconfigured hooks never block Copilot.
   process.exit(0);
 }
 
-const targetPath = resolve(CLAUDE_HOOKS, target);
+const targetPath: string = resolve(CLAUDE_HOOKS, target);
 if (!existsSync(targetPath)) {
   process.stderr.write(
     `agentboard copilot hook: missing target ${targetPath} — install the agentboard claude-code plugin alongside this repo's hooks.\n`,
@@ -60,33 +59,34 @@ if (!existsSync(targetPath)) {
   });
   if (process.env.AGENTBOARD_HOOK_DEBUG && result.status !== 0) {
     process.stderr.write(
-      `agentboard copilot hook ${event} exit=${result.status} stderr=${result.stderr}\n`,
+      `agentboard copilot hook ${event} exit=${result.status} stderr=${String(result.stderr)}\n`,
     );
   }
   process.exit(0);
 })();
 
-function readStdin() {
+function readStdin(): Promise<string> {
   return new Promise((resolveOk) => {
     let data = "";
     if (process.stdin.isTTY) return resolveOk("");
     process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk) => { data += chunk; });
+    process.stdin.on("data", (chunk: string) => { data += chunk; });
     process.stdin.on("end", () => resolveOk(data.replace(/^﻿/, "")));
     process.stdin.on("error", () => resolveOk(""));
   });
 }
 
-function normaliseCopilotPayload(raw) {
+function normaliseCopilotPayload(raw: string): string {
   if (!raw) return "{}";
-  let obj;
-  try { obj = JSON.parse(raw); } catch { return raw; }
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return raw;
+  }
   if (!obj || typeof obj !== "object") return raw;
 
-  // Copy through, dual-writing camelCase ↔ snake_case for the keys the
-  // shared scripts read. Safe to keep the originals; downstream code
-  // ignores fields it doesn't recognise.
-  const out = { ...obj };
+  const out: Record<string, unknown> = { ...obj };
   copyKey(out, "sessionId", "session_id");
   copyKey(out, "transcriptPath", "transcript_path");
   copyKey(out, "hookEventName", "hook_event_name");
@@ -94,18 +94,15 @@ function normaliseCopilotPayload(raw) {
   copyKey(out, "toolInput", "tool_input");
   copyKey(out, "toolResponse", "tool_response");
   copyKey(out, "toolOutput", "tool_output");
-  // Copilot's user-prompt event sends `userPrompt`; the shared script reads
-  // either `prompt` or `message`. Map all three.
   if (out.userPrompt && !out.prompt) out.prompt = out.userPrompt;
   if (out.message && !out.prompt) out.prompt = out.message;
-  // SessionStart matcher field. Claude/Codex use `source`.
   if (typeof out.source !== "string" && typeof out.startSource === "string") {
     out.source = out.startSource;
   }
   return JSON.stringify(out);
 }
 
-function copyKey(obj, fromKey, toKey) {
+function copyKey(obj: Record<string, unknown>, fromKey: string, toKey: string): void {
   if (obj[fromKey] !== undefined && obj[toKey] === undefined) {
     obj[toKey] = obj[fromKey];
   } else if (obj[toKey] !== undefined && obj[fromKey] === undefined) {

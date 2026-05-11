@@ -20,7 +20,7 @@ try {
   const source = input.source ?? "startup";
 
   const { SessionDB } = await import(pathToFileURL(join(HOOK_DIR, "session-db.bundle.mjs")).href);
-  const { resolveAttribution } = await import(pathToFileURL(join(HOOK_DIR, "project-attribution.mjs")).href);
+  const { resolveAttribution } = await import(pathToFileURL(join(HOOK_DIR, "project-attribution.ts")).href);
   const db = new SessionDB({ dbPath: getSessionDBPath() });
   const sessionId = getSessionId(input);
   // Use the higher-confidence project attribution when available; fall back

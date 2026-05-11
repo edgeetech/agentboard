@@ -11,4 +11,4 @@ description: Diagnose the agentboard install for the Codex plugin. Reports Node 
 6. Confirm `~/.agentboard/server.lock` is either absent (no server) or owned by a live PID.
 7. Output a checklist showing pass/fail for each step. Do NOT print the Bearer token.
 
-If a step fails, suggest the obvious remediation — usually `node "${CODEX_PLUGIN_ROOT}/bin/ensure-server.mjs"` to boot the server.
+If a step fails, suggest the obvious remediation — usually `node --experimental-strip-types --no-warnings "${CODEX_PLUGIN_ROOT}/bin/ensure-server.ts"` to boot the server.

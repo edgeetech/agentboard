@@ -4,20 +4,20 @@
       {
         "matcher": "startup",
         "hooks": [
-          { "type": "command", "command": "node \"${CODEX_PLUGIN_ROOT}/bin/ensure-server.mjs\" --silent" }
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CODEX_PLUGIN_ROOT}/bin/ensure-server.ts\" --silent" }
         ]
       },
       {
         "matcher": "startup|resume|clear",
         "hooks": [
-          { "type": "command", "command": "node \"${CODEX_PLUGIN_ROOT}/hooks/session/sessionstart.mjs\"" }
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CODEX_PLUGIN_ROOT}/hooks/session/sessionstart.ts\"" }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CODEX_PLUGIN_ROOT}/hooks/session/userpromptsubmit.mjs\"" }
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CODEX_PLUGIN_ROOT}/hooks/session/userpromptsubmit.ts\"" }
         ]
       }
     ],
@@ -25,7 +25,7 @@
       {
         "matcher": ".*",
         "hooks": [
-          { "type": "command", "command": "node \"${CODEX_PLUGIN_ROOT}/hooks/session/posttooluse.mjs\"" }
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CODEX_PLUGIN_ROOT}/hooks/session/posttooluse.ts\"" }
         ]
       }
     ]

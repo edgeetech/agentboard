@@ -1,0 +1,6 @@
+{
+  "name": "agentboard-codex-plugin",
+  "private": true,
+  "type": "module",
+  "description": "Marker so Node treats this plugin's .ts files as ES modules under --experimental-strip-types."
+}

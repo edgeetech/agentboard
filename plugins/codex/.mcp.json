@@ -3,7 +3,9 @@
     "agentboard": {
       "command": "node",
       "args": [
-        "${CODEX_PLUGIN_ROOT}/mcp/agentboard.mjs"
+        "--experimental-strip-types",
+        "--no-warnings",
+        "${CODEX_PLUGIN_ROOT}/mcp/agentboard.ts"
       ]
     }
   }

@@ -27,27 +27,25 @@ export const ATTRIBUTION_CONFIDENCE = Object.freeze({
   cwd_event: 0.55,
   last_seen: 0.4,
   fallback: 0.1,
-});
+} as const);
 
-/**
- * @typedef {Object} AttributionContext
- * @property {Record<string, unknown>} input         Hook stdin payload.
- * @property {string|null} sessionOrigin             session_meta.project_dir if known.
- * @property {string|null} lastSeen                  Most recently attributed project_dir for this session.
- * @property {string} processCwd                     Current process.cwd().
- *
- * @typedef {Object} Attribution
- * @property {string} projectDir
- * @property {keyof typeof ATTRIBUTION_CONFIDENCE} source
- * @property {number} confidence
- */
+export type AttributionSource = keyof typeof ATTRIBUTION_CONFIDENCE;
 
-/**
- * Pure function: resolve a single attribution.
- * @param {AttributionContext} ctx
- * @returns {Attribution}
- */
-export function resolveAttribution(ctx) {
+export interface AttributionContext {
+  input: Record<string, unknown>;
+  sessionOrigin: string | null;
+  lastSeen: string | null;
+  processCwd: string;
+}
+
+export interface Attribution {
+  projectDir: string;
+  source: AttributionSource;
+  confidence: number;
+}
+
+/** Pure function: resolve a single attribution. */
+export function resolveAttribution(ctx: AttributionContext): Attribution {
   const { input, sessionOrigin, lastSeen, processCwd } = ctx;
 
   const fromWorkspace = pickWorkspaceRoot(input);
@@ -75,7 +73,7 @@ export function resolveAttribution(ctx) {
   return mk("fallback", processCwd || ".");
 }
 
-function mk(source, projectDir) {
+function mk(source: AttributionSource, projectDir: string): Attribution {
   return {
     projectDir: normalize(projectDir),
     source,
@@ -83,7 +81,7 @@ function mk(source, projectDir) {
   };
 }
 
-function normalize(p) {
+function normalize(p: string): string {
   if (!p) return p;
   try {
     return resolvePath(p);
@@ -92,32 +90,32 @@ function normalize(p) {
   }
 }
 
-function pickWorkspaceRoot(input) {
+function pickWorkspaceRoot(input: Record<string, unknown>): string | null {
   if (!input || typeof input !== "object") return null;
-  const candidates = [input.workspace_root, input.workspaceRoot];
+  const candidates = [input.workspace_root, (input as { workspaceRoot?: unknown }).workspaceRoot];
   for (const c of candidates) {
     if (typeof c === "string" && isAbsolute(c)) return c;
   }
-  if (Array.isArray(input.workspace_roots) && input.workspace_roots.length > 0) {
-    const first = input.workspace_roots[0];
+  const wsRoots = (input as { workspace_roots?: unknown }).workspace_roots;
+  if (Array.isArray(wsRoots) && wsRoots.length > 0) {
+    const first = wsRoots[0];
     if (typeof first === "string" && isAbsolute(first)) return first;
   }
   return null;
 }
 
-function pickInputCwd(input) {
+function pickInputCwd(input: Record<string, unknown>): string | null {
   if (!input || typeof input !== "object") return null;
-  const top = typeof input.cwd === "string" ? input.cwd : null;
+  const top = typeof input.cwd === "string" ? (input.cwd as string) : null;
   if (top && isAbsolute(top)) return top;
 
-  const ti = input.tool_input;
+  const ti = input.tool_input as Record<string, unknown> | undefined;
   if (ti && typeof ti === "object") {
-    const fromTool = typeof ti.cwd === "string" ? ti.cwd : null;
+    const fromTool = typeof ti.cwd === "string" ? (ti.cwd as string) : null;
     if (fromTool && isAbsolute(fromTool)) return fromTool;
     // Edit / Write / Read tool family: derive cwd from the file_path's parent.
     // No `existsSync` stat — PostToolUse fires constantly, syscall is hot path.
-    // If the dir is gone, downstream attribution still works via lower-confidence sources.
-    const filePath = typeof ti.file_path === "string" ? ti.file_path : null;
+    const filePath = typeof ti.file_path === "string" ? (ti.file_path as string) : null;
     if (filePath && isAbsolute(filePath)) {
       return dirname(filePath);
     }

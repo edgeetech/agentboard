@@ -4,7 +4,7 @@
       {
         "matcher": "startup",
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/ensure-server.mjs\" --silent" }
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CLAUDE_PLUGIN_ROOT}/bin/ensure-server.ts\" --silent" }
         ]
       },
       {
@@ -31,7 +31,7 @@
     "PreCompact": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session/precompact.mjs\"" }
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CLAUDE_PLUGIN_ROOT}/hooks/session/precompact.ts\"" }
         ]
       }
     ]

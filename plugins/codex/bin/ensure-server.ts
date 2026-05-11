@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Codex bin/ensure-server.mjs
+ * Codex bin/ensure-server.ts
  *
  * Delegates to the shared TypeScript ensure-server in the claude-code plugin
  * (single source of truth for boot/reuse logic). Both plugins ship in the
@@ -8,9 +8,9 @@
  * this repo's marketplace.
  *
  * Sets AGENTBOARD_PLUGIN_ROOT (so /alive reports the codex plugin's version)
- * and AGENTBOARD_CORE_ROOT (so the spawn target is the shared agent-board-core
- * under claude-code/). Stdio is silenced when --silent is passed so SessionStart
- * stays quiet.
+ * and AGENTBOARD_CORE_ROOT (so the spawn target is the shared
+ * agent-board-core under claude-code/). Stdio is silenced when --silent is
+ * passed so SessionStart stays quiet.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -31,9 +31,9 @@ if (!existsSync(TARGET) || !existsSync(CORE_ROOT)) {
   process.exit(2);
 }
 
-const silent = process.argv.includes("--silent");
+const silent: boolean = process.argv.includes("--silent");
 
-const args = [
+const args: string[] = [
   "--experimental-sqlite",
   "--experimental-strip-types",
   "--no-warnings",
