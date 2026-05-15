@@ -44,6 +44,5 @@ plugins/copilot/
     hook-runner.ts            — entry-point invoked by the dropped repo hook
   templates/
     agentboard.json.tmpl      — repo hook config; __HOOK_RUNNER__ placeholder substituted at install
-  agents/                     — reserved for future custom-agent markdown
   README.md
 ```
