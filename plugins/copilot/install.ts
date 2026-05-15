@@ -55,17 +55,26 @@ const SHARED_MCP: string = resolve(REPO_ROOT, "plugins", "claude-code", "mcp", "
 const STANZA_BEGIN = "<!-- agentboard:begin -->";
 const STANZA_END = "<!-- agentboard:end -->";
 
-function arg(name: string, def: string | boolean): string | boolean {
+/**
+ * Read a value-taking option like `--repo /path`. If the option is missing,
+ * or its next token is itself a flag (starts with "-"), or there is no next
+ * token, fall back to `def` instead of silently consuming a flag or the
+ * literal string "true".
+ */
+function optionString(name: string, def: string): string {
   const i = process.argv.indexOf(`--${name}`);
   if (i === -1) return def;
   const next = process.argv[i + 1];
-  // Treat anything starting with "-" (including "--" terminator and short
-  // options like "-x") as a separate flag, not a value for this option.
-  if (typeof next === "string" && !next.startsWith("-")) return next;
-  return true;
+  if (typeof next !== "string" || next.startsWith("-")) {
+    console.error(
+      `[!] --${name} requires a value; got "${next ?? "(end of args)"}". Falling back to default "${def}".`,
+    );
+    return def;
+  }
+  return next;
 }
 
-const targetRepo: string = resolve(String(arg("repo", process.cwd())));
+const targetRepo: string = resolve(optionString("repo", process.cwd()));
 const writeAgentsMd: boolean = !process.argv.includes("--no-agents-md");
 const dryRun: boolean = process.argv.includes("--dry-run");
 const copilotHome: string = process.env.COPILOT_HOME || join(homedir(), ".copilot");
@@ -120,22 +129,26 @@ try {
   if (!parseFailed) {
     const cur = cfg.mcpServers.agentboard;
     const argsArr: unknown[] = Array.isArray(cur?.args) ? cur.args : [];
-    // Already "up to date" if any arg slot points at SHARED_MCP — tolerant of
-    // leading flags (e.g. ["--experimental-strip-types", SHARED_MCP]) and of
-    // a non-"node" command the user may have chosen (bun, npx, absolute node path).
-    const sharedIdx = argsArr.findIndex((a) => a === SHARED_MCP);
-    const same = !!cur && sharedIdx !== -1;
+    // The "script path slot" is the first non-flag arg (leading "-" entries
+    // are Node flags like --experimental-strip-types). The entry is already
+    // up-to-date iff that slot equals SHARED_MCP.
+    const scriptIdx = argsArr.findIndex(
+      (a) => typeof a !== "string" || !a.startsWith("-"),
+    );
+    const same = !!cur && scriptIdx !== -1 && argsArr[scriptIdx] === SHARED_MCP;
     if (!same) {
-      // Preserve any leading flags the user had; if there were none, default
-      // to bare ["SHARED_MCP", ...tail]. Preserve user-chosen command.
+      // Replace only the script slot, preserving leading flags and trailing
+      // script-args. If there is no non-flag slot (e.g. args is empty or all
+      // flags), append SHARED_MCP after the flags.
       let nextArgs: unknown[];
-      if (sharedIdx !== -1) {
-        nextArgs = argsArr;
-      } else if (cur && argsArr.length > 0) {
-        // Replace whatever was at args[0] (legacy mcp path) but keep the rest.
-        nextArgs = [SHARED_MCP, ...argsArr.slice(1)];
+      if (scriptIdx === -1) {
+        nextArgs = [...argsArr, SHARED_MCP];
       } else {
-        nextArgs = [SHARED_MCP];
+        nextArgs = [
+          ...argsArr.slice(0, scriptIdx),
+          SHARED_MCP,
+          ...argsArr.slice(scriptIdx + 1),
+        ];
       }
       if (cur && cur.command !== "node") {
         console.log(

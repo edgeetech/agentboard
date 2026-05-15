@@ -28,17 +28,25 @@ function atomicWrite(path: string, contents: string): void {
   renameSync(tmp, path);
 }
 
-function arg(name: string, def: string | boolean): string | boolean {
+/**
+ * Read a value-taking option like `--repo /path`. If the option is missing,
+ * or its next token is itself a flag (starts with "-"), or there is no next
+ * token, fall back to `def` instead of silently consuming a flag.
+ */
+function optionString(name: string, def: string): string {
   const i = process.argv.indexOf(`--${name}`);
   if (i === -1) return def;
   const next = process.argv[i + 1];
-  // Treat anything starting with "-" (including "--" terminator and short
-  // options like "-x") as a separate flag, not a value for this option.
-  if (typeof next === "string" && !next.startsWith("-")) return next;
-  return true;
+  if (typeof next !== "string" || next.startsWith("-")) {
+    console.error(
+      `[!] --${name} requires a value; got "${next ?? "(end of args)"}". Falling back to default "${def}".`,
+    );
+    return def;
+  }
+  return next;
 }
 
-const targetRepo: string = resolve(String(arg("repo", process.cwd())));
+const targetRepo: string = resolve(optionString("repo", process.cwd()));
 const dryRun: boolean = process.argv.includes("--dry-run");
 const copilotHome: string = process.env.COPILOT_HOME || join(homedir(), ".copilot");
 const mcpConfigPath: string = join(copilotHome, "mcp-config.json");
@@ -51,20 +59,24 @@ console.log(`  COPILOT_HOME: ${copilotHome}`);
 console.log(`  dry-run     : ${dryRun}`);
 console.log("");
 
-let changed = 0;
+// Separate counters: `planned` covers everything that would be removed (used
+// for the dry-run summary), `applied` only increments after a real mutation.
+let planned = 0;
+let applied = 0;
 
 if (existsSync(mcpConfigPath)) {
   try {
     const cfg = JSON.parse(readFileSync(mcpConfigPath, "utf-8")) as MCPConfig;
     if (cfg?.mcpServers && (cfg.mcpServers as Record<string, unknown>).agentboard) {
+      planned++;
       if (dryRun) {
         console.log(`[dry-run] would remove agentboard from ${mcpConfigPath}`);
       } else {
         delete (cfg.mcpServers as Record<string, unknown>).agentboard;
         atomicWrite(mcpConfigPath, JSON.stringify(cfg, null, 2) + "\n");
         console.log(`[-] removed agentboard from ${mcpConfigPath}`);
+        applied++;
       }
-      changed++;
     }
   } catch (e) {
     console.error(`[!] could not edit ${mcpConfigPath}: ${(e as Error)?.message ?? e}`);
@@ -73,13 +85,14 @@ if (existsSync(mcpConfigPath)) {
 
 if (existsSync(repoHookFile)) {
   try {
+    planned++;
     if (dryRun) {
       console.log(`[dry-run] would delete ${repoHookFile}`);
     } else {
       unlinkSync(repoHookFile);
       console.log(`[-] deleted ${repoHookFile}`);
+      applied++;
     }
-    changed++;
   } catch (e) {
     console.error(`[!] could not delete ${repoHookFile}: ${(e as Error)?.message ?? e}`);
   }
@@ -90,20 +103,25 @@ if (existsSync(agentsMdPath)) {
     const body = readFileSync(agentsMdPath, "utf-8");
     const seam = stripAgentboardStanza(body);
     if (seam !== null) {
+      planned++;
       if (dryRun) {
         console.log(`[dry-run] would remove agentboard stanza from ${agentsMdPath}`);
       } else {
         atomicWrite(agentsMdPath, seam);
         console.log(`[-] removed agentboard stanza from ${agentsMdPath}`);
+        applied++;
       }
-      changed++;
     }
   } catch (e) {
     console.error(`[!] could not edit ${agentsMdPath}: ${(e as Error)?.message ?? e}`);
   }
 }
 
-console.log(changed > 0 ? `done — ${changed} change(s).` : "done — nothing to remove.");
+if (dryRun) {
+  console.log(planned > 0 ? `dry-run — ${planned} change(s) planned.` : "dry-run — nothing to remove.");
+} else {
+  console.log(applied > 0 ? `done — ${applied} change(s).` : "done — nothing to remove.");
+}
 
 /**
  * Returns the file contents with the agentboard stanza stripped, or null if
