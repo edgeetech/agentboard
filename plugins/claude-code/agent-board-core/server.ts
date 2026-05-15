@@ -82,7 +82,6 @@ const UI_DIST = new URL('./ui/dist/', import.meta.url);
 const PLUGIN_VERSION = process.env.AGENTBOARD_PLUGIN_VERSION ?? '0.1.0';
 
 const startedAt = Date.now();
-let lastApiHitMs = Date.now();
 
 interface ParsedArgs {
   port: number;
@@ -172,8 +171,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       json(res, 401, { error: 'unauthorized' });
       return;
     }
-
-    lastApiHitMs = Date.now();
 
     if (p === '/healthz') {
       const active = await getActiveDb();
@@ -279,13 +276,10 @@ server.once('error', onListenError);
 server.once('listening', onListening);
 server.listen(requestedPort, '127.0.0.1');
 
-// Idle shutdown: no API hit for 10 minutes → exit.
-setInterval((): void => {
-  const idleFor = Date.now() - lastApiHitMs;
-  if (idleFor < 10 * 60_000) return;
-  console.warn('[server] idle shutdown');
-  process.exit(0);
-}, 30_000).unref();
+// Server stays up until /agentboard:stop sends SIGTERM (or the plugin host
+// exits). Reaper still sweeps orphaned agent runs in the background. We
+// intentionally do NOT auto-exit on API inactivity — users expect the board
+// to be reachable any time the plugin is loaded.
 
 // ────────────── helpers ──────────────
 

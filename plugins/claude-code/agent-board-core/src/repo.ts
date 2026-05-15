@@ -303,13 +303,12 @@ export function createTask(
     const id = ulid();
     const now = isoNow();
 
-    // Determine initial status based on assignee_role
-    // - 'pm' stays 'todo' (PM enriches from todo)
-    // - 'worker' → 'agent_working' (Worker implements directly)
-    // - 'reviewer' → 'agent_review' (Reviewer reviews directly)
+    // Initial status reflects whether an agent is about to run.
+    // - 'pm' / 'worker' → 'agent_working' (agent is active)
+    // - 'reviewer' → 'agent_review'
     // - null or other → 'todo'
     let initialStatus: TaskStatus = 'todo';
-    if (assignee_role === 'worker') initialStatus = 'agent_working';
+    if (assignee_role === 'pm' || assignee_role === 'worker') initialStatus = 'agent_working';
     else if (assignee_role === 'reviewer') initialStatus = 'agent_review';
 
     db.prepare(`

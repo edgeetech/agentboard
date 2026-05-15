@@ -61,6 +61,33 @@ const DEFAULT_MAX_TURNS = parseInt(process.env.AGENTBOARD_MAX_TURNS ?? '60', 10)
 
 let started = false;
 
+// Tracks abort controllers for currently-executing runs so they can be cancelled
+// externally (e.g. via REST). Populated in tryClaimAndRun, cleaned up in finally.
+const ACTIVE_ABORTERS = new Map<string, AbortController>();
+
+export function cancelRun(db: DbHandle, runId: string): boolean {
+  const ctl = ACTIVE_ABORTERS.get(runId);
+  // Mark the row failed first so the catch/retry path in tryClaimAndRun
+  // sees status != 'running' and skips scheduleRetry.
+  const live = getRun(db, runId);
+  if (live && (live.status === 'running' || live.status === 'queued')) {
+    try {
+      finishRun(db, runId, 'failed', null, 'cancelled by user');
+    } catch {
+      /* ignore */
+    }
+  }
+  if (ctl) {
+    try {
+      ctl.abort();
+    } catch {
+      /* ignore */
+    }
+    return true;
+  }
+  return live !== undefined;
+}
+
 export function startExecutor({ port, serverToken }: ExecutorParams): void {
   if (started) return;
   started = true;
@@ -258,6 +285,7 @@ async function tryClaimAndRun(
   }
 
   const abortController = new AbortController();
+  ACTIVE_ABORTERS.set(run.id, abortController);
   const sessionLog = sessionLogger.createSessionLog(run.id);
 
   // Agent runs directly inside repo_path with full access to all files under
@@ -537,6 +565,7 @@ async function tryClaimAndRun(
       }
     }
   } finally {
+    ACTIVE_ABORTERS.delete(run.id);
     clearInterval(heartbeatTicker);
     sessionLogger.closeSessionLog(run.id);
     try {

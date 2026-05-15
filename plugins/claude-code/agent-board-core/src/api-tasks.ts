@@ -19,6 +19,7 @@ import {
   listRunsForTask,
   enqueueRun,
 } from './repo.ts';
+import { cancelRun } from './executor.ts';
 import type { TaskRow } from './repo.ts';
 import { isoNow } from './time.ts';
 import type { AgentProvider, AssigneeRole, RunRole, TaskStatus } from './types.ts';
@@ -214,6 +215,29 @@ async function handleRunAgent(
   return true;
 }
 
+function handleCancelRun(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  _url: URL,
+  _active: ProjectDb,
+  task: TaskRow,
+  db: DbHandle,
+): void {
+  const runs = listRunsForTask(db, task.id);
+  const active = runs.find((r) => r.status === 'running' || r.status === 'queued');
+  if (!active) {
+    json(res, 404, { error: 'no active run to cancel' });
+    return;
+  }
+  const ok = cancelRun(db, active.id);
+  if (!ok) {
+    json(res, 404, { error: 'run not found' });
+    return;
+  }
+  addComment(db, task.id, 'human', `CANCELLED: run ${active.id} (${active.role}) by user`);
+  json(res, 200, { ok: true, run_id: active.id });
+}
+
 function runIdSafe(): string {
   return Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
 }
@@ -377,6 +401,7 @@ const TASK_ROUTES: [string, MethodMap][] = [
   ['/api/tasks/:id/dispatch', { POST: handleDispatch as unknown as TaskHandler }],
   ['/api/tasks/:id/retry-from-worker', { POST: handleRetryFromWorker as unknown as TaskHandler }],
   ['/api/tasks/:id/run-agent', { POST: handleRunAgent }],
+  ['/api/tasks/:id/cancel-run', { POST: handleCancelRun as TaskHandler }],
   ['/api/tasks/:id/comments', { POST: handleAddComment }],
   ['/api/tasks/:id/cost', { GET: handleTaskCost as TaskHandler }],
   ['/api/tasks/:id/file-paths', { POST: handleAddFilePath }],

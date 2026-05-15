@@ -183,6 +183,11 @@ export const api = {
       `${taskBase()}/${encodeURIComponent(code)}/run-agent`,
       { role, ...(opts ?? {}) },
     ),
+  cancelRun: (code: string) =>
+    call<{ ok: boolean; run_id: string }>(
+      'POST',
+      `${taskBase()}/${encodeURIComponent(code)}/cancel-run`,
+    ),
   addComment: (code: string, body: string) =>
     call<{ comment: any }>('POST', `${taskBase()}/${encodeURIComponent(code)}/comments`, { body }),
   getTaskCost: (code: string) => call<any>('GET', `${taskBase()}/${encodeURIComponent(code)}/cost`),
