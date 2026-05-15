@@ -8,6 +8,7 @@ import { canTransition, allowedPrevStatuses } from './state-machine.ts';
 import { isoNow } from './time.ts';
 import type {
   ActorRole,
+  AgentProvider,
   AssigneeRole,
   Phase,
   RunRole,
@@ -28,6 +29,7 @@ export interface ProjectRow {
   repo_path: string;
   max_parallel: number;
   agent_provider: 'claude' | 'github_copilot' | 'codex';
+  agent_config_json: string | null;
   concerns_json: string;
   allow_git: number;
   scan_ignore_json: string;
@@ -53,6 +55,7 @@ export interface TaskRow {
   assignee_role: AssigneeRole | null;
   rework_count: number;
   agent_provider_override: 'claude' | 'github_copilot' | 'codex' | null;
+  agent_config_json: string | null;
   workspace_path: string | null;
   discovery_mode: 'full' | 'validate' | 'technical-depth' | 'ship-fast' | 'explore';
   prompt_template?: string | null;
@@ -69,6 +72,8 @@ export interface AgentRunRow {
   status: RunStatus;
   token: string | null;
   pid: number | null;
+  session_provider: AgentProvider | null;
+  session_id: string | null;
   claude_session_id: string | null;
   error: string | null;
   logs_path: string | null;
@@ -89,6 +94,11 @@ export interface AgentRunRow {
   phase: Phase;
   phase_state_json: string;
   phase_history_json: string;
+  parent_run_id: string | null;
+  member_index: number | null;
+  council_size: number | null;
+  session_provider_override: AgentProvider | null;
+  cost_breakdown_json: string;
 }
 
 export interface CommentRow {
@@ -139,6 +149,11 @@ export interface CostData {
   };
   cost_usd?: number;
   cost_version?: number;
+}
+
+export interface RunSessionRefInput {
+  provider: AgentProvider;
+  sessionId: string;
 }
 
 /* ─── HELPERS ───────────────────────────────────────────────────────────── */
@@ -208,7 +223,7 @@ export function updateProject(
   patch: ProjectPatch,
   expectedVersion: number,
 ): { ok: boolean; project?: ProjectRow; reason?: string } {
-  const allowed: (keyof Omit<ProjectRow, 'scan_ignore_json'>)[] = ['name', 'description', 'repo_path', 'max_parallel', 'agent_provider', 'deleted_at'];
+  const allowed: (keyof Omit<ProjectRow, 'scan_ignore_json'>)[] = ['name', 'description', 'repo_path', 'max_parallel', 'agent_provider', 'agent_config_json', 'deleted_at'];
   const sets: string[] = [];
   const args: unknown[] = [];
   for (const k of allowed) {
@@ -288,13 +303,12 @@ export function createTask(
     const id = ulid();
     const now = isoNow();
 
-    // Determine initial status based on assignee_role
-    // - 'pm' stays 'todo' (PM enriches from todo)
-    // - 'worker' → 'agent_working' (Worker implements directly)
-    // - 'reviewer' → 'agent_review' (Reviewer reviews directly)
+    // Initial status reflects whether an agent is about to run.
+    // - 'pm' / 'worker' → 'agent_working' (agent is active)
+    // - 'reviewer' → 'agent_review'
     // - null or other → 'todo'
     let initialStatus: TaskStatus = 'todo';
-    if (assignee_role === 'worker') initialStatus = 'agent_working';
+    if (assignee_role === 'pm' || assignee_role === 'worker') initialStatus = 'agent_working';
     else if (assignee_role === 'reviewer') initialStatus = 'agent_review';
 
     db.prepare(`
@@ -318,15 +332,51 @@ export function createTask(
 
 /**
  * Enqueue an agent run. Returns run ID.
+ * Optional opts support manual provider override and council member rows.
  */
-export function enqueueRun(db: DbHandle, task_id: string, role: RunRole): string {
+export interface EnqueueRunOpts {
+  session_provider_override?: AgentProvider | null;
+  parent_run_id?: string | null;
+  member_index?: number | null;
+  council_size?: number | null;
+}
+
+export function enqueueRun(
+  db: DbHandle,
+  task_id: string,
+  role: RunRole,
+  opts: EnqueueRunOpts = {},
+): string {
   const id = ulid();
   const now = isoNow();
   db.prepare(`
-    INSERT INTO agent_run(id, task_id, role, status, queued_at)
-    VALUES (?, ?, ?, 'queued', ?)
-  `).run(id, task_id, role, now);
+    INSERT INTO agent_run(
+      id, task_id, role, status, queued_at,
+      session_provider_override, parent_run_id, member_index, council_size
+    )
+    VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    task_id,
+    role,
+    now,
+    opts.session_provider_override ?? null,
+    opts.parent_run_id ?? null,
+    opts.member_index ?? null,
+    opts.council_size ?? null,
+  );
   return id;
+}
+
+export function getAgentRun(db: DbHandle, run_id: string): AgentRunRow | undefined {
+  const row = db.prepare(`SELECT * FROM agent_run WHERE id=?`).get(run_id);
+  if (row === undefined || row === null) return undefined;
+  return asRun(row);
+}
+
+export function listCouncilMembers(db: DbHandle, parent_run_id: string): AgentRunRow[] {
+  const rows = db.prepare(`SELECT * FROM agent_run WHERE parent_run_id=? ORDER BY member_index ASC`).all(parent_run_id);
+  return (rows as unknown[]).map(asRun);
 }
 
 /**
@@ -493,8 +543,10 @@ export function listQueuedRunsForProject(db: DbHandle): AgentRunRow[] {
 }
 
 export function runningCount(db: DbHandle): number {
+  // Council members spawned by a parent count as part of the parent — only
+  // top-level (parent_run_id IS NULL) running rows hit max_parallel.
   const row = db.prepare(`
-    SELECT COUNT(*) as cnt FROM agent_run WHERE status IN ('running')
+    SELECT COUNT(*) as cnt FROM agent_run WHERE status='running' AND parent_run_id IS NULL
   `).get() as { cnt: number } | undefined;
   return row?.cnt ?? 0;
 }
@@ -541,6 +593,14 @@ export function setRunCost(db: DbHandle, run_id: string, costData: CostData): vo
     cost_version ?? PRICING_VERSION,
     run_id,
   );
+}
+
+export function setRunSessionRef(db: DbHandle, run_id: string, session: RunSessionRefInput): void {
+  db.prepare(`
+    UPDATE agent_run
+    SET session_provider=?, session_id=?, claude_session_id=?
+    WHERE id=?
+  `).run(session.provider, session.sessionId, session.sessionId, run_id);
 }
 
 export function finishRun(

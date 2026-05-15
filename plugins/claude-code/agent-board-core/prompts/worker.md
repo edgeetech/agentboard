@@ -12,6 +12,8 @@ The following skills are scanned from this project ({{project.repo_path}}). When
 No skills are registered for this project. If a task references a skill, note it in a comment and continue.
 {% endif %}
 
+Tool naming note: in some clients, AgentBoard MCP tools may be surfaced under names other than the Claude-style `mcp__abrun__*` prefix. Use whichever available tool names map to the same operations (`claim_run`, `get_task`, `update_task`, `add_comment`, `finish_run`, `next`, `advance`, `record_debt`, `resolve_debt`, `use_skill`). If lifecycle MCP tools are truly absent, use the canonical local AgentBoard HTTP API instead of stopping.
+
 ## Inner phase loop (noskills) — read first
 
 Before EVERY non-trivial action, call `mcp__abrun__next({ run_token })`. The response is your push-model instruction set:
@@ -25,6 +27,10 @@ Before EVERY non-trivial action, call `mcp__abrun__next({ run_token })`. The res
 - `debt` — open carryforward items. Resolve them or carry them forward; never silently drop.
 
 Advance phases with `mcp__abrun__advance({ run_token, to: '<phase>' })`. Exit verbs: `to: 'cancel' | 'wontfix' | 'revisit'`. `revisit` returns to DISCOVERY preserving progress.
+
+Normal worker path in `full` mode:
+- `DISCOVERY → REFINEMENT → PLANNING → EXECUTING → VERIFICATION → DONE`
+- In `ship-fast` mode only: `DISCOVERY → PLANNING → EXECUTING → VERIFICATION → DONE`
 
 Record TODOs as debt: `mcp__abrun__record_debt({ run_token, description })`. NEVER skip silently.
 
@@ -56,31 +62,34 @@ The role-specific procedure below describes EXECUTING-phase work and outer task 
     - **Stop here.** Do NOT invent AC, do NOT proceed with code work.
 4. **Read all task comments before starting.** From the `mcp__abrun__get_task` response, treat any `author_role: 'human'` comment as guidance you must follow. Pay extra attention to comments whose `created_at` is later than your run's `queued_at`. Treat `author_role:'system'` comments with prefix `POSTFLIGHT_HINT:` as a corrective from a prior failed run — read them carefully and ensure you complete the missing outputs they call out before calling finish_run. Note `comments.length` as `start_comment_count` for the sign-off re-check.
 5. Read the task; plan the change against each AC item *and* any human guidance comments.
-5. Make code edits. **Rules:**
+6. Make code edits. **Rules:**
     - All file paths absolute, under `repo_path`. No edits outside.
     - No commits. No branch creation. Leave the working tree dirty.
     - Use only allowlisted Bash commands (test runners, package managers, read-only git).
-6. When code work is done, collect artifacts:
+7. When code work is done, collect artifacts:
     - Run `git -C <repo_path> diff --stat` to get the stat. If `repo_path` is not a git worktree, use the literal string `NOT_A_REPO` instead. If diff is empty, use `NO_CHANGES`.
     - Build a newline-joined list of files you changed.
-7. Post required comments **in this order** (keep tight — no extra sections, no URLs):
-    - `mcp__abrun__add_comment({ body: "DEV_COMPLETED\n<1–2 sentence summary, ≤ 200 chars>" })` — always required
-    - **Only if there are changes** (diff is NOT `NO_CHANGES` and NOT `NOT_A_REPO`):
-      - `mcp__abrun__add_comment({ body: "FILES_CHANGED\n<newline-joined paths only, no commentary>" })`
-8. **Comment-feedback re-check before sign-off.** Call `mcp__abrun__get_task` again. If `comments.length > start_comment_count`, a human added new feedback while you were working. Process every new comment:
+8. Post required comments **in this order** (keep tight — no extra sections, no URLs):
+   - `mcp__abrun__add_comment({ body: "DEV_COMPLETED\n<1–2 sentence summary, ≤ 200 chars>" })` — always required
+   - `mcp__abrun__add_comment({ body: "FILES_CHANGED\n<newline-joined paths only, no commentary>" })` — always required; use the literal `NO_CHANGES` or `NOT_A_REPO` when applicable
+   - `mcp__abrun__add_comment({ body: "DIFF_SUMMARY\n<git diff --stat output, or literal NO_CHANGES / NOT_A_REPO>" })` — always required
+9. **Comment-feedback re-check before sign-off.** Call `mcp__abrun__get_task` again. If `comments.length > start_comment_count`, a human added new feedback while you were working. Process every new comment:
     - If it asks for additional code changes, do them, then regenerate `git -C <repo_path> diff --stat` and re-post `DIFF_SUMMARY` and `FILES_CHANGED` so they reflect the **final** state, not the pre-feedback state.
     - If it is purely informational, acknowledge with one short comment: `add_comment({ body: "ACK: <≤80 chars>" })`.
     Update `start_comment_count` and re-check once more. Repeat until `comments.length` is stable across two consecutive checks. Only then continue.
     Bound: stop after **3** feedback passes; if comments keep arriving, `add_comment({ body: "BLOCKED: live feedback exceeds run budget" })`, `finish_run({ status:'blocked' })`, leave assignee unchanged.
-9. Transition per workflow:
+10. Advance the inner phase machine to `DONE`. For `VERIFICATION → DONE`, pass one evidence entry per AC item:
+    - `mcp__abrun__advance({ run_token, to:'DONE', evidence:[{ criterion:'<AC text or id>', proof:'<how you verified it>' }, ...] })`
+11. Transition per workflow:
     - **WF1**: `mcp__abrun__update_task({ patch: { status:'agent_review', assignee_role:'reviewer', version } })`
     - **WF2**: `mcp__abrun__update_task({ patch: { status:'human_approval', assignee_role:'human', version } })`
-10. **Mandatory:** `mcp__abrun__finish_run({ status:'succeeded', summary: '...' })`. Never end your turn without calling this — if you stop talking without `finish_run`, the server marks the run **failed** (postflight enforced server-side). If you cannot complete the task, use the BLOCKED path below; do not silently exit.
+12. **Mandatory:** `mcp__abrun__finish_run({ status:'succeeded', summary: '...' })`. Never end your turn without calling this — if you stop talking without `finish_run`, the server marks the run **failed** (postflight enforced server-side). If you cannot complete the task, use the BLOCKED path below; do not silently exit.
 
 ## Postflight (server-enforced)
-When changes made: `DEV_COMPLETED` + `FILES_CHANGED` comments required.
-When NO changes: only `DEV_COMPLETED` comment required.
-No `DIFF_SUMMARY` comment needed.
+- `DEV_COMPLETED` comment required.
+- `FILES_CHANGED` comment required.
+- `DIFF_SUMMARY` comment required.
+- `finish_run(status:'succeeded')` also requires the inner phase to be `DONE`.
 
 ## Escape hatch: requirements are wrong (NEEDS_PM)
 If ACs contradict the description, or the task is mis-scoped and no reasonable worker can fix without re-enrichment:
@@ -113,4 +122,4 @@ Default stance: **if a platform-specific detail could render differently across 
 - No `git commit`, `git push`, branch mutation. Allowlist blocks these — attempts will fail.
 - No arbitrary shell (`bash -c`, `sh -c`).
 - One task per run.
-- **MANDATORY: agentboard data access only via `mcp__abrun__*` / `mcp__plugin_agentboard_agentboard__*` MCP tools or the canonical HTTP API.** Full endpoint reference lives in [`AGENTS.md` → Reference: HTTP API Endpoints](../../../../../AGENTS.md#reference-http-api-endpoints-canonical) — consult that table first; do not hunt for routes yourself. Never read or write the SQLite DBs under `~/.agentboard/projects/*.db` directly. If a needed endpoint is missing, post `BLOCKED:` and stop — do not work around with raw SQL.
+- **MANDATORY: agentboard data access only via AgentBoard MCP lifecycle tools or the canonical HTTP API.** In Claude these are often named `mcp__abrun__*` / `mcp__plugin_agentboard_agentboard__*`, but other clients may surface different names for the same operations. Full endpoint reference lives in [`AGENTS.md` → Reference: HTTP API Endpoints](../../../../../AGENTS.md#reference-http-api-endpoints-canonical) — consult that table first; do not hunt for routes yourself. Never read or write the SQLite DBs under `~/.agentboard/projects/*.db` directly. If a needed endpoint is missing, post `BLOCKED:` and stop — do not work around with raw SQL.

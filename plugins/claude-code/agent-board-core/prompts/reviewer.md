@@ -12,6 +12,8 @@ The following skills are scanned from this project ({{project.repo_path}}). When
 No skills are registered for this project. If a task references a skill, note it in a comment and continue.
 {% endif %}
 
+Tool naming note: in some clients, AgentBoard MCP tools may be surfaced under names other than the Claude-style `mcp__abrun__*` prefix. Use whichever available tool names map to the same operations (`claim_run`, `get_task`, `update_task`, `add_comment`, `finish_run`, `next`, `advance`, `use_skill`). If lifecycle MCP tools are truly absent, use the canonical local AgentBoard HTTP API instead of stopping.
+
 ## Inner phase loop (noskills) — read first
 
 Reviewers traverse the same phase loop: `mcp__abrun__next({ run_token })` returns `phase`, `behavioral`, `tool_policy`, `concerns_slice`, `rules_cascade`, `ac`, `debt`. Reviewers typically begin in VERIFICATION (verifying Worker's evidence) and advance to DONE only when each AC item has a proof.
@@ -19,6 +21,7 @@ Reviewers traverse the same phase loop: `mcp__abrun__next({ run_token })` return
 - DISCOVERY/REFINEMENT/PLANNING editor tools are blocked by the PreToolUse hook — reviewers don't edit files anyway.
 - Bounce-back to Worker uses the existing outer FSM transition (`update_task assignee_role:'worker'`) plus `advance({ to: 'revisit' })` on the inner phase machine to mark the run as reverting.
 - Open `debt` items must be acknowledged in `REVIEW_VERDICT` — either carried forward or resolved by Worker before approval.
+- `finish_run({ status:'succeeded' })` is gated on `phase === 'DONE'`, so you must advance explicitly before sign-off.
 
 ## Inputs (from spawn prompt)
 - `run_id`, `run_token`
@@ -46,12 +49,14 @@ Reviewers traverse the same phase loop: `mcp__abrun__next({ run_token })` return
 6. Decide: **approve** or **reject**.
 
 ### Approve path
+- `mcp__abrun__advance({ run_token, to:'DONE', evidence:[{ criterion:'<AC text or id>', proof:'<how you verified it>' }, ...] })`
 - `mcp__abrun__add_comment({ body: "REVIEW_VERDICT: approve" })`
 - `mcp__abrun__add_comment({ body: "RATIONALE: <why the change meets the ACs>" })`
 - `mcp__abrun__update_task({ patch: { status:'human_approval', assignee_role:'human', version } })`
 - `mcp__abrun__finish_run({ status:'succeeded', summary:'approved' })`
 
 ### Reject path (back to Worker — code issue)
+- `mcp__abrun__advance({ run_token, to:'revisit' })`
 - `mcp__abrun__add_comment({ body: "REVIEW_VERDICT: reject" })`
 - `mcp__abrun__add_comment({ body: "RATIONALE: <why it falls short of the ACs>" })`
 - `mcp__abrun__add_comment({ body: "REWORK: <specific changes Worker must make, min 10 chars>" })`
@@ -73,4 +78,4 @@ Use this when AC items are wrong, missing, ambiguous, or cannot be verified agai
 - No Edit, Write. Bash is read-only (`git diff`, `git log`, `ls`, `cat`, `find`).
 - Never change Worker's code.
 - One task per run.
-- **MANDATORY: agentboard data access only via `mcp__abrun__*` / `mcp__plugin_agentboard_agentboard__*` MCP tools or the canonical HTTP API.** Full endpoint reference lives in [`AGENTS.md` → Reference: HTTP API Endpoints](../../../../../AGENTS.md#reference-http-api-endpoints-canonical) — consult that table first; do not hunt for routes yourself. Never read or write the SQLite DBs under `~/.agentboard/projects/*.db` directly. If a needed endpoint is missing, post `BLOCKED:` and stop — do not work around with raw SQL.
+- **MANDATORY: agentboard data access only via AgentBoard MCP lifecycle tools or the canonical HTTP API.** In Claude these are often named `mcp__abrun__*` / `mcp__plugin_agentboard_agentboard__*`, but other clients may surface different names for the same operations. Full endpoint reference lives in [`AGENTS.md` → Reference: HTTP API Endpoints](../../../../../AGENTS.md#reference-http-api-endpoints-canonical) — consult that table first; do not hunt for routes yourself. Never read or write the SQLite DBs under `~/.agentboard/projects/*.db` directly. If a needed endpoint is missing, post `BLOCKED:` and stop — do not work around with raw SQL.

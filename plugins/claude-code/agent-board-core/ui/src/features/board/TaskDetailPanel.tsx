@@ -37,7 +37,13 @@ export function TaskDetailPanel({
   const [tab, setTab] = useState<'files' | 'comments' | 'agent_runs'>('agent_runs');
   const [elapsedTimes, setElapsedTimes] = useState<Record<string, number>>({});
   const [runAgentRole, setRunAgentRole] = useState<'pm' | 'worker' | 'reviewer'>('worker');
+  const [runAgentProvider, setRunAgentProvider] = useState<
+    'default' | 'claude' | 'github_copilot' | 'codex' | 'council'
+  >('default');
   const [commentDraft, setCommentDraft] = useState('');
+  const [runPickerOpen, setRunPickerOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [phaseOpen, setPhaseOpen] = useState(false);
 
   const projectCode = getProjectCode();
   const q = useQuery({
@@ -80,9 +86,22 @@ export function TaskDetailPanel({
     onSuccess: () => { invalidate(); onClose?.(); },
   });
   const runAgent = useMutation({
-    mutationFn: (role: 'pm' | 'worker' | 'reviewer') => api.runAgent(taskCode, role),
+    mutationFn: (input: {
+      role: 'pm' | 'worker' | 'reviewer';
+      providerChoice: 'default' | 'claude' | 'github_copilot' | 'codex' | 'council';
+    }) => {
+      const opts: { provider?: 'claude' | 'github_copilot' | 'codex'; use_council?: boolean } = {};
+      if (input.providerChoice === 'council') opts.use_council = true;
+      else if (input.providerChoice !== 'default') opts.provider = input.providerChoice;
+      return api.runAgent(taskCode, input.role, opts);
+    },
     onSuccess: invalidate,
     onError: (err: any) => { alert(err?.message || 'Run agent failed'); },
+  });
+  const cancelRun = useMutation({
+    mutationFn: () => api.cancelRun(taskCode),
+    onSuccess: invalidate,
+    onError: (err: any) => { alert(err?.message || 'Cancel failed'); },
   });
   const addComment = useMutation({
     mutationFn: (body: string) => api.addComment(taskCode, body),
@@ -236,16 +255,7 @@ export function TaskDetailPanel({
 
         {tab === 'comments' && (
           <section role="tabpanel">
-            <ul className="comments">
-              {comments.map((c: any) => (
-                <li key={c.id} className={`comment author-${c.author_role}`}>
-                  <div className="author">{t(`role.${c.author_role}`)}</div>
-                  <pre>{c.body}</pre>
-                </li>
-              ))}
-              {comments.length === 0 && <li className="muted">(no comments yet)</li>}
-            </ul>
-            <div className="add-comment-row" style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div className="add-comment-row" style={{ marginBottom: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <textarea
                 value={commentDraft}
                 onChange={(e) => { setCommentDraft(e.target.value); }}
@@ -264,6 +274,15 @@ export function TaskDetailPanel({
                 </button>
               </div>
             </div>
+            <ul className="comments">
+              {[...comments].reverse().map((c: any) => (
+                <li key={c.id} className={`comment author-${c.author_role}`}>
+                  <div className="author">{t(`role.${c.author_role}`)}</div>
+                  <pre>{c.body}</pre>
+                </li>
+              ))}
+              {comments.length === 0 && <li className="muted">(no comments yet)</li>}
+            </ul>
           </section>
         )}
 
@@ -275,8 +294,17 @@ export function TaskDetailPanel({
               const latestId = latest?.id ?? null;
               return (
                 <>
-                  <PhaseTimeline runId={latestId} />
-                  <DebtList runId={latestId} />
+                  <details
+                    className="phase-collapsible"
+                    open={phaseOpen}
+                    onToggle={(e) => { setPhaseOpen((e.target as HTMLDetailsElement).open); }}
+                  >
+                    <summary className="phase-collapsible-summary">
+                      {t('task.phase_section', 'Phase & debt')}
+                    </summary>
+                    <PhaseTimeline runId={latestId} />
+                    <DebtList runId={latestId} />
+                  </details>
                 </>
               );
             })()}
@@ -289,10 +317,11 @@ export function TaskDetailPanel({
                     {run.status === 'running' && run.started_at && (
                       <span className="elapsed-time">⏱ {formatElapsed(elapsedTimes[run.id] ?? 0)}</span>
                     )}
-                    {run.claude_session_id && (
+                    {(run.session_id ?? run.claude_session_id) && (
                       <ResumeRunButton
-                        sessionId={run.claude_session_id}
+                        sessionId={run.session_id ?? run.claude_session_id}
                         repoPath={project?.repo_path}
+                        provider={run.session_provider ?? task?.agent_provider_override ?? project?.agent_provider ?? 'claude'}
                       />
                     )}
                   </div>
@@ -312,53 +341,163 @@ export function TaskDetailPanel({
         )}
       </div>
 
-      <footer className="detail-foot">
-        <div className="actions">
-          {task.status === 'human_approval' && (
-            <>
-              <button className="primary" onClick={() => { approve.mutate(); }}>{t('task.approve')}</button>
-              <button onClick={() => { setRejectOpen(true); }}>{t('task.reject')}</button>
-            </>
-          )}
-          {(() => {
-            const hasActiveRun = (agent_runs ?? []).some(
-              (r: any) => r.status === 'queued' || r.status === 'running'
-            );
-            return (
-              <span className="run-agent-group" style={{ display: 'inline-flex', gap: '0.25rem', alignItems: 'center' }}>
-                <select
-                  value={runAgentRole}
-                  onChange={(e) => { setRunAgentRole(e.target.value as 'pm' | 'worker' | 'reviewer'); }}
-                  disabled={runAgent.isPending || hasActiveRun}
-                  aria-label={t('task.run_agent_role', 'Agent role')}
-                >
-                  <option value="pm">{t('role.pm', 'PM')}</option>
-                  <option value="worker">{t('role.worker', 'Worker')}</option>
-                  <option value="reviewer">{t('role.reviewer', 'Reviewer')}</option>
-                </select>
+      {(() => {
+        const hasActiveRun = (agent_runs ?? []).some(
+          (r: any) => r.status === 'queued' || r.status === 'running'
+        );
+        const actions = (
+          <>
+            <div className="run-agent-wrap">
+              <button
+                type="button"
+                className="icon-btn icon-btn-lg action-run"
+                onClick={() => { setRunPickerOpen((v) => !v); }}
+                disabled={runAgent.isPending || hasActiveRun}
+                title={hasActiveRun ? t('task.run_agent_busy', 'Run already queued/active') : t('task.run_agent', 'Run Agent')}
+                aria-label={t('task.run_agent', 'Run Agent')}
+                aria-expanded={runPickerOpen}
+              >
+                <SvgIcon d="M5 3 L14 9 L5 15 Z" />
+              </button>
+              {runPickerOpen && (
+                <div className="run-picker-pop" role="dialog">
+                  <label className="run-picker-row">
+                    <span>{t('task.run_agent_role', 'Role')}</span>
+                    <select
+                      value={runAgentRole}
+                      onChange={(e) => { setRunAgentRole(e.target.value as 'pm' | 'worker' | 'reviewer'); }}
+                    >
+                      <option value="pm">{t('role.pm', 'PM')}</option>
+                      <option value="worker">{t('role.worker', 'Worker')}</option>
+                      <option value="reviewer">{t('role.reviewer', 'Reviewer')}</option>
+                    </select>
+                  </label>
+                  <label className="run-picker-row">
+                    <span>{t('task.run_agent_provider', 'Provider')}</span>
+                    <select
+                      value={runAgentProvider}
+                      onChange={(e) => {
+                        setRunAgentProvider(
+                          e.target.value as 'default' | 'claude' | 'github_copilot' | 'codex' | 'council',
+                        );
+                      }}
+                    >
+                      <option value="default">{t('task.run_agent_provider_default', 'Role default')}</option>
+                      <option value="claude">Claude</option>
+                      <option value="github_copilot">Copilot</option>
+                      <option value="codex">Codex</option>
+                      <option value="council">{t('task.run_agent_provider_council', 'Council')}</option>
+                    </select>
+                  </label>
+                  <div className="run-picker-actions">
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => { setRunPickerOpen(false); }}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => {
+                        runAgent.mutate({ role: runAgentRole, providerChoice: runAgentProvider });
+                        setRunPickerOpen(false);
+                      }}
+                      disabled={runAgent.isPending}
+                    >
+                      {t('task.run_agent', 'Run')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            {hasActiveRun && (
+              <button
+                type="button"
+                className="icon-btn icon-btn-lg action-cancel"
+                onClick={() => {
+                  if (confirm(t('task.confirm_cancel_run', { defaultValue: 'Cancel active agent run?' }))) {
+                    cancelRun.mutate();
+                  }
+                }}
+                disabled={cancelRun.isPending}
+                title={t('task.cancel_run', 'Cancel active agent')}
+                aria-label={t('task.cancel_run', 'Cancel active agent')}
+              >
+                <SvgIcon d="M5 5 H13 V13 H5 Z" />
+              </button>
+            )}
+            <CopyContextIconButton task={task} project={project} comments={comments} />
+            <div className="action-spacer" />
+            {task.status === 'human_approval' && (
+              <>
                 <button
                   type="button"
-                  onClick={() => { runAgent.mutate(runAgentRole); }}
-                  disabled={runAgent.isPending || hasActiveRun}
-                  title={hasActiveRun ? t('task.run_agent_busy', 'Run already queued/active') : ''}
+                  className="icon-btn icon-btn-lg action-approve"
+                  onClick={() => { approve.mutate(); }}
+                  title={t('task.approve')}
+                  aria-label={t('task.approve')}
                 >
-                  {t('task.run_agent', 'Run Agent')}
+                  <SvgIcon d="M3 9 L7 13 L15 4" />
                 </button>
-              </span>
-            );
-          })()}
-          <CopyContextButton task={task} project={project} comments={comments} />
-          <button
-            className="danger"
-            style={{ marginLeft: 'auto' }}
-            onClick={() => {
-              if (confirm(t('common.confirm_delete', { code: task.code }))) del.mutate();
-            }}
-          >
-            {t('common.delete')}
-          </button>
-        </div>
-      </footer>
+                <button
+                  type="button"
+                  className="icon-btn icon-btn-lg action-reject"
+                  onClick={() => { setRejectOpen(true); }}
+                  title={t('task.reject')}
+                  aria-label={t('task.reject')}
+                >
+                  <SvgIcon d="M4 4 L14 14 M14 4 L4 14" />
+                </button>
+              </>
+            )}
+            <div className="action-delete-wrap">
+              <button
+                type="button"
+                className="icon-btn icon-btn-lg action-delete"
+                onClick={() => { setDeleteConfirmOpen((v) => !v); }}
+                title={t('common.delete')}
+                aria-label={t('common.delete')}
+                aria-expanded={deleteConfirmOpen}
+              >
+                <SvgIcon d="M3 5 H15 M6 5 V3 A1 1 0 0 1 7 2 H11 A1 1 0 0 1 12 3 V5 M5 5 L6 15 A1 1 0 0 0 7 16 H11 A1 1 0 0 0 12 15 L13 5 M8 8 V13 M10 8 V13" />
+              </button>
+              {deleteConfirmOpen && (
+                <div className="pop-confirm" role="dialog">
+                  <p className="pop-confirm-msg">{t('common.confirm_delete', { code: task.code })}</p>
+                  <div className="pop-confirm-actions">
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => { setDeleteConfirmOpen(false); }}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => {
+                        del.mutate();
+                        setDeleteConfirmOpen(false);
+                      }}
+                    >
+                      {t('common.delete')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        );
+        return variant === 'drawer' ? (
+          <footer className="detail-foot">
+            <div className="actions compact">{actions}</div>
+          </footer>
+        ) : (
+          <div className="detail-form-actions compact">{actions}</div>
+        );
+      })()}
 
       {rejectOpen && (
         <div className="modal-overlay" onClick={() => { setRejectOpen(false); }}>
@@ -445,13 +584,23 @@ function RoleAvatar({ role, label }: { role: string; label: string }) {
 }
 
 function ResumeRunButton({
-  sessionId, repoPath,
-}: { sessionId: string; repoPath: string | null | undefined }) {
+  sessionId, repoPath, provider = 'claude',
+}: {
+  sessionId: string;
+  repoPath: string | null | undefined;
+  provider?: 'claude' | 'github_copilot' | 'codex' | null;
+}) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const bin =
+    provider === 'codex'
+      ? 'codex resume'
+      : provider === 'github_copilot'
+        ? 'gh copilot -- --resume='
+        : 'claude --resume';
   const cmd = repoPath
-    ? `cd "${repoPath}"; claude --resume ${sessionId}`
-    : `claude --resume ${sessionId}`;
+    ? `cd "${repoPath}"; ${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`
+    : `${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`;
   async function copy() {
     try {
       await navigator.clipboard.writeText(cmd);
@@ -473,7 +622,7 @@ function ResumeRunButton({
   );
 }
 
-function CopyContextButton({
+function CopyContextIconButton({
   task, project, comments,
 }: { task: any; project: any; comments: any[] }) {
   const { t } = useTranslation();
@@ -517,11 +666,15 @@ function CopyContextButton({
   return (
     <button
       type="button"
-      className="linkish"
+      className={`icon-btn icon-btn-lg action-copy${copied ? ' is-copied' : ''}`}
       onClick={copy}
-      title={t('task.copy_context_hint', 'Copies task context as markdown — paste into a fresh `claude` session.')}
+      title={copied ? t('common.copied', 'Copied') : t('task.copy_context', 'Copy context')}
+      aria-label={t('task.copy_context', 'Copy context')}
     >
-      {copied ? t('common.copied', 'Copied') : `⏎ ${t('task.copy_context', 'Copy context')}`}
+      {copied
+        ? <SvgIcon d="M3 9 L7 13 L15 4" />
+        : <SvgIcon d="M6 2 H11 L13 4 V11 H6 Z M4 5 V14 H11 M8 5 H11 M8 8 H11" />}
     </button>
   );
 }
+

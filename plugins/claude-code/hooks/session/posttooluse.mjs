@@ -17,10 +17,19 @@ try {
 
   const { SessionDB } = await import(pathToFileURL(join(HOOK_DIR, "session-db.bundle.mjs")).href);
   const { extractEvents } = await import(pathToFileURL(join(HOOK_DIR, "session-extract.bundle.mjs")).href);
+  const { resolveAttribution } = await import(pathToFileURL(join(HOOK_DIR, "project-attribution.ts")).href);
 
   const db = new SessionDB({ dbPath: getSessionDBPath() });
   const sessionId = getSessionId(input);
-  db.ensureSession(sessionId, getProjectDir());
+  // Resolve attribution per event so a tool call from a sub-shell (different
+  // cwd) is anchored to its own project_dir, not the parent session's.
+  const attribution = resolveAttribution({
+    input,
+    sessionOrigin: null,
+    lastSeen: null,
+    processCwd: getProjectDir(),
+  });
+  db.ensureSession(sessionId, attribution.projectDir);
 
   const events = extractEvents({
     tool_name: input.tool_name,

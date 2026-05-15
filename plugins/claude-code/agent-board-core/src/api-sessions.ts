@@ -274,12 +274,13 @@ async function loadAgentboardSessionMap(): Promise<Map<string, AgentboardEntry>>
       rows = db
         .prepare(
           `
-        SELECT r.claude_session_id AS sid, r.role AS role, t.code AS task_code,
-               COALESCE(t.agent_provider_override, p.agent_provider, 'claude') AS provider
+        SELECT COALESCE(r.session_id, r.claude_session_id) AS sid, r.role AS role, t.code AS task_code,
+               COALESCE(r.session_provider, t.agent_provider_override, p.agent_provider, 'claude') AS provider
         FROM agent_run r
         LEFT JOIN task t ON t.id = r.task_id
         LEFT JOIN project p ON p.id = t.project_id
-        WHERE r.claude_session_id IS NOT NULL AND r.claude_session_id != ''
+        WHERE COALESCE(r.session_id, r.claude_session_id) IS NOT NULL
+          AND COALESCE(r.session_id, r.claude_session_id) != ''
       `,
         )
         .all() as AgentboardRunRow[];

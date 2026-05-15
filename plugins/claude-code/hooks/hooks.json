@@ -4,7 +4,7 @@
       {
         "matcher": "startup",
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/ensure-server.mjs\" --silent" }
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CLAUDE_PLUGIN_ROOT}/bin/ensure-server.ts\" --silent" }
         ]
       },
       {
@@ -25,6 +25,13 @@
         "matcher": "Bash|Read|Write|Edit|Glob|Grep|TodoWrite|TaskCreate|Agent|AskUserQuestion|EnterWorktree|mcp__.*",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session/posttooluse.mjs\"" }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CLAUDE_PLUGIN_ROOT}/hooks/session/precompact.ts\"" }
         ]
       }
     ]

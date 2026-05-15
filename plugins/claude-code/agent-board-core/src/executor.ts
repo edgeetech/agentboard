@@ -1,22 +1,21 @@
 // Executor: drains queued runs, executes via Claude Agent SDK or Copilot CLI, reaps orphans.
 
 import { randomBytes, randomUUID } from 'node:crypto';
-import { appendFileSync, readFileSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync, statSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { TokenUsage } from './agent-runner.ts';
-import { AgentRunner } from './agent-runner.ts';
+import { parseAgentConfig, resolveRoleConfig } from './agent-config.ts';
 import { emitActivity } from './api-activity.ts';
-import { CodexRunner } from './codex-runner.ts';
-import { CopilotRunner } from './copilot-runner.ts';
+import { executeCouncilRun } from './council-runner.ts';
 import type { DbHandle } from './db.ts';
 import { agentboardBus } from './event-bus.ts';
 import { logPath } from './paths.ts';
-import { recordActivity } from './phase-repo.ts';
+import { recordActivity, setRunPhase } from './phase-repo.ts';
 import { checkPostflight } from './postflight.ts';
 import { computeCost } from './pricing.ts';
+import { maybeRegisterInteractiveHistory, providerFor } from './provider-registry.ts';
+import type { ProviderRuntimeContext, SdkMcpServer } from './provider-runtime.ts';
 import { getDb, listProjectDbs } from './project-registry.ts';
 import type { SkillContext } from './prompt-builder.ts';
 import { buildRolePrompt, renderSystemPrompt } from './prompt-builder.ts';
@@ -35,47 +34,17 @@ import {
   reapOrphans,
   runningCount,
   setRunCost,
+  setRunSessionRef,
 } from './repo.ts';
 import { scheduleRetry } from './retry-manager.ts';
 import { buildSdkHooks } from './run-hooks.ts';
 import { sessionLogger } from './session-logger.ts';
 import { listSkills } from './skill-repo.ts';
 import { Supervisor } from './supervisor.ts';
+import { isoNow } from './time.ts';
 import { allowlistFor } from './tool-allowlist.ts';
 import { inheritedUserMcpServers } from './user-mcps.ts';
 import { workspaceManager } from './workspace-manager.ts';
-
-/** SDK-style MCP server descriptor (http or stdio). */
-interface SdkMcpServer {
-  type?: string;
-  url?: string;
-  command?: string;
-  args?: unknown[];
-  env?: Record<string, string>;
-  cwd?: string;
-  headers?: Record<string, string>;
-  tools?: string[];
-  bearer_token_env_var?: string;
-}
-
-/** Combined runner options — superset of AgentRunner / CopilotRunner / CodexRunner options. */
-export interface RunnerOptions {
-  runId: string;
-  role: string;
-  prompt: string;
-  systemPrompt: string;
-  cwd: string;
-  maxTurns: number;
-  allowedTools: string;
-  mcpServers: Record<string, SdkMcpServer>;
-  hooks?: Record<string, unknown>;
-  abortController: AbortController;
-  rateLimiter: RateLimitTracker;
-  sessionLog: ReturnType<typeof sessionLogger.createSessionLog>;
-  serverToken: string;
-  serverPort: number;
-  onEvent: (eventName: string, detail: Record<string, unknown>) => void;
-}
 
 /** Parameters for startExecutor. */
 export interface ExecutorParams {
@@ -88,8 +57,36 @@ const rateLimiter = new RateLimitTracker();
 
 const REAPER_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_REAPER_TIMEOUT_MS ?? '120000', 10);
 const REAPER_SWEEP_MS = parseInt(process.env.AGENTBOARD_REAPER_SWEEP_MS ?? '60000', 10);
+const DEFAULT_MAX_TURNS = parseInt(process.env.AGENTBOARD_MAX_TURNS ?? '60', 10);
 
 let started = false;
+
+// Tracks abort controllers for currently-executing runs so they can be cancelled
+// externally (e.g. via REST). Populated in tryClaimAndRun, cleaned up in finally.
+const ACTIVE_ABORTERS = new Map<string, AbortController>();
+
+export function cancelRun(db: DbHandle, runId: string): boolean {
+  const ctl = ACTIVE_ABORTERS.get(runId);
+  // Mark the row failed first so the catch/retry path in tryClaimAndRun
+  // sees status != 'running' and skips scheduleRetry.
+  const live = getRun(db, runId);
+  if (live && (live.status === 'running' || live.status === 'queued')) {
+    try {
+      finishRun(db, runId, 'failed', null, 'cancelled by user');
+    } catch {
+      /* ignore */
+    }
+  }
+  if (ctl) {
+    try {
+      ctl.abort();
+    } catch {
+      /* ignore */
+    }
+    return true;
+  }
+  return live !== undefined;
+}
 
 export function startExecutor({ port, serverToken }: ExecutorParams): void {
   if (started) return;
@@ -175,10 +172,26 @@ async function tryClaimAndRun(
     return;
   }
 
-  // Resolve effective executor provider: task override > project default > 'claude'
-  const rawProvider: 'claude' | 'github_copilot' | 'codex' =
-    task.agent_provider_override ?? project.agent_provider;
-  const effectiveProvider = rawProvider;
+  // Resolve effective role config: per-role agent_config_json takes precedence,
+  // then legacy task.agent_provider_override / project.agent_provider, finally 'claude'.
+  // A run-level session_provider_override (set by manual dispatch with a specific
+  // provider pick) trumps everything for this single run.
+  const taskCfg = parseAgentConfig(task.agent_config_json);
+  const projectCfg = parseAgentConfig(project.agent_config_json);
+  const roleCfgResolved = resolveRoleConfig(run.role, {
+    taskConfig: taskCfg,
+    projectConfig: projectCfg,
+    legacyTaskOverride: task.agent_provider_override,
+    legacyProjectProvider: project.agent_provider,
+  });
+  const roleCfg = run.session_provider_override
+    ? { type: 'single' as const, provider: run.session_provider_override }
+    : roleCfgResolved;
+  const effectiveProvider: 'claude' | 'github_copilot' | 'codex' =
+    roleCfg.type === 'single'
+      ? roleCfg.provider
+      : (roleCfg.members[roleCfg.members.length - 1] as 'claude' | 'github_copilot' | 'codex');
+  const isCouncil = roleCfg.type === 'council';
 
   const run_token = randomBytes(24).toString('hex');
   const stdoutPath = logPath(run.id);
@@ -238,21 +251,41 @@ async function tryClaimAndRun(
     console.warn('[executor] claim lost for', run.id);
     return;
   }
-
-  if (effectiveProvider === 'claude') {
-    const claude_session_id = randomUUID();
-    db.prepare(`UPDATE agent_run SET claude_session_id=? WHERE id=?`).run(
-      claude_session_id,
-      run.id,
-    );
-    registerWithClaudeHistory({
-      sessionId: claude_session_id,
-      projectPath: project.repo_path,
-      display: `agentboard ${run.role} run — ${task.code}`,
+  if (run.role === 'reviewer') {
+    setRunPhase(db, run.id, {
+      phase: 'VERIFICATION',
+      appendHistoryEntry: {
+        from: 'DISCOVERY',
+        to: 'VERIFICATION',
+        by: 'reviewer',
+        at: isoNow(),
+      },
+    });
+  } else if (run.role === 'pm') {
+    setRunPhase(db, run.id, {
+      phase: 'REFINEMENT',
+      appendHistoryEntry: {
+        from: 'DISCOVERY',
+        to: 'REFINEMENT',
+        by: 'pm',
+        at: isoNow(),
+      },
     });
   }
 
+  if (!isCouncil && effectiveProvider === 'claude') {
+    const claude_session_id = randomUUID();
+    setRunSessionRef(db, run.id, { provider: 'claude', sessionId: claude_session_id });
+    maybeRegisterInteractiveHistory(
+      'claude',
+      claude_session_id,
+      project.repo_path,
+      `agentboard ${run.role} run — ${task.code}`,
+    );
+  }
+
   const abortController = new AbortController();
+  ACTIVE_ABORTERS.set(run.id, abortController);
   const sessionLog = sessionLogger.createSessionLog(run.id);
 
   // Agent runs directly inside repo_path with full access to all files under
@@ -289,8 +322,10 @@ async function tryClaimAndRun(
 
   // Build noskills PreToolUse hooks (Claude SDK shape). Reports every tool
   // attempt to abrun.record_tool, blocks per phase policy.
+  // Hooks only attach for single-claude runs; council members manage their own
+  // session lifetime per member.
   const sdkHooks =
-    effectiveProvider === 'claude'
+    !isCouncil && effectiveProvider === 'claude'
       ? buildSdkHooks({
           runToken: run_token,
           mcpUrl: `http://127.0.0.1:${port}/mcp`,
@@ -330,10 +365,7 @@ async function tryClaimAndRun(
       detail.subtype === 'init' &&
       typeof detail.session_id === 'string'
     ) {
-      db.prepare(`UPDATE agent_run SET claude_session_id=? WHERE id=?`).run(
-        detail.session_id,
-        run.id,
-      );
+      setRunSessionRef(db, run.id, { provider: 'claude', sessionId: detail.session_id });
     }
     // Forward rate-limit stall events to the bus
     if (eventName === 'run.rate-limited') {
@@ -341,16 +373,13 @@ async function tryClaimAndRun(
     }
   };
 
-  // Create appropriate runner based on effective provider
-  let runner: AgentRunner | CopilotRunner | CodexRunner;
-
-  const baseOpts: RunnerOptions = {
+  const baseOpts: ProviderRuntimeContext = {
     runId: run.id,
     role: run.role,
     prompt: promptBody,
     systemPrompt,
     cwd: workspacePath,
-    maxTurns: 10,
+    maxTurns: DEFAULT_MAX_TURNS,
     allowedTools: allowlistFor(run.role),
     mcpServers,
     ...(sdkHooks !== undefined ? { hooks: sdkHooks } : {}),
@@ -362,16 +391,37 @@ async function tryClaimAndRun(
     onEvent,
   };
 
-  if (effectiveProvider === 'github_copilot') {
-    runner = new CopilotRunner(baseOpts);
-  } else if (effectiveProvider === 'codex') {
-    runner = new CodexRunner(baseOpts);
-  } else {
-    runner = new AgentRunner(baseOpts);
-  }
-
   try {
-    const result = await runner.run();
+    const result = isCouncil
+      ? await executeCouncilRun(db, {
+          parentRunId: run.id,
+          taskId: task.id,
+          baseOpts,
+          config: roleCfg as Extract<typeof roleCfg, { type: 'council' }>,
+          buildMemberBasePrompt: (childId, childToken) =>
+            buildRolePrompt(
+              run.role,
+              task,
+              project,
+              childId,
+              childToken,
+              comments,
+              task.prompt_template ?? undefined,
+              skillsForPrompt,
+            ),
+        })
+      : await providerFor(effectiveProvider).run(baseOpts);
+
+    if (result.sessionRef !== null && result.sessionRef !== undefined) {
+      try {
+        setRunSessionRef(db, run.id, {
+          provider: result.sessionRef.provider,
+          sessionId: result.sessionRef.sessionId,
+        });
+      } catch (e) {
+        logErr(e);
+      }
+    }
 
     // Always record cost/usage when we have it — even if the run row was
     // already moved to 'failed' (e.g. by the reaper). Otherwise an orphaned
@@ -515,6 +565,7 @@ async function tryClaimAndRun(
       }
     }
   } finally {
+    ACTIVE_ABORTERS.delete(run.id);
     clearInterval(heartbeatTicker);
     sessionLogger.closeSessionLog(run.id);
     try {
@@ -545,43 +596,4 @@ function loadRolePromptBody(role: string): string {
 
 function logErr(e: unknown): void {
   console.error('[executor]', (e as Error | null)?.stack ?? e);
-}
-
-interface ClaudeHistoryEntry {
-  sessionId: string;
-  projectPath: string;
-  display: string;
-}
-
-/**
- * Register this run's session in Claude's interactive history index
- * (`~/.claude/history.jsonl`). Headless `-p` mode saves the session JSONL
- * but does NOT write a history entry, so `claude --resume <id>` reports
- * "No conversation found". Writing one line here makes the session
- * appear in the `/resume` picker and work with `--resume`.
- *
- * Best-effort: any error (file missing, permissions, etc.) is logged and
- * swallowed — the agent run itself already succeeded by this point.
- */
-function registerWithClaudeHistory({ sessionId, projectPath, display }: ClaudeHistoryEntry): void {
-  try {
-    // Claude stores project paths with OS-native separators. Normalize forward
-    // slashes back to backslashes on Windows so the picker groups this session
-    // under the right project.
-    const osPath = process.platform === 'win32' ? projectPath.replace(/\//g, '\\') : projectPath;
-    const entry =
-      JSON.stringify({
-        display,
-        pastedContents: {},
-        timestamp: Date.now(),
-        project: osPath,
-        sessionId,
-      }) + '\n';
-    appendFileSync(join(homedir(), '.claude', 'history.jsonl'), entry);
-  } catch (e) {
-    console.warn(
-      '[executor] could not register with claude history:',
-      (e as Error | null)?.message ?? String(e),
-    );
-  }
 }

@@ -21,10 +21,18 @@ const DATA_DIR: string = process.env['AGENTBOARD_DATA_DIR'] ?? join(homedir(), '
 const CFG_PATH: string = join(DATA_DIR, 'config.json');
 const LOCK_PATH: string = join(DATA_DIR, 'server.lock');
 
-const PLUGIN_ROOT: string = resolve(fileURLToPath(import.meta.url), '..', '..');
-const CORE_ROOT: string = resolve(PLUGIN_ROOT, 'agent-board-core');
+const SELF_PLUGIN_ROOT: string = resolve(fileURLToPath(import.meta.url), '..', '..');
+// Sibling plugins (codex, future copilot) share this server. They invoke this
+// bin with AGENTBOARD_PLUGIN_ROOT set to their own plugin root so /alive
+// reports their version, and optionally AGENTBOARD_CORE_ROOT if the
+// agent-board-core directory lives outside the invoking plugin root.
+const PLUGIN_ROOT: string = process.env['AGENTBOARD_PLUGIN_ROOT'] ?? SELF_PLUGIN_ROOT;
+const CORE_ROOT: string = process.env['AGENTBOARD_CORE_ROOT']
+  ?? resolve(SELF_PLUGIN_ROOT, 'agent-board-core');
 const SERVER_JS: string = join(CORE_ROOT, 'server.ts');
-const PLUGIN_JSON: Record<string, unknown> | null = readJsonSafe(join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json'));
+const PLUGIN_JSON: Record<string, unknown> | null =
+  readJsonSafe(join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json'))
+  ?? readJsonSafe(join(PLUGIN_ROOT, '.codex-plugin', 'plugin.json'));
 const PLUGIN_VERSION: string = (typeof PLUGIN_JSON?.['version'] === 'string' ? PLUGIN_JSON['version'] : null) ?? '0.1.0';
 
 const silent: boolean = process.argv.includes('--silent');

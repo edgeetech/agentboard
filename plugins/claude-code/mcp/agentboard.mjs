@@ -73,12 +73,14 @@ const TOOLS = [
   },
   {
     name: 'dispatch_task',
-    description: 'Manually (re-)dispatch a task role: pm|worker|reviewer.',
+    description: 'Manually (re-)dispatch a task role: pm|worker|reviewer. Optional `provider` forces a one-shot single-provider run for this dispatch; optional `use_council` forces the role\'s configured council. The two are mutually exclusive.',
     inputSchema: {
       type: 'object',
       properties: {
-        task_code: { type: 'string' },
-        role:      { type: 'string', enum: ['pm', 'worker', 'reviewer'] },
+        task_code:   { type: 'string' },
+        role:        { type: 'string', enum: ['pm', 'worker', 'reviewer'] },
+        provider:    { type: 'string', enum: ['claude', 'github_copilot', 'codex'] },
+        use_council: { type: 'boolean' },
       },
       required: ['task_code', 'role'],
     },
@@ -159,8 +161,12 @@ async function callTool(name, args) {
       return (await call('GET', `/api/tasks/${enc(args.task_code)}`)).runs;
     case 'server_status':
       return (await call('GET', '/healthz'));
-    case 'dispatch_task':
-      return (await call('POST', `/api/tasks/${enc(args.task_code)}/dispatch`, { role: args.role }));
+    case 'dispatch_task': {
+      const body = { role: args.role };
+      if (args.provider) body.provider = args.provider;
+      if (args.use_council) body.use_council = true;
+      return (await call('POST', `/api/tasks/${enc(args.task_code)}/run-agent`, body));
+    }
     case 'approve_task':
       return (await call('POST', `/api/tasks/${enc(args.task_code)}/transition`, {
         to_status: 'done', to_assignee: 'human', by_role: 'human',

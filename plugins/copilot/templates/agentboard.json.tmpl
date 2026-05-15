@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "node --experimental-strip-types --no-warnings '__HOOK_RUNNER__' --event sessionStart",
+        "powershell": "node --experimental-strip-types --no-warnings '__HOOK_RUNNER__' --event sessionStart",
+        "timeoutSec": 15
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "bash": "node --experimental-strip-types --no-warnings '__HOOK_RUNNER__' --event userPromptSubmitted",
+        "powershell": "node --experimental-strip-types --no-warnings '__HOOK_RUNNER__' --event userPromptSubmitted",
+        "timeoutSec": 10
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "node --experimental-strip-types --no-warnings '__HOOK_RUNNER__' --event postToolUse",
+        "powershell": "node --experimental-strip-types --no-warnings '__HOOK_RUNNER__' --event postToolUse",
+        "timeoutSec": 15
+      }
+    ]
+  }
+}

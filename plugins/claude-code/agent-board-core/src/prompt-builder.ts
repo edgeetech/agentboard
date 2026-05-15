@@ -159,7 +159,7 @@ ${acList.join('\n') || '(none yet)'}
 Recent comments:
 ${recent.join('\n') || '(none)'}
 
-Begin. Use mcp__abrun__* tools (list_queue, claim_run, get_task, update_task, add_comment, finish_run, add_heartbeat). Finish with finish_run.`;
+Begin. Use the AgentBoard run-lifecycle tools for claim_run/get_task/update_task/add_comment/finish_run/add_heartbeat, even if this client surfaces them under names other than mcp__abrun__*. Finish with finish_run.`;
 }
 
 /**

@@ -19,9 +19,12 @@ import {
   listRunsForTask,
   enqueueRun,
 } from './repo.ts';
+import { cancelRun } from './executor.ts';
 import type { TaskRow } from './repo.ts';
 import { isoNow } from './time.ts';
-import type { AssigneeRole, RunRole, TaskStatus } from './types.ts';
+import type { AgentProvider, AssigneeRole, RunRole, TaskStatus } from './types.ts';
+import { AGENT_PROVIDERS } from './types.ts';
+import { parseAgentConfig, resolveRoleConfig } from './agent-config.ts';
 
 const MIN_REJECT_COMMENT = 10;
 
@@ -139,15 +142,104 @@ async function handleRunAgent(
     );
   }
 
-  const runId = enqueueRun(db, task.id, role as RunRole);
+  // One-shot per-run provider override (forces single-provider for this run).
+  let providerOverride: AgentProvider | null = null;
+  if (typeof rawBody.provider === 'string' && rawBody.provider.length > 0) {
+    if (!(AGENT_PROVIDERS as readonly string[]).includes(rawBody.provider)) {
+      json(res, 400, { error: `provider must be one of ${AGENT_PROVIDERS.join(', ')}` });
+      return;
+    }
+    providerOverride = rawBody.provider as AgentProvider;
+  }
+
+  // use_council=true forces council using the resolved role config; if it
+  // doesn't resolve to a council, return 422.
+  const useCouncil = rawBody.use_council === true;
+  if (useCouncil) {
+    if (providerOverride) {
+      json(res, 400, { error: 'use_council and provider are mutually exclusive' });
+      return;
+    }
+    if (!project) {
+      json(res, 500, { error: 'project missing' });
+      return;
+    }
+    const taskCfg = parseAgentConfig(task.agent_config_json);
+    const projectCfg = parseAgentConfig(project.agent_config_json);
+    const resolved = resolveRoleConfig(role as RunRole, {
+      taskConfig: taskCfg,
+      projectConfig: projectCfg,
+      legacyTaskOverride: task.agent_provider_override,
+      legacyProjectProvider: project.agent_provider,
+    });
+    if (resolved.type !== 'council') {
+      json(res, 422, { error: `no council configured for role '${role}'` });
+      return;
+    }
+  }
+
+  // Manual dispatch reflects assignee/status immediately so the board
+  // doesn't lag behind the run. Skip state-machine to avoid double auto-dispatch.
+  const desiredStatus =
+    role === 'reviewer' ? 'agent_review' : role === 'worker' ? 'agent_working' : task.status;
+  const statusChanged = desiredStatus !== task.status;
+  const assigneeChanged = task.assignee_role !== role;
+  if (statusChanged || assigneeChanged) {
+    db.prepare(
+      `UPDATE task SET status=?, assignee_role=?, version=version+1, updated_at=? WHERE id=?`,
+    ).run(desiredStatus, role, isoNow(), task.id);
+    if (statusChanged) {
+      db.prepare(
+        `INSERT INTO task_history(id, task_id, from_status, to_status, by_role, at) VALUES (?, ?, ?, ?, 'human', ?)`,
+      ).run(`th_${runIdSafe()}`, task.id, task.status, desiredStatus, isoNow());
+    }
+  }
+
+  const runId = enqueueRun(db, task.id, role as RunRole, {
+    session_provider_override: providerOverride,
+  });
+  const tag = providerOverride
+    ? ` [provider: ${providerOverride}]`
+    : useCouncil
+      ? ' [council]'
+      : executor_override !== null
+        ? ` [executor: ${executor_override}]`
+        : '';
   addComment(
     db,
     task.id,
     'human',
-    `RUN_AGENT: manually dispatched ${role} (run ${runId})${executor_override !== null ? ` [executor: ${executor_override}]` : ''}`,
+    `RUN_AGENT: manually dispatched ${role} (run ${runId})${tag}`,
   );
   json(res, 201, { run_id: runId, role });
   return true;
+}
+
+function handleCancelRun(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  _url: URL,
+  _active: ProjectDb,
+  task: TaskRow,
+  db: DbHandle,
+): void {
+  const runs = listRunsForTask(db, task.id);
+  const active = runs.find((r) => r.status === 'running' || r.status === 'queued');
+  if (!active) {
+    json(res, 404, { error: 'no active run to cancel' });
+    return;
+  }
+  const ok = cancelRun(db, active.id);
+  if (!ok) {
+    json(res, 404, { error: 'run not found' });
+    return;
+  }
+  addComment(db, task.id, 'human', `CANCELLED: run ${active.id} (${active.role}) by user`);
+  json(res, 200, { ok: true, run_id: active.id });
+}
+
+function runIdSafe(): string {
+  return Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
 }
 
 function handleDeleteTask(
@@ -309,6 +401,7 @@ const TASK_ROUTES: [string, MethodMap][] = [
   ['/api/tasks/:id/dispatch', { POST: handleDispatch as unknown as TaskHandler }],
   ['/api/tasks/:id/retry-from-worker', { POST: handleRetryFromWorker as unknown as TaskHandler }],
   ['/api/tasks/:id/run-agent', { POST: handleRunAgent }],
+  ['/api/tasks/:id/cancel-run', { POST: handleCancelRun as TaskHandler }],
   ['/api/tasks/:id/comments', { POST: handleAddComment }],
   ['/api/tasks/:id/cost', { GET: handleTaskCost as TaskHandler }],
   ['/api/tasks/:id/file-paths', { POST: handleAddFilePath }],

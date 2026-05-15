@@ -294,10 +294,15 @@ function ResumeInline({
 }: { sessionId: string; repoPath: string | null | undefined; provider?: 'claude' | 'github_copilot' | 'codex' | null }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
-  const bin = provider === 'codex' ? 'codex resume' : 'claude --resume';
+  const bin =
+    provider === 'codex'
+      ? 'codex resume'
+      : provider === 'github_copilot'
+        ? 'gh copilot -- --resume='
+        : 'claude --resume';
   const cmd = repoPath
-    ? `cd "${repoPath}"; ${bin} ${sessionId}`
-    : `${bin} ${sessionId}`;
+    ? `cd "${repoPath}"; ${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`
+    : `${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`;
   return (
     <button
       type="button"

@@ -10,8 +10,9 @@ import { SearchIcon } from '../components/SearchIcon';
 import { useCurrentProject } from '../hooks/useCurrentProjectCode';
 import { useSkillScanEvents } from '../hooks/useSkillScanEvents';
 import { buildSkillsTree, collectExpandedBranchIds } from './skillsTree';
+import { SkillsDiagram } from './SkillsDiagram';
 
-type SkillsViewMode = 'flat' | 'tree';
+type SkillsViewMode = 'flat' | 'tree' | 'diagram';
 
 const VIEW_STORAGE_KEY = 'agentboard.skills.view';
 
@@ -21,7 +22,9 @@ function expandedStorageKey(projectCode: string | null): string {
 
 function loadViewMode(): SkillsViewMode {
   try {
-    return localStorage.getItem(VIEW_STORAGE_KEY) === 'tree' ? 'tree' : 'flat';
+    const v = localStorage.getItem(VIEW_STORAGE_KEY);
+    if (v === 'tree' || v === 'diagram' || v === 'flat') return v;
+    return 'flat';
   } catch {
     return 'flat';
   }
@@ -55,7 +58,7 @@ function TreeBranch(props: {
   branch: SkillTreeBranchNode;
   depth: number;
   isExpanded: (id: string, depth: number) => boolean;
-  onToggle: (id: string) => void;
+  onToggle: (id: string, currentOpen: boolean) => void;
 }) {
   const { branch, depth, isExpanded, onToggle } = props;
   const open = isExpanded(branch.id, depth);
@@ -65,8 +68,8 @@ function TreeBranch(props: {
         type="button"
         className="skills-tree-row skills-tree-branch"
         aria-expanded={open}
-        onClick={() => { onToggle(branch.id); }}
-        style={{ paddingLeft: `${0.85 + depth * 1.1}rem` }}
+        onClick={() => { onToggle(branch.id, open); }}
+        style={{ paddingLeft: `${0.55 + depth * 0.85}rem` }}
       >
         <span className={'skills-tree-caret' + (open ? ' open' : '')} aria-hidden>›</span>
         <span className="skills-tree-copy">
@@ -103,7 +106,7 @@ function TreeLeaf(props: { skill: ApiSkill; path: string; depth: number }) {
       <Link
         to={`/skills/${skill.id}`}
         className="skills-tree-row skills-tree-leaf"
-        style={{ paddingLeft: `${0.85 + depth * 1.1}rem` }}
+        style={{ paddingLeft: `${0.55 + depth * 0.85}rem` }}
       >
         <span className="skills-tree-emblem">{skill.emblem || '··'}</span>
         <span className="skills-tree-copy">
@@ -129,7 +132,7 @@ function TreeNode(props: {
   node: SkillTreeNode;
   depth: number;
   isExpanded: (id: string, depth: number) => boolean;
-  onToggle: (id: string) => void;
+  onToggle: (id: string, currentOpen: boolean) => void;
 }) {
   const { node, depth, isExpanded, onToggle } = props;
   return node.kind === 'branch'
@@ -221,8 +224,15 @@ export function SkillsPage() {
     [deferredSearch, tree],
   );
 
-  function toggleBranch(id: string) {
-    setExpanded((current) => ({ ...current, [id]: !(current[id] ?? false) }));
+  function toggleBranch(id: string, currentOpen: boolean) {
+    setExpanded((current) => ({ ...current, [id]: !currentOpen }));
+  }
+
+  function expandAll() {
+    setExpanded(Object.fromEntries([...collectExpandedBranchIds(tree)].map((id) => [id, true])));
+  }
+  function collapseAll() {
+    setExpanded(Object.fromEntries([...collectExpandedBranchIds(tree)].map((id) => [id, false])));
   }
 
   function isExpanded(id: string, depth: number): boolean {
@@ -260,7 +270,6 @@ export function SkillsPage() {
                 ? t('skills.scanning', 'Scanning… {{count}} found', { count: scanQ.data?.foundCount ?? 0 })
                 : t('skills.scan_btn', 'Rescan')}
             </button>
-            {/* TODO: implement tree view rendering — toggle stub only */}
             <div className="view-toggle" role="tablist" aria-label="View mode">
               <button
                 type="button"
@@ -280,7 +289,26 @@ export function SkillsPage() {
               >
                 {t('skills.view_tree', 'Tree')}
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === 'diagram'}
+                className={'ghost' + (view === 'diagram' ? ' active' : '')}
+                onClick={() => { setView('diagram'); }}
+              >
+                {t('skills.view_diagram', 'Diagram')}
+              </button>
             </div>
+            {view === 'tree' && (
+              <div className="tree-bulk-actions">
+                <button type="button" className="ghost small" onClick={expandAll}>
+                  {t('skills.expand_all', 'Expand all')}
+                </button>
+                <button type="button" className="ghost small" onClick={collapseAll}>
+                  {t('skills.collapse_all', 'Collapse all')}
+                </button>
+              </div>
+            )}
             {scanQ.data?.endedAt && (
               <span className="muted">
                 {t('skills.last_scan', 'Last scan: {{when}}', { when: relativeTime(scanQ.data.endedAt) })}
@@ -305,7 +333,9 @@ export function SkillsPage() {
           </p>
         </div>
       ) : (
-        view === 'tree' ? (
+        view === 'diagram' ? (
+          <SkillsDiagram tree={tree} />
+        ) : view === 'tree' ? (
           <div className="skills-tree" role="tree" aria-label={t('skills.title', 'Skills')}>
             <ul className="skills-tree-list">
               {tree.map((node) => (

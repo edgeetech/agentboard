@@ -26,6 +26,9 @@ const ROLES_DEFAULT: Role[] = [
   { id: 'human', name: 'Human', emblem: 'HU',
     description: 'You. Approves done work or rejects back to the worker with a comment.',
     skills: ['approve', 'reject'] },
+  { id: 'council', name: 'Council', emblem: 'CO',
+    description: 'Multi-agent persona — 2–5 ordered members, mixed providers, round-robin debate. Last member synthesises canonical output. Fail-fast on any member error.',
+    skills: ['debate', 'synthesise', 'multi-provider'] },
 ];
 
 const KEY_ROLES = 'ab.catalog.roles';

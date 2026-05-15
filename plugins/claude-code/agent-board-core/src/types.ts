@@ -30,4 +30,27 @@ export type RunRole = 'pm' | 'worker' | 'reviewer';
 export type WorkflowType = 'WF1' | 'WF2';
 export type AgentProvider = 'claude' | 'github_copilot' | 'codex';
 
+export const AGENT_PROVIDERS: readonly AgentProvider[] = ['claude', 'github_copilot', 'codex'] as const;
+
+export interface SingleRoleConfig {
+  type: 'single';
+  provider: AgentProvider;
+}
+
+export interface CouncilRoleConfig {
+  type: 'council';
+  members: AgentProvider[]; // 2..5, ordered; last = synthesizer
+}
+
+export type RoleConfig = SingleRoleConfig | CouncilRoleConfig;
+
+export interface AgentConfig {
+  pm?: RoleConfig | undefined;
+  worker?: RoleConfig | undefined;
+  reviewer?: RoleConfig | undefined;
+}
+
+export const COUNCIL_MIN = 2;
+export const COUNCIL_MAX = 5;
+
 export type ExitVerb = 'cancel' | 'wontfix' | 'revisit';

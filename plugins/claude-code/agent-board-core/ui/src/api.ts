@@ -173,11 +173,20 @@ export const api = {
     }>('GET', `/api/sessions/${encodeURIComponent(hash)}/events/${encodeURIComponent(sessionId)}`),
   deleteTask: (code: string) =>
     call<{ ok: boolean }>('DELETE', `${taskBase()}/${encodeURIComponent(code)}`),
-  runAgent: (code: string, role: 'pm' | 'worker' | 'reviewer') =>
+  runAgent: (
+    code: string,
+    role: 'pm' | 'worker' | 'reviewer',
+    opts?: { provider?: AgentProvider; use_council?: boolean },
+  ) =>
     call<{ run_id: string; role: string }>(
       'POST',
       `${taskBase()}/${encodeURIComponent(code)}/run-agent`,
-      { role },
+      { role, ...(opts ?? {}) },
+    ),
+  cancelRun: (code: string) =>
+    call<{ ok: boolean; run_id: string }>(
+      'POST',
+      `${taskBase()}/${encodeURIComponent(code)}/cancel-run`,
     ),
   addComment: (code: string, body: string) =>
     call<{ comment: any }>('POST', `${taskBase()}/${encodeURIComponent(code)}/comments`, { body }),
@@ -264,6 +273,21 @@ export interface SkillScanEvent {
   type: 'skill-scan:started' | 'skill-scan:finished' | 'skill-scan:latest';
   scan: ApiScan | null;
 }
+
+export type AgentProvider = 'claude' | 'github_copilot' | 'codex';
+
+export type RoleConfig =
+  | { type: 'single'; provider: AgentProvider }
+  | { type: 'council'; members: AgentProvider[] };
+
+export interface AgentConfig {
+  pm?: RoleConfig;
+  worker?: RoleConfig;
+  reviewer?: RoleConfig;
+}
+
+export const COUNCIL_MIN = 2;
+export const COUNCIL_MAX = 5;
 
 export type Phase = 'DISCOVERY' | 'REFINEMENT' | 'PLANNING' | 'EXECUTING' | 'VERIFICATION' | 'DONE';
 

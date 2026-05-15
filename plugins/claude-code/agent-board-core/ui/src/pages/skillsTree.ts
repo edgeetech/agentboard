@@ -96,15 +96,14 @@ function createBranch(id: string, label: string, path: string): MutableBranch {
 }
 
 function freezeBranch(branch: MutableBranch): SkillTreeBranchNode {
-  const children = [...branch.children.values()]
-    .map((child) => (child.kind === 'branch' ? freezeBranch(child) : child))
-    .toSorted((a, b) => {
-      if (a.kind !== b.kind) return a.kind === 'branch' ? -1 : 1;
-      if (a.kind === 'branch' && b.kind === 'branch') return compareLabel(a.label, b.label);
-      return compareLabel(a.label, b.label);
-    });
+  const children: SkillTreeNode[] = [...branch.children.values()]
+    .map((child) => (child.kind === 'branch' ? freezeBranch(child) : child));
+  children.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'branch' ? -1 : 1;
+    return compareLabel(a.label, b.label);
+  });
   const skillCount = children.reduce(
-    (count, child) => count + (child.kind === 'branch' ? child.skillCount : 1),
+    (count: number, child) => count + (child.kind === 'branch' ? child.skillCount : 1),
     0,
   );
   return {
@@ -153,9 +152,9 @@ export function buildSkillsTree(skills: SkillTreeSkill[]): SkillTreeBranchNode[]
     });
   }
 
-  return [...roots.values()]
-    .map((branch) => freezeBranch(branch))
-    .toSorted((a, b) => compareLabel(a.label, b.label));
+  const frozen = [...roots.values()].map((branch) => freezeBranch(branch));
+  frozen.sort((a, b) => compareLabel(a.label, b.label));
+  return frozen;
 }
 
 export function collectExpandedBranchIds(nodes: readonly SkillTreeNode[]): Set<string> {

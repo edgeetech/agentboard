@@ -1,0 +1,14 @@
+{
+  "name": "agentboard",
+  "version": "0.1.94",
+  "description": "Local agent management kanban: PM / Worker / Reviewer / Human workflow driven by headless agent runs (Claude / Codex / Copilot). Per-project SQLite + local UI.",
+  "author": {
+    "name": "edgeetech",
+    "url": "https://github.com/edgeetech/agentboard"
+  },
+  "homepage": "https://github.com/edgeetech/agentboard",
+  "license": "Elastic-2.0",
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/hooks.json",
+  "skills": "./skills"
+}

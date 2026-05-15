@@ -26,7 +26,7 @@ import {
   resolveDebt,
   setRunPhase,
 } from './phase-repo.ts';
-import { checkPhaseGate, checkPostflight, checkReassignAudit } from './postflight.ts';
+import { checkPhaseGate, checkPostflight, checkReassignAudit, isNonFinalCouncilMember } from './postflight.ts';
 import { getActiveDb, getDbForRunId, getDbForRunToken } from './project-registry.ts';
 import {
   addComment,
@@ -413,13 +413,15 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
         throw new Error('invalid finish status');
       }
       if (status === 'succeeded') {
-        const task = getTask(db, run.task_id);
-        const comments = listComments(db, run.task_id);
-        const err = checkPostflight(run.role, task ?? {}, comments);
-        if (err !== null) throw new Error(`postflight: ${err}`);
-        const phaseState = getRunPhaseState(db, run.id);
-        const phaseErr = checkPhaseGate(run.role, phaseState?.phase ?? null);
-        if (phaseErr !== null) throw new Error(`postflight: ${phaseErr}`);
+        if (!isNonFinalCouncilMember(run)) {
+          const task = getTask(db, run.task_id);
+          const comments = listComments(db, run.task_id);
+          const err = checkPostflight(run.role, task ?? {}, comments);
+          if (err !== null) throw new Error(`postflight: ${err}`);
+          const phaseState = getRunPhaseState(db, run.id);
+          const phaseErr = checkPhaseGate(run.role, phaseState?.phase ?? null);
+          if (phaseErr !== null) throw new Error(`postflight: ${phaseErr}`);
+        }
       }
       finishRunRow(
         db,

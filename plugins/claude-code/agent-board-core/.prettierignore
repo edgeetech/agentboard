@@ -63,9 +63,6 @@ package-lock.json
 README.md
 CLAUDE.md
 AGENTS.md
-sdk-test.mjs
-test-*.mjs
-check-runs.mjs
 plugins/**
 .claude-plugin/**
 

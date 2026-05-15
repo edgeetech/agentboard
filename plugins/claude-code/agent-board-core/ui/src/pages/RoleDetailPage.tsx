@@ -86,7 +86,7 @@ export function RoleDetailPage() {
       </div>
 
       <div className={'detail-with-aside' + (promptOpen ? '' : ' no-aside')}>
-      <form className="form-card" onSubmit={onSave}>
+      <form id="role-detail-form" className="form-card" onSubmit={onSave}>
         <div className="form-grid">
           <label>
             {t('roles.name', 'Name')}
@@ -126,18 +126,19 @@ export function RoleDetailPage() {
             </small>
           </div>
 
-          <div className="form-actions">
-            <button type="submit" className="primary" disabled={!dirty || !name.trim()}>
-              {t('common.save')}
-            </button>
-            {saved && <span className="muted" role="status">{saved}</span>}
-          </div>
           <small className="muted">
             {t('catalog.local_note', 'Stored locally in this browser until the server adds a catalog API.')}
           </small>
         </div>
       </form>
       {promptOpen && <PromptPanel kind="role" id={existing.id} onClose={() => { setPromptOpen(false); }} />}
+      </div>
+      {/* Fixed save bar — always visible at viewport bottom */}
+      <div className="detail-form-actions">
+        <button form="role-detail-form" type="submit" className="primary" disabled={!dirty || !name.trim()}>
+          {t('common.save')}
+        </button>
+        {saved && <span className="muted" role="status">{saved}</span>}
       </div>
     </>
   );

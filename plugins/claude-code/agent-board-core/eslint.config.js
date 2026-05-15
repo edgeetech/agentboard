@@ -26,13 +26,6 @@ export default tseslint.config(
       'lint-staged.config.js',
       'eslint.config.js',
       'vitest.config.ts',
-      // Dev-only scratch scripts — not part of tsconfig project service.
-      'sdk-test.ts',
-      'test-copilot-agent.ts',
-      'test-copilot-sdk.ts',
-      'test-copilot-sdk2.ts',
-      'test-e2e-copilot.ts',
-      'test-sdk.ts',
       // Pre-existing UI files predate this lint setup. Lint-staged picks up
       // edits as they happen; bulk-fixing untouched files is out of scope.
       'ui/src/App.tsx',

@@ -1,0 +1,33 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CODEX_PLUGIN_ROOT}/bin/ensure-server.ts\" --silent" }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CODEX_PLUGIN_ROOT}/hooks/session/sessionstart.ts\"" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CODEX_PLUGIN_ROOT}/hooks/session/userpromptsubmit.ts\"" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          { "type": "command", "command": "node --experimental-strip-types --no-warnings \"${CODEX_PLUGIN_ROOT}/hooks/session/posttooluse.ts\"" }
+        ]
+      }
+    ]
+  }
+}

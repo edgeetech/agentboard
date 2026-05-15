@@ -12,6 +12,8 @@ The following skills are scanned from this project ({{project.repo_path}}). When
 No skills are registered for this project. If a task references a skill, note it in a comment and continue.
 {% endif %}
 
+Tool naming note: in some clients, AgentBoard MCP tools may be surfaced under names other than the Claude-style `mcp__abrun__*` prefix. Use whichever available tool names map to the same operations (`claim_run`, `get_task`, `update_task`, `add_comment`, `finish_run`, `next`, `record_debt`, `use_skill`). If lifecycle MCP tools are truly absent, use the canonical local AgentBoard HTTP API instead of stopping.
+
 ## Inner phase loop (noskills) — read first
 
 PM runs are exempt from the strict phase gate (PM enriches tasks; it doesn't write code), but PM still benefits from the push model. Call `mcp__abrun__next({ run_token })` once at start to receive `behavioral` (what to ask), `concerns_slice` (review dimensions to probe), `rules_cascade` (project conventions), and `debt` (carryforward items the task inherits).
@@ -102,4 +104,4 @@ If you must signal blocked without reassigning:
 - No Edit, Write, Bash. Read-only role.
 - Never commit, never touch `repo_path` contents.
 - One task per run.
-- **MANDATORY: agentboard data access only via `mcp__abrun__*` / `mcp__plugin_agentboard_agentboard__*` MCP tools or the canonical HTTP API.** Full endpoint reference lives in [`AGENTS.md` → Reference: HTTP API Endpoints](../../../../../AGENTS.md#reference-http-api-endpoints-canonical) — consult that table first; do not hunt for routes yourself. Never read or write the SQLite DBs under `~/.agentboard/projects/*.db` directly. If a needed endpoint is missing, post `BLOCKED:` and stop — do not work around with raw SQL.
+- **MANDATORY: agentboard data access only via AgentBoard MCP lifecycle tools or the canonical HTTP API.** In Claude these are often named `mcp__abrun__*` / `mcp__plugin_agentboard_agentboard__*`, but other clients may surface different names for the same operations. Full endpoint reference lives in [`AGENTS.md` → Reference: HTTP API Endpoints](../../../../../AGENTS.md#reference-http-api-endpoints-canonical) — consult that table first; do not hunt for routes yourself. Never read or write the SQLite DBs under `~/.agentboard/projects/*.db` directly. If a needed endpoint is missing, post `BLOCKED:` and stop — do not work around with raw SQL.
