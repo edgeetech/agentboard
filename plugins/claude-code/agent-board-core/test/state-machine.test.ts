@@ -21,9 +21,9 @@ describe('StateMachine (CAS transitions)', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('invalid: pm cannot move agent_working → agent_review', () => {
+    it('valid: pm can move agent_working → agent_review (council/dispatch)', () => {
       const result = canTransition('WF1', 'agent_working', 'agent_review', 'reviewer', 'pm');
-      expect(result.ok).toBe(false);
+      expect(result.ok).toBe(true);
     });
 
     it('valid: reviewer can move agent_review → human_approval', () => {

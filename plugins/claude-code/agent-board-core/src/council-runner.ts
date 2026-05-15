@@ -3,9 +3,11 @@
 
 import { randomBytes } from 'node:crypto';
 
+import { providerLabel } from './agent-config.ts';
 import type { TokenUsage } from './agent-runner.ts';
 import type { DbHandle } from './db.ts';
 import { logPath } from './paths.ts';
+import { setRunPhase } from './phase-repo.ts';
 import { computeCost } from './pricing.ts';
 import { providerFor } from './provider-registry.ts';
 import type {
@@ -16,13 +18,14 @@ import {
   addComment,
   claimRun,
   finishRun,
+  getRun,
   setRunCost,
   setRunSessionRef,
 } from './repo.ts';
-import { ulid } from './ulid.ts';
+import { buildSdkHooks } from './run-hooks.ts';
 import { isoNow } from './time.ts';
 import type { AgentProvider, CouncilRoleConfig } from './types.ts';
-import { providerLabel } from './agent-config.ts';
+import { ulid } from './ulid.ts';
 
 export interface CouncilRunInput {
   parentRunId: string;
@@ -58,7 +61,7 @@ export async function executeCouncilRun(
 ): Promise<ProviderRuntimeResult> {
   const { parentRunId, taskId, baseOpts, config, buildMemberBasePrompt } = input;
   const N = config.members.length;
-  const debateOutputs: Array<{ provider: AgentProvider; summary: string }> = [];
+  const debateOutputs: { provider: AgentProvider; summary: string }[] = [];
   const breakdown: MemberCostSlice[] = [];
   let totalCost = 0;
   let aggregateUsage: TokenUsage = {
@@ -110,6 +113,30 @@ export async function executeCouncilRun(
       return abortCouncil(db, parentRunId, taskId, i, memberProvider, msg);
     }
 
+    // Mirror executor.ts: set initial phase per role on the child row so MCP
+    // next/advance see the correct starting phase for reviewer/pm members.
+    const initialPhase =
+      baseOpts.role === 'reviewer'
+        ? 'VERIFICATION'
+        : baseOpts.role === 'pm'
+          ? 'REFINEMENT'
+          : null;
+    if (initialPhase) {
+      try {
+        setRunPhase(db, childId, {
+          phase: initialPhase,
+          appendHistoryEntry: {
+            from: 'DISCOVERY',
+            to: initialPhase,
+            by: baseOpts.role,
+            at: isoNow(),
+          },
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+
     const memberBasePrompt = await buildMemberBasePrompt(childId, childToken);
     const augmentedPrompt = buildMemberPrompt({
       basePrompt: memberBasePrompt,
@@ -120,10 +147,29 @@ export async function executeCouncilRun(
       priors: debateOutputs,
     });
 
+    // Claude council members need their own PreToolUse sdkHooks bound to the
+    // child run_token so abrun.record_tool authenticates against the child
+    // row (parent baseOpts.hooks is intentionally unset by executor.ts for
+    // the council path).
+    const memberHooks =
+      memberProvider === 'claude'
+        ? buildSdkHooks({
+            runToken: childToken,
+            mcpUrl: `http://127.0.0.1:${baseOpts.serverPort}/mcp`,
+            serverToken: baseOpts.serverToken,
+          })
+        : undefined;
+
+    const baseOptsNoHooks: Omit<ProviderRuntimeContext, 'hooks'> = (() => {
+      const { hooks: _h, ...rest } = baseOpts;
+      void _h;
+      return rest;
+    })();
     const memberCtx: ProviderRuntimeContext = {
-      ...baseOpts,
+      ...baseOptsNoHooks,
       runId: childId,
       prompt: augmentedPrompt,
+      ...(memberHooks !== undefined ? { hooks: memberHooks } : {}),
     };
 
     let result: ProviderRuntimeResult;
@@ -207,7 +253,20 @@ export async function executeCouncilRun(
       );
     }
 
-    finishRun(db, childId, 'succeeded', null, null);
+    // Respect MCP finish_run if the member already finalized itself.
+    // For the synthesizer that ends naturally without calling finish_run,
+    // fail like executor's natural-end path so postflight/phase-gate aren't
+    // bypassed. Non-final members are instructed not to call finish_run,
+    // so auto-succeed them.
+    const live = getRun(db, childId);
+    if (live && (live.status === 'running' || live.status === 'queued')) {
+      if (isSynthesizer) {
+        const msg = 'synthesizer ended without calling finish_run (postflight gate)';
+        finishRun(db, childId, 'failed', null, msg);
+        return abortCouncil(db, parentRunId, taskId, i, memberProvider, msg);
+      }
+      finishRun(db, childId, 'succeeded', null, null);
+    }
 
     debateOutputs.push({
       provider: memberProvider,
@@ -284,7 +343,7 @@ interface BuildMemberPromptArgs {
   total: number;
   memberProvider: AgentProvider;
   isSynthesizer: boolean;
-  priors: Array<{ provider: AgentProvider; summary: string }>;
+  priors: { provider: AgentProvider; summary: string }[];
 }
 
 function buildMemberPrompt(args: BuildMemberPromptArgs): string {
