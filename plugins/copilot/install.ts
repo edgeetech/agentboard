@@ -50,15 +50,31 @@ const REPO_ROOT: string = resolve(HERE, "..", "..");
 const HOOK_RUNNER: string = resolve(PLUGIN_ROOT, "hooks", "session", "hook-runner.ts");
 const SHARED_MCP: string = resolve(REPO_ROOT, "plugins", "claude-code", "mcp", "agentboard.mjs");
 
-function arg(name: string, def: string | boolean): string | boolean {
+// Sentinels delimit the agentboard stanza in AGENTS.md so uninstall can
+// exact-match and remove it without depending on neighbouring heading levels.
+const STANZA_BEGIN = "<!-- agentboard:begin -->";
+const STANZA_END = "<!-- agentboard:end -->";
+
+/**
+ * Read a value-taking option like `--repo /path`. If the option is missing,
+ * or its next token is itself a flag (starts with "-"), or there is no next
+ * token, fall back to `def` instead of silently consuming a flag or the
+ * literal string "true".
+ */
+function optionString(name: string, def: string): string {
   const i = process.argv.indexOf(`--${name}`);
   if (i === -1) return def;
   const next = process.argv[i + 1];
-  if (typeof next === "string" && !next.startsWith("--")) return next;
-  return true;
+  if (typeof next !== "string" || next.startsWith("-")) {
+    console.error(
+      `[!] --${name} requires a value; got "${next ?? "(end of args)"}". Falling back to default "${def}".`,
+    );
+    return def;
+  }
+  return next;
 }
 
-const targetRepo: string = resolve(String(arg("repo", process.cwd())));
+const targetRepo: string = resolve(optionString("repo", process.cwd()));
 const writeAgentsMd: boolean = !process.argv.includes("--no-agents-md");
 const dryRun: boolean = process.argv.includes("--dry-run");
 const copilotHome: string = process.env.COPILOT_HOME || join(homedir(), ".copilot");
@@ -81,12 +97,19 @@ if (!existsSync(SHARED_MCP)) {
   );
   process.exit(1);
 }
+if (!existsSync(HOOK_RUNNER)) {
+  console.error(
+    `[!] cannot find hook runner at ${HOOK_RUNNER}. ` +
+      `Repo hook template would point at a missing file. Aborting.`,
+  );
+  process.exit(1);
+}
 
 let changed = 0;
 
 // 1. MCP config merge — best-effort; failures don't abort the rest.
 try {
-  mkdirSync(copilotHome, { recursive: true });
+  if (!dryRun) mkdirSync(copilotHome, { recursive: true });
   let cfg: MCPConfig = { mcpServers: {} };
   let parseFailed = false;
   if (existsSync(mcpConfigPath)) {
@@ -106,12 +129,36 @@ try {
   if (!parseFailed) {
     const cur = cfg.mcpServers.agentboard;
     const argsArr: unknown[] = Array.isArray(cur?.args) ? cur.args : [];
-    const same = !!cur && cur.command === "node" && argsArr[0] === SHARED_MCP;
+    // The "script path slot" is the first non-flag arg (leading "-" entries
+    // are Node flags like --experimental-strip-types). The entry is already
+    // up-to-date iff that slot equals SHARED_MCP.
+    const scriptIdx = argsArr.findIndex(
+      (a) => typeof a !== "string" || !a.startsWith("-"),
+    );
+    const same = !!cur && scriptIdx !== -1 && argsArr[scriptIdx] === SHARED_MCP;
     if (!same) {
+      // Replace only the script slot, preserving leading flags and trailing
+      // script-args. If there is no non-flag slot (e.g. args is empty or all
+      // flags), append SHARED_MCP after the flags.
+      let nextArgs: unknown[];
+      if (scriptIdx === -1) {
+        nextArgs = [...argsArr, SHARED_MCP];
+      } else {
+        nextArgs = [
+          ...argsArr.slice(0, scriptIdx),
+          SHARED_MCP,
+          ...argsArr.slice(scriptIdx + 1),
+        ];
+      }
+      if (cur && cur.command !== "node") {
+        console.log(
+          `[!] preserving user-modified command "${cur.command}" on existing agentboard entry`,
+        );
+      }
       cfg.mcpServers.agentboard = {
         ...(cur ?? { command: "node" }),
-        command: "node",
-        args: [SHARED_MCP, ...argsArr.slice(1)],
+        command: cur?.command ?? "node",
+        args: nextArgs,
       };
       const out = JSON.stringify(cfg, null, 2) + "\n";
       if (dryRun) {
@@ -131,7 +178,7 @@ try {
 
 // 2. Repo hook config drop
 try {
-  mkdirSync(repoHooksDir, { recursive: true });
+  if (!dryRun) mkdirSync(repoHooksDir, { recursive: true });
   const tmpl = readFileSync(join(PLUGIN_ROOT, "templates", "agentboard.json.tmpl"), "utf-8");
   const filled = tmpl.replaceAll("__HOOK_RUNNER__", HOOK_RUNNER.replace(/\\/g, "/"));
   if (existsSync(repoHookFile)) {
@@ -159,23 +206,31 @@ try {
 // 3. AGENTS.md appendix
 if (writeAgentsMd) {
   try {
-    const stanza = [
-      "",
+    const stanzaLines = [
+      STANZA_BEGIN,
       "## agentboard MCP",
       "",
       "This repo has an agentboard MCP server registered (`agentboard`).",
       "Use its tools to inspect and drive the local kanban board:",
       "`get_board`, `get_task`, `list_runs`, `dispatch_task`, `approve_task`,",
       "`reject_task`. The MCP server reads from `~/.agentboard/`.",
+      STANZA_END,
       "",
-    ].join("\n");
+    ];
     let body = "";
     if (existsSync(agentsMdPath)) body = readFileSync(agentsMdPath, "utf-8");
-    if (!body.includes("## agentboard MCP")) {
+    // Match either the new sentinel marker or the legacy heading so we don't
+    // double-append on top of a pre-sentinel install.
+    const alreadyInstalled = body.includes(STANZA_BEGIN) || body.includes("## agentboard MCP");
+    if (!alreadyInstalled) {
+      // Join order avoids leading blank line on fresh files: separator first,
+      // then the stanza body; on empty body the separator is dropped.
+      const separator = body.length === 0 ? "" : body.endsWith("\n") ? "\n" : "\n\n";
+      const out = body + separator + stanzaLines.join("\n");
       if (dryRun) {
         console.log(`[dry-run] would append agentboard stanza to ${agentsMdPath}`);
       } else {
-        atomicWrite(agentsMdPath, body + stanza);
+        atomicWrite(agentsMdPath, out);
         console.log(`[+] appended agentboard stanza to ${agentsMdPath}`);
         changed++;
       }
