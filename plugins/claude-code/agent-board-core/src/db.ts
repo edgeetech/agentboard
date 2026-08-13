@@ -287,6 +287,21 @@ const MIGRATIONS: Migration[] = [
   { sql: `INSERT INTO meta(key, value) VALUES ('schema_version', '6')
           ON CONFLICT(key) DO UPDATE SET value='6' WHERE meta.value < '6'`,
     why: 'bump schema_version to 6 for per-role agent config + council' },
+
+  // --- v7: tracker runtime status ---
+  { sql: `CREATE TABLE IF NOT EXISTS tracker_poll_state (
+    project_id TEXT PRIMARY KEY REFERENCES project(id),
+    last_poll_at TEXT,
+    last_success_at TEXT,
+    last_error TEXT,
+    last_issue_count INTEGER NOT NULL DEFAULT 0,
+    rate_limited INTEGER NOT NULL DEFAULT 0,
+    next_poll_at TEXT,
+    updated_at TEXT NOT NULL
+  )`, why: 'persist tracker poll status for API/UI health' },
+  { sql: `INSERT INTO meta(key, value) VALUES ('schema_version', '7')
+          ON CONFLICT(key) DO UPDATE SET value='7' WHERE meta.value < '7'`,
+    why: 'bump schema_version to 7 for tracker poll state' },
 ];
 
 function applyMigrations(db: DbHandle): void {
@@ -297,6 +312,96 @@ function applyMigrations(db: DbHandle): void {
   try { migrateTaskProviderOverrideCheck(db); } catch { /* ignore */ }
   try { migrateProjectScanIgnoreJson(db); } catch { /* ignore */ }
   try { migrateAgentConfigColumns(db); } catch (e) { console.warn('[db] v6 column migrate:', (e as Error).message); }
+  try { migrateTrackerTables(db); } catch (e) { console.warn('[db] tracker table migrate:', (e as Error).message); }
+}
+
+function tableColumns(db: DbHandle, table: string): string[] {
+  return (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+}
+
+function hasColumns(db: DbHandle, table: string, columns: string[]): boolean {
+  const present = new Set(tableColumns(db, table));
+  return columns.every((c) => present.has(c));
+}
+
+function migrateTrackerTables(db: DbHandle): void {
+  const requiredConfig = [
+    'id',
+    'project_id',
+    'kind',
+    'endpoint',
+    'api_key_env_var',
+    'project_slug',
+    'active_states',
+    'terminal_states',
+    'assignee',
+    'poll_interval_ms',
+    'enabled',
+    'created_at',
+    'updated_at',
+  ];
+
+  if (!hasColumns(db, 'tracker_config', requiredConfig)) {
+    db.exec('PRAGMA foreign_keys=OFF');
+    try {
+      try {
+        db.exec(`DROP TABLE IF EXISTS tracker_config_legacy_pre_v7`);
+        db.exec(`ALTER TABLE tracker_config RENAME TO tracker_config_legacy_pre_v7`);
+      } catch {
+        db.exec(`DROP TABLE IF EXISTS tracker_config`);
+      }
+      db.exec(`
+  CREATE TABLE IF NOT EXISTS tracker_config (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES project(id) UNIQUE,
+    kind TEXT NOT NULL CHECK (kind IN ('linear','github','gitlab')),
+    endpoint TEXT,
+    api_key_env_var TEXT NOT NULL,
+    project_slug TEXT NOT NULL,
+    active_states TEXT NOT NULL DEFAULT '["Todo","In Progress"]',
+    terminal_states TEXT NOT NULL DEFAULT '["Done","Cancelled","Canceled","Duplicate"]',
+    assignee TEXT,
+    poll_interval_ms INTEGER NOT NULL DEFAULT 30000,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
+    } finally {
+      db.exec('PRAGMA foreign_keys=ON');
+    }
+  }
+
+  db.exec(`
+CREATE TABLE IF NOT EXISTS tracker_issue (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES project(id),
+  task_id TEXT REFERENCES task(id),
+  tracker_kind TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  identifier TEXT NOT NULL,
+  title TEXT NOT NULL,
+  state TEXT NOT NULL,
+  url TEXT,
+  synced_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id, tracker_kind, external_id)
+)`);
+
+  db.exec(`
+CREATE TABLE IF NOT EXISTS tracker_poll_state (
+  project_id TEXT PRIMARY KEY REFERENCES project(id),
+  last_poll_at TEXT,
+  last_success_at TEXT,
+  last_error TEXT,
+  last_issue_count INTEGER NOT NULL DEFAULT 0,
+  rate_limited INTEGER NOT NULL DEFAULT 0,
+  next_poll_at TEXT,
+  updated_at TEXT NOT NULL
+)`);
+
+  if (!hasColumns(db, 'tracker_poll_state', ['rate_limited'])) {
+    db.exec(`ALTER TABLE tracker_poll_state ADD COLUMN rate_limited INTEGER NOT NULL DEFAULT 0`);
+  }
 }
 
 function migrateAgentConfigColumns(db: DbHandle): void {

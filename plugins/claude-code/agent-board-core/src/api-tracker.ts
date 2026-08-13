@@ -5,64 +5,139 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import { z } from 'zod';
+
 import type { DbHandle } from './db.ts';
 import { json, readJson } from './http-util.ts';
+import { validateCode } from './project-code.ts';
 import { getDb } from './project-registry.ts';
-import { getProject } from './repo.ts';
+import { getProject, type ProjectRow } from './repo.ts';
 import { isoNow } from './time.ts';
+import {
+  getTrackerConfig,
+  listTrackerIssues,
+  parseStringArray,
+  recordTrackerPollState,
+  syncTracker,
+  trackerStatus,
+  type TrackerConfigRow,
+} from './tracker-sync.ts';
 import { ulid } from './ulid.ts';
 
-// ── DB row types ─────────────────────────────────────────────────────────────
+const DEFAULT_ACTIVE_STATES = ['Todo', 'In Progress'];
+const DEFAULT_TERMINAL_STATES = ['Done', 'Cancelled', 'Canceled', 'Duplicate'];
 
-interface TrackerConfigRow {
-  id: string;
-  provider: string;
-  base_url: string | null;
-  project_key: string | null;
-  api_token: string | null;
-  enabled: number;
-  created_at: string;
-  updated_at: string;
+const TrackerConfigInput = z.object({
+  kind: z.enum(['linear', 'github', 'gitlab']).optional(),
+  endpoint: z.string().trim().min(1).max(500).optional().nullable(),
+  api_key_env_var: z.string().trim().min(1).max(200).optional(),
+  project_slug: z.string().trim().min(1).max(500).optional(),
+  active_states: z.array(z.string().trim().min(1).max(100)).min(1).max(50).optional(),
+  terminal_states: z.array(z.string().trim().min(1).max(100)).min(1).max(50).optional(),
+  assignee: z.string().trim().min(1).max(200).optional().nullable(),
+  poll_interval_ms: z.number().int().min(5_000).max(86_400_000).optional(),
+  enabled: z.boolean().optional(),
+});
+
+type TrackerConfigInputValue = z.infer<typeof TrackerConfigInput>;
+
+function serializeTracker(row: TrackerConfigRow | null): Record<string, unknown> | null {
+  if (row === null) return null;
+  return {
+    ...row,
+    active_states: parseStringArray(row.active_states, DEFAULT_ACTIVE_STATES),
+    terminal_states: parseStringArray(row.terminal_states, DEFAULT_TERMINAL_STATES),
+    enabled: row.enabled === 1,
+  };
 }
 
-interface TrackerIssueRow {
-  id: string;
-  task_id: string | null;
-  task_code: string | null;
-  task_status: string | null;
-  [key: string]: unknown;
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
-
-function getConfig(db: DbHandle): TrackerConfigRow | null {
-  try {
-    return db.prepare(`SELECT * FROM tracker_config LIMIT 1`).get() as TrackerConfigRow | null;
-  } catch {
-    return null;
+function writeTrackerConfig(
+  db: DbHandle,
+  project: ProjectRow,
+  input: TrackerConfigInputValue,
+): TrackerConfigRow {
+  const existing = getTrackerConfig(db, project.id);
+  const now = isoNow();
+  const kind = input.kind ?? existing?.kind;
+  const apiKeyEnvVar = input.api_key_env_var ?? existing?.api_key_env_var;
+  const projectSlug = input.project_slug ?? existing?.project_slug;
+  if (kind === undefined || apiKeyEnvVar === undefined || projectSlug === undefined) {
+    throw new Error('kind, api_key_env_var, and project_slug are required');
   }
-}
+  const endpoint = input.endpoint === undefined ? (existing?.endpoint ?? null) : input.endpoint;
+  const terminalStates = JSON.stringify(
+    input.terminal_states ?? parseStringArray(existing?.terminal_states, DEFAULT_TERMINAL_STATES),
+  );
+  const activeStates = JSON.stringify(
+    input.active_states ?? parseStringArray(existing?.active_states, DEFAULT_ACTIVE_STATES),
+  );
+  const assignee = input.assignee === undefined ? (existing?.assignee ?? null) : input.assignee;
+  const enabled = input.enabled === undefined ? (existing?.enabled ?? 0) : input.enabled ? 1 : 0;
 
-function getTrackerIssues(db: DbHandle): TrackerIssueRow[] {
-  try {
-    return db
-      .prepare(
-        `
-      SELECT ti.*, t.code AS task_code, t.status AS task_status
-      FROM tracker_issue ti
-      LEFT JOIN task t ON t.id = ti.task_id
-      ORDER BY ti.created_at DESC
-      LIMIT 100
+  if (existing) {
+    db.prepare(
+      `
+      UPDATE tracker_config
+      SET kind=?, endpoint=?, api_key_env_var=?, project_slug=?, active_states=?,
+          terminal_states=?, assignee=?, poll_interval_ms=?, enabled=?, updated_at=?
+      WHERE project_id=?
     `,
-      )
-      .all() as TrackerIssueRow[];
-  } catch {
-    return [];
+    ).run(
+      kind,
+      endpoint ?? null,
+      apiKeyEnvVar,
+      projectSlug,
+      activeStates,
+      terminalStates,
+      assignee ?? null,
+      input.poll_interval_ms ?? existing.poll_interval_ms,
+      enabled,
+      now,
+      project.id,
+    );
+  } else {
+    db.prepare(
+      `
+      INSERT INTO tracker_config(id, project_id, kind, endpoint, api_key_env_var, project_slug,
+                                 active_states, terminal_states, assignee, poll_interval_ms,
+                                 enabled, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    ).run(
+      ulid(),
+      project.id,
+      kind,
+      endpoint ?? null,
+      apiKeyEnvVar,
+      projectSlug,
+      activeStates,
+      terminalStates,
+      assignee ?? null,
+      input.poll_interval_ms ?? 30_000,
+      enabled,
+      now,
+      now,
+    );
   }
+
+  const cfg = getTrackerConfig(db, project.id);
+  if (!cfg) throw new Error('tracker config write failed');
+  return cfg;
+}
+
+function setEnabled(db: DbHandle, project: ProjectRow, enabled: boolean): TrackerConfigRow | null {
+  const cfg = getTrackerConfig(db, project.id);
+  if (!cfg) return null;
+  db.prepare(`UPDATE tracker_config SET enabled=?, updated_at=? WHERE project_id=?`).run(
+    enabled ? 1 : 0,
+    isoNow(),
+    project.id,
+  );
+  const next = getTrackerConfig(db, project.id);
+  if (enabled && next) {
+    recordTrackerPollState(db, project.id, { next_poll_at: new Date().toISOString() });
+  }
+  return next;
 }
 
 // ── Route handler ────────────────────────────────────────────────────────────
@@ -75,134 +150,95 @@ export async function handleTracker(
   const m = /^\/api\/projects\/([^/]+)\/tracker(\/[a-z]+)?$/.exec(url.pathname);
   if (!m) return null;
 
-  const code = String(m[1]);
+  const code = decodeURIComponent(String(m[1])).trim().toUpperCase();
+  const codeErr = validateCode(code);
+  if (codeErr !== null) {
+    json(res, 400, { error: codeErr });
+    return true;
+  }
   const sub = m[2];
   const db = await getDb(code).catch(() => null);
   if (!db) {
     json(res, 404, { error: 'project not found' });
-    return;
+    return true;
   }
   const project = getProject(db);
   if (!project) {
     json(res, 404, { error: 'project not found' });
-    return;
-  }
-
-  // GET /api/projects/{code}/tracker
-  if (req.method === 'GET' && sub === undefined) {
-    const cfg = getConfig(db);
-    json(res, 200, { tracker: cfg });
     return true;
   }
 
-  // POST /api/projects/{code}/tracker
+  if (req.method === 'GET' && sub === undefined) {
+    const cfg = getTrackerConfig(db, project.id);
+    json(res, 200, { tracker: serializeTracker(cfg), status: trackerStatus(db, project.id, cfg) });
+    return true;
+  }
+
   if (req.method === 'POST' && sub === undefined) {
     const body = await readJson(req);
-    if (!isRecord(body)) {
-      json(res, 400, { error: 'invalid body' });
-      return;
-    }
-    const { provider, base_url, project_key, api_token } = body;
-    if (typeof provider !== 'string' || !provider) {
-      json(res, 400, { error: 'provider required' });
-      return;
-    }
-    const existing = getConfig(db);
-    const now = isoNow();
-    if (existing) {
-      db.prepare(
-        `
-        UPDATE tracker_config SET provider=?, base_url=?, project_key=?, api_token=?, updated_at=?
-        WHERE id=?
-      `,
-      ).run(
-        provider,
-        typeof base_url === 'string' ? base_url : null,
-        typeof project_key === 'string' ? project_key : null,
-        typeof api_token === 'string' ? api_token : null,
-        now,
-        existing.id,
-      );
-      json(res, 200, { tracker: getConfig(db) });
+    const parsed = TrackerConfigInput.safeParse(body);
+    if (!parsed.success) {
+      json(res, 400, { error: parsed.error.issues[0]?.message ?? 'invalid body' });
       return true;
     }
-    const id = ulid();
-    db.prepare(
-      `
-      INSERT INTO tracker_config (id, provider, base_url, project_key, api_token, enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
-    `,
-    ).run(
-      id,
-      provider,
-      typeof base_url === 'string' ? base_url : null,
-      typeof project_key === 'string' ? project_key : null,
-      typeof api_token === 'string' ? api_token : null,
-      now,
-      now,
-    );
-    json(res, 201, { tracker: getConfig(db) });
-    return true;
-  }
-
-  // POST /api/projects/{code}/tracker/enable
-  if (req.method === 'POST' && sub === '/enable') {
-    const cfg = getConfig(db);
-    if (!cfg) {
-      json(res, 404, { error: 'no tracker configured' });
-      return;
-    }
-    db.prepare(`UPDATE tracker_config SET enabled=1, updated_at=? WHERE id=?`).run(
-      isoNow(),
-      cfg.id,
-    );
-    json(res, 200, { ok: true });
-    return true;
-  }
-
-  // POST /api/projects/{code}/tracker/disable
-  if (req.method === 'POST' && sub === '/disable') {
-    const cfg = getConfig(db);
-    if (!cfg) {
-      json(res, 404, { error: 'no tracker configured' });
-      return;
-    }
-    db.prepare(`UPDATE tracker_config SET enabled=0, updated_at=? WHERE id=?`).run(
-      isoNow(),
-      cfg.id,
-    );
-    json(res, 200, { ok: true });
-    return true;
-  }
-
-  // POST /api/projects/{code}/tracker/sync — force immediate poll
-  if (req.method === 'POST' && sub === '/sync') {
-    const cfg = getConfig(db);
-    if (!cfg) {
-      json(res, 404, { error: 'no tracker configured' });
-      return;
-    }
-    // Dynamic import avoids circular deps at startup. Types not yet available.
-    const trackerPath = './trackers/index.mjs';
-    const trackerMod = (await import(trackerPath)) as Record<string, unknown>;
-    const createTracker = trackerMod.createTracker as (c: TrackerConfigRow) => {
-      fetchCandidateIssues(): Promise<unknown[]>;
-    };
+    let cfg: TrackerConfigRow;
     try {
-      const tracker = createTracker(cfg);
-      const issues = await tracker.fetchCandidateIssues();
-      json(res, 200, { ok: true, issues_fetched: issues.length });
-      return true;
+      cfg = writeTrackerConfig(db, project, parsed.data);
     } catch (e) {
-      json(res, 400, { error: (e as Error).message });
-      return;
+      json(res, 400, { error: e instanceof Error ? e.message : String(e) });
+      return true;
     }
+    json(res, 200, {
+      tracker: serializeTracker(cfg),
+      status: trackerStatus(db, project.id, cfg),
+    });
+    return true;
   }
 
-  // GET /api/projects/{code}/tracker/issues
+  if (req.method === 'POST' && sub === '/enable') {
+    const cfg = setEnabled(db, project, true);
+    if (!cfg) {
+      json(res, 404, { error: 'no tracker configured' });
+      return true;
+    }
+    json(res, 200, {
+      ok: true,
+      tracker: serializeTracker(cfg),
+      status: trackerStatus(db, project.id, cfg),
+    });
+    return true;
+  }
+
+  if (req.method === 'POST' && sub === '/disable') {
+    const cfg = setEnabled(db, project, false);
+    if (!cfg) {
+      json(res, 404, { error: 'no tracker configured' });
+      return true;
+    }
+    json(res, 200, {
+      ok: true,
+      tracker: serializeTracker(cfg),
+      status: trackerStatus(db, project.id, cfg),
+    });
+    return true;
+  }
+
+  if (req.method === 'POST' && sub === '/sync') {
+    const cfg = getTrackerConfig(db, project.id);
+    if (!cfg) {
+      json(res, 404, { error: 'no tracker configured' });
+      return true;
+    }
+    const result = await syncTracker(db, code, cfg);
+    json(res, result.ok ? 200 : (result.status_code ?? 400), {
+      ...result,
+      status: trackerStatus(db, project.id, cfg),
+    });
+    return true;
+  }
+
   if (req.method === 'GET' && sub === '/issues') {
-    const issues = getTrackerIssues(db);
-    json(res, 200, { issues });
+    json(res, 200, { issues: listTrackerIssues(db, project.id) });
     return true;
   }
 
