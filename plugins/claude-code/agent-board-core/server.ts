@@ -52,7 +52,10 @@ try {
 }
 
 import { handleActivity } from './src/api-activity.ts';
+import { handleAudit } from './src/api-audit.ts';
 import { handleCosts } from './src/api-costs.ts';
+import { handleDoctor } from './src/api-doctor.ts';
+import { handleHealthSummary } from './src/api-health-summary.ts';
 import { handleLogs } from './src/api-logs.ts';
 import { handleMcp } from './src/api-mcp.ts';
 import { handleProjects } from './src/api-projects.ts';
@@ -196,6 +199,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
     // REST routers (first non-null handler wins)
     const handlers = [
+      handleDoctor,
+      handleAudit,
+      handleHealthSummary,
       handleProjects,
       handleTracker,
       handleTasks,

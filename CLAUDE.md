@@ -48,7 +48,7 @@ node plugins/claude-code/bin/ensure-server.ts
 # From inside Claude Code:
 /agentboard:open     # boot server + open UI
 /agentboard:stop     # SIGTERM the server
-/agentboard:doctor   # health checklist
+/agentboard:doctor   # health checklist; HTTP equivalents: /api/doctor and /api/projects/:code/doctor
 ```
 
 ### Test / iterate on a live run
@@ -103,6 +103,17 @@ On `finish_run(status='succeeded')` the server enforces role-specific required c
 - Reviewer: `REVIEW_VERDICT:` (approve|reject) + `RATIONALE:` + on reject `REWORK:` (min 10 chars).
 
 Assignee reassigns within `agent_working` also require a prefixed comment (`REWORK:` for reviewer→worker, `NEEDS_PM:` for worker→pm). Enforced in `update_task` before the CAS.
+
+Task audits can also be exported through `src/api-audit.ts` as JSON or Markdown. The export builder redacts credential-shaped keys and bearer/token-like strings before rendering. It deliberately excludes raw session DB/log exports in P0 because those are broader arbitrary user content.
+
+### Tracker, doctor, and health runtime
+
+- `src/api-tracker.ts` is schema-aligned with `tracker_config`; credentials are env-var names only, not stored secrets.
+- `src/tracker-sync.ts` is the shared manual/scheduled sync boundary. Keep task creation and tracker issue linking transactional and idempotent.
+- `src/tracker-poller.ts` reconciles enabled tracker configs repeatedly so trackers enabled after startup do not require a restart.
+- `src/doctor.ts` owns timeout-bounded setup checks. Failed CLI probes must return `unknown`, not break the whole request.
+- `src/api-health-summary.ts` is intentionally lightweight and must not execute provider CLI probes.
+- Tracker v7 rollback note: restore a pre-migration project DB backup and run the previous app version. The legacy tracker config table is backed up as `tracker_config_legacy_pre_v7` when the old token-storing shape is found.
 
 ### Executor lifecycle
 

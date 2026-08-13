@@ -113,7 +113,13 @@ function toScanStatus(s: string): ScanStatus {
 }
 
 function toScanTrigger(s: string): ScanTrigger {
-  if (s === 'project_created' || s === 'project_switched' || s === 'repo_path_changed' || s === 'manual') return s;
+  if (
+    s === 'project_created' ||
+    s === 'project_switched' ||
+    s === 'repo_path_changed' ||
+    s === 'manual'
+  )
+    return s;
   return 'manual';
 }
 
@@ -172,11 +178,7 @@ export function getSkill(db: DbHandle, id: string): SkillRow | null {
   return toSkillRow(row);
 }
 
-export function getSkillByName(
-  db: DbHandle,
-  projectCode: string,
-  name: string,
-): SkillRow | null {
+export function getSkillByName(db: DbHandle, projectCode: string, name: string): SkillRow | null {
   const row = db
     .prepare(
       `SELECT * FROM skill WHERE project_code=? AND LOWER(name)=LOWER(?) AND deleted_at IS NULL LIMIT 1`,
@@ -235,8 +237,7 @@ export function upsertSkillIndex(
         continue;
       }
       const tagsEq =
-        existing.tags.length === s.tags.length &&
-        existing.tags.every((t, i) => t === s.tags[i]);
+        existing.tags.length === s.tags.length && existing.tags.every((t, i) => t === s.tags[i]);
       const allowedEq =
         existing.allowedTools.length === s.allowedTools.length &&
         existing.allowedTools.every((t, i) => t === s.allowedTools[i]);
@@ -348,9 +349,7 @@ export function getScan(db: DbHandle, id: string): ScanRow | null {
 
 export function latestScan(db: DbHandle, projectCode: string): ScanRow | null {
   const row = db
-    .prepare(
-      `SELECT * FROM skill_scan WHERE project_code=? ORDER BY created_at DESC LIMIT 1`,
-    )
+    .prepare(`SELECT * FROM skill_scan WHERE project_code=? ORDER BY created_at DESC LIMIT 1`)
     .get(projectCode);
   if (row === null || row === undefined) return null;
   return toScanRow(row);

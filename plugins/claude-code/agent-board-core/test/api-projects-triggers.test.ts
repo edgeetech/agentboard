@@ -6,16 +6,9 @@
 
 import { describe, expect, it, beforeEach } from 'vitest';
 
-import {
-  normalizeScanIgnore,
-  shouldSkipSwitchScan,
-} from '../src/api-projects.ts';
+import { normalizeScanIgnore, shouldSkipSwitchScan } from '../src/api-projects.ts';
 import type { DbHandle } from '../src/db.ts';
-import {
-  latestScan,
-  recordScan,
-  updateScan,
-} from '../src/skill-repo.ts';
+import { latestScan, recordScan, updateScan } from '../src/skill-repo.ts';
 
 const PROJECT_CODE = 'TST';
 

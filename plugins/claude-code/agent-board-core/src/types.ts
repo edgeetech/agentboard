@@ -30,7 +30,11 @@ export type RunRole = 'pm' | 'worker' | 'reviewer';
 export type WorkflowType = 'WF1' | 'WF2';
 export type AgentProvider = 'claude' | 'github_copilot' | 'codex';
 
-export const AGENT_PROVIDERS: readonly AgentProvider[] = ['claude', 'github_copilot', 'codex'] as const;
+export const AGENT_PROVIDERS: readonly AgentProvider[] = [
+  'claude',
+  'github_copilot',
+  'codex',
+] as const;
 
 export interface SingleRoleConfig {
   type: 'single';

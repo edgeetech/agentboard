@@ -10,18 +10,8 @@ import { logPath } from './paths.ts';
 import { setRunPhase } from './phase-repo.ts';
 import { computeCost } from './pricing.ts';
 import { providerFor } from './provider-registry.ts';
-import type {
-  ProviderRuntimeContext,
-  ProviderRuntimeResult,
-} from './provider-runtime.ts';
-import {
-  addComment,
-  claimRun,
-  finishRun,
-  getRun,
-  setRunCost,
-  setRunSessionRef,
-} from './repo.ts';
+import type { ProviderRuntimeContext, ProviderRuntimeResult } from './provider-runtime.ts';
+import { addComment, claimRun, finishRun, getRun, setRunCost, setRunSessionRef } from './repo.ts';
 import { buildSdkHooks } from './run-hooks.ts';
 import { isoNow } from './time.ts';
 import type { AgentProvider, CouncilRoleConfig } from './types.ts';
@@ -85,7 +75,8 @@ export async function executeCouncilRun(
   }
 
   for (let i = 0; i < N; i++) {
-    const memberProvider = config.members[i] as AgentProvider;
+    const memberProvider = config.members[i];
+    if (memberProvider === undefined) throw new Error(`missing council member at index ${i}`);
     const isSynthesizer = i === N - 1;
 
     // Insert child row directly. We won't go through enqueue/drain — council
@@ -116,11 +107,7 @@ export async function executeCouncilRun(
     // Mirror executor.ts: set initial phase per role on the child row so MCP
     // next/advance see the correct starting phase for reviewer/pm members.
     const initialPhase =
-      baseOpts.role === 'reviewer'
-        ? 'VERIFICATION'
-        : baseOpts.role === 'pm'
-          ? 'REFINEMENT'
-          : null;
+      baseOpts.role === 'reviewer' ? 'VERIFICATION' : baseOpts.role === 'pm' ? 'REFINEMENT' : null;
     if (initialPhase) {
       try {
         setRunPhase(db, childId, {
@@ -230,8 +217,7 @@ export async function executeCouncilRun(
     aggregateUsage = {
       input_tokens: aggregateUsage.input_tokens + usage.input_tokens,
       output_tokens: aggregateUsage.output_tokens + usage.output_tokens,
-      cache_creation_tokens:
-        aggregateUsage.cache_creation_tokens + usage.cache_creation_tokens,
+      cache_creation_tokens: aggregateUsage.cache_creation_tokens + usage.cache_creation_tokens,
       cache_read_tokens: aggregateUsage.cache_read_tokens + usage.cache_read_tokens,
     };
 
@@ -297,7 +283,8 @@ export async function executeCouncilRun(
     totalCostUsd: totalCost,
   };
   try {
-    const synthesizer = config.members[N - 1] as AgentProvider;
+    const synthesizer = config.members[N - 1];
+    if (synthesizer === undefined) throw new Error('missing council synthesizer');
     addComment(
       db,
       taskId,
@@ -362,8 +349,7 @@ function buildMemberPrompt(args: BuildMemberPromptArgs): string {
       `\n\n## Prior Council Debate\n\n` +
       priors
         .map(
-          (p, idx) =>
-            `### Member ${idx + 1}/${total} — ${providerLabel(p.provider)}\n${p.summary}`,
+          (p, idx) => `### Member ${idx + 1}/${total} — ${providerLabel(p.provider)}\n${p.summary}`,
         )
         .join('\n\n') +
       `\n\nFull comments from prior members are visible in the task comment history; read them for full context.`;

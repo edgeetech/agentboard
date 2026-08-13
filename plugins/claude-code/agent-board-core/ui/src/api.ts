@@ -39,6 +39,19 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   if (!res.ok) throw new Error(json?.error || text || `HTTP ${res.status}`);
   return json as T;
 }
+
+async function raw(method: string, path: string): Promise<Blob> {
+  const res = await fetch(path, {
+    method,
+    headers: { Authorization: `Bearer ${token()}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    const parsed = text ? safeJson(text) : null;
+    throw new Error(parsed?.error || text || `HTTP ${res.status}`);
+  }
+  return res.blob();
+}
 function safeJson(s: string) {
   try {
     return JSON.parse(s);
@@ -50,6 +63,9 @@ function safeJson(s: string) {
 export const api = {
   alive: () => fetch('/alive').then((r) => r.json()),
   healthz: () => call<any>('GET', '/healthz'),
+  doctor: () => call<DoctorResult>('GET', '/api/doctor'),
+  projectDoctor: (code: string) =>
+    call<DoctorResult>('GET', `/api/projects/${encodeURIComponent(code)}/doctor`),
   listProjects: () => call<{ projects: any[] }>('GET', '/api/projects/list'),
   activeProject: () => call<{ project: any | null }>('GET', '/api/projects/active'),
   selectActiveProject: (code: string) =>
@@ -194,6 +210,39 @@ export const api = {
   getBoardCost: () => call<any>('GET', `${boardBase()}/cost`),
   projectCostsTotal: (code: string) =>
     call<any>('GET', `/api/projects/${encodeURIComponent(code)}/costs/total`),
+  projectHealthSummary: (code: string) =>
+    call<HealthSummary>('GET', `/api/projects/${encodeURIComponent(code)}/health-summary`),
+  projectTracker: (code: string) =>
+    call<{ tracker: TrackerConfig | null; status: TrackerStatus }>(
+      'GET',
+      `/api/projects/${encodeURIComponent(code)}/tracker`,
+    ),
+  saveProjectTracker: (code: string, body: Partial<TrackerConfigInput>) =>
+    call<{ tracker: TrackerConfig; status: TrackerStatus }>(
+      'POST',
+      `/api/projects/${encodeURIComponent(code)}/tracker`,
+      body,
+    ),
+  enableProjectTracker: (code: string) =>
+    call<{ ok: boolean; tracker: TrackerConfig; status: TrackerStatus }>(
+      'POST',
+      `/api/projects/${encodeURIComponent(code)}/tracker/enable`,
+    ),
+  disableProjectTracker: (code: string) =>
+    call<{ ok: boolean; tracker: TrackerConfig; status: TrackerStatus }>(
+      'POST',
+      `/api/projects/${encodeURIComponent(code)}/tracker/disable`,
+    ),
+  syncProjectTracker: (code: string) =>
+    call<any>('POST', `/api/projects/${encodeURIComponent(code)}/tracker/sync`),
+  downloadTaskAudit: (code: string, format: 'json' | 'md') => {
+    const project = getProjectCode();
+    const prefix = project ? `/api/projects/${encodeURIComponent(project)}/tasks` : taskBase();
+    return raw(
+      'GET',
+      `${prefix}/${encodeURIComponent(code)}/audit?format=${encodeURIComponent(format)}`,
+    );
+  },
   updateProject: (code: string, patch: Record<string, unknown> & { version: number }) =>
     call<{ ok: boolean; project: any }>(
       'PATCH',
@@ -229,7 +278,9 @@ export const api = {
     call<{ skill: ApiSkillDetail }>('GET', `/api/skills/${encodeURIComponent(id)}`),
   updateSkill: (
     id: string,
-    patch: Partial<Pick<ApiSkillDetail, 'name' | 'description' | 'emblem' | 'tags' | 'allowedTools' | 'body'>>,
+    patch: Partial<
+      Pick<ApiSkillDetail, 'name' | 'description' | 'emblem' | 'tags' | 'allowedTools' | 'body'>
+    >,
   ) => call<{ skill: ApiSkill }>('PUT', `/api/skills/${encodeURIComponent(id)}`, patch),
   scanSkills: (trigger: ScanTrigger = 'manual') =>
     call<{ scanId: string; status: 'queued' }>('POST', '/api/skills/scan', { trigger }),
@@ -267,6 +318,65 @@ export interface ApiScan {
   error: string | null;
   trigger: ScanTrigger;
   createdAt: string;
+}
+
+export interface TrackerConfigInput {
+  kind: 'linear' | 'github' | 'gitlab';
+  endpoint?: string | null;
+  api_key_env_var: string;
+  project_slug: string;
+  active_states?: string[];
+  terminal_states?: string[];
+  assignee?: string | null;
+  poll_interval_ms?: number;
+  enabled?: boolean;
+}
+
+export interface TrackerConfig extends TrackerConfigInput {
+  id: string;
+  project_id: string;
+  active_states: string[];
+  terminal_states: string[];
+  poll_interval_ms: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrackerStatus {
+  env_present: boolean;
+  enabled: boolean;
+  last_poll_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  last_issue_count: number;
+  next_poll_at: string | null;
+  issues_count: number;
+  rate_limited: boolean;
+}
+
+export interface DoctorCheck {
+  id: string;
+  label: string;
+  status: 'ok' | 'warning' | 'error' | 'unknown';
+  detail: string;
+  action?: string;
+}
+
+export interface DoctorResult {
+  generated_at: string;
+  checks: DoctorCheck[];
+}
+
+export interface HealthSummary {
+  tasks: Record<string, number>;
+  runs: Record<string, number>;
+  queue: { queued: number; running: number; awaiting_human: number };
+  skills: ApiScan | null;
+  tracker: TrackerStatus;
+  costs: { all_time: number; uncosted_runs: number };
+  providers: Record<string, number>;
+  generated_at: string;
 }
 
 export interface SkillScanEvent {

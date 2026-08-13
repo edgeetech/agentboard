@@ -44,6 +44,7 @@ export function TaskDetailPanel({
   const [runPickerOpen, setRunPickerOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [phaseOpen, setPhaseOpen] = useState(false);
+  const [exporting, setExporting] = useState<'json' | 'md' | null>(null);
 
   const projectCode = getProjectCode();
   const q = useQuery({
@@ -108,6 +109,25 @@ export function TaskDetailPanel({
     onSuccess: () => { invalidate(); setCommentDraft(''); },
     onError: (err: any) => { alert(err?.message || 'Add comment failed'); },
   });
+
+  async function downloadAudit(format: 'json' | 'md') {
+    setExporting(format);
+    try {
+      const blob = await api.downloadTaskAudit(taskCode, format);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${taskCode}-audit.${format === 'json' ? 'json' : 'md'}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Audit export failed');
+    } finally {
+      setExporting(null);
+    }
+  }
 
   // Update elapsed times for running agents
   useEffect(() => {
@@ -429,6 +449,26 @@ export function TaskDetailPanel({
               </button>
             )}
             <CopyContextIconButton task={task} project={project} comments={comments} />
+            <button
+              type="button"
+              className="icon-btn icon-btn-lg"
+              onClick={() => { void downloadAudit('json'); }}
+              disabled={exporting !== null}
+              title={t('task.export_json', 'Export audit JSON')}
+              aria-label={t('task.export_json', 'Export audit JSON')}
+            >
+              <SvgIcon d="M5 2 H11 L14 5 V16 H5 Z M11 2 V6 H14 M7 9 H12 M7 12 H12" />
+            </button>
+            <button
+              type="button"
+              className="icon-btn icon-btn-lg"
+              onClick={() => { void downloadAudit('md'); }}
+              disabled={exporting !== null}
+              title={t('task.export_markdown', 'Export audit Markdown')}
+              aria-label={t('task.export_markdown', 'Export audit Markdown')}
+            >
+              <SvgIcon d="M4 2 H14 V16 H4 Z M6 5 H12 M6 8 H12 M6 11 H10" />
+            </button>
             <div className="action-spacer" />
             {task.status === 'human_approval' && (
               <>
@@ -677,4 +717,3 @@ function CopyContextIconButton({
     </button>
   );
 }
-

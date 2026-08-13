@@ -1,6 +1,6 @@
 import type { TokenUsage } from './agent-runner.ts';
 import type { RateLimitTracker } from './rate-limit-tracker.ts';
-import { sessionLogger } from './session-logger.ts';
+import type { sessionLogger } from './session-logger.ts';
 import type { AgentProvider, RunRole } from './types.ts';
 
 export interface SdkMcpServer {

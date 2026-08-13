@@ -376,7 +376,7 @@ export function getAgentRun(db: DbHandle, run_id: string): AgentRunRow | undefin
 
 export function listCouncilMembers(db: DbHandle, parent_run_id: string): AgentRunRow[] {
   const rows = db.prepare(`SELECT * FROM agent_run WHERE parent_run_id=? ORDER BY member_index ASC`).all(parent_run_id);
-  return (rows as unknown[]).map(asRun);
+  return (rows).map(asRun);
 }
 
 /**

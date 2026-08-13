@@ -6,11 +6,7 @@ import * as path from 'node:path';
 
 import { z } from 'zod';
 
-import {
-  BUILTIN_SKILLS,
-  findBuiltinSkill,
-  isBuiltinSkillId,
-} from './builtin-skills.ts';
+import { BUILTIN_SKILLS, findBuiltinSkill, isBuiltinSkillId } from './builtin-skills.ts';
 import {
   agentboardBus,
   type SkillScanFinishedPayload,
@@ -101,7 +97,21 @@ function yamlNeedsQuote(s: string): boolean {
   if (/^\s|\s$/.test(s)) return true;
   if (/[:#]/.test(s)) return true;
   const first = s[0];
-  if (first === '"' || first === "'" || first === '[' || first === '{' || first === '|' || first === '>' || first === '&' || first === '*' || first === '!' || first === '%' || first === '@' || first === '`') return true;
+  if (
+    first === '"' ||
+    first === "'" ||
+    first === '[' ||
+    first === '{' ||
+    first === '|' ||
+    first === '>' ||
+    first === '&' ||
+    first === '*' ||
+    first === '!' ||
+    first === '%' ||
+    first === '@' ||
+    first === '`'
+  )
+    return true;
   return false;
 }
 
@@ -136,7 +146,10 @@ function buildFrontmatter(args: {
   return lines.join('\n') + '\n' + args.body;
 }
 
-function resolveSafeAbsPath(repoPath: string, relPath: string): { ok: true; abs: string } | { ok: false } {
+function resolveSafeAbsPath(
+  repoPath: string,
+  relPath: string,
+): { ok: true; abs: string } | { ok: false } {
   const root = path.resolve(repoPath);
   const abs = path.resolve(repoPath, relPath);
   const sep = path.sep;
@@ -190,8 +203,7 @@ export async function handleSkills(
       builtins = needle
         ? list.filter(
             (s) =>
-              s.name.toLowerCase().includes(needle) ||
-              s.description.toLowerCase().includes(needle),
+              s.name.toLowerCase().includes(needle) || s.description.toLowerCase().includes(needle),
           )
         : list;
     }
@@ -415,11 +427,7 @@ function sendSse(res: ServerResponse, event: string, data: unknown): void {
   res.write(`event: ${event}\ndata: ${payload}\n\n`);
 }
 
-function serveScanSse(
-  req: IncomingMessage,
-  res: ServerResponse,
-  projectCode: string,
-): void {
+function serveScanSse(req: IncomingMessage, res: ServerResponse, projectCode: string): void {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
@@ -459,14 +467,18 @@ function serveScanSse(
   const startedKey = 'skill-scan:started';
   const finishedKey = 'skill-scan:finished';
   // The shared bus is loosely typed; cast event names.
-  (agentboardBus as unknown as {
-    on: (k: string, h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void) => void;
-    off: (k: string, h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void) => void;
-  }).on(startedKey, onStarted as (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void);
-  (agentboardBus as unknown as {
-    on: (k: string, h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void) => void;
-    off: (k: string, h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void) => void;
-  }).on(finishedKey, onFinished as (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void);
+  (
+    agentboardBus as unknown as {
+      on: (k: string, h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void) => void;
+      off: (k: string, h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void) => void;
+    }
+  ).on(startedKey, onStarted as (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void);
+  (
+    agentboardBus as unknown as {
+      on: (k: string, h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void) => void;
+      off: (k: string, h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void) => void;
+    }
+  ).on(finishedKey, onFinished as (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void);
 
   const hb = setInterval(() => {
     try {
@@ -478,12 +490,25 @@ function serveScanSse(
 
   const cleanup = (): void => {
     clearInterval(hb);
-    (agentboardBus as unknown as {
-      off: (k: string, h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void) => void;
-    }).off(startedKey, onStarted as (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void);
-    (agentboardBus as unknown as {
-      off: (k: string, h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void) => void;
-    }).off(finishedKey, onFinished as (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void);
+    (
+      agentboardBus as unknown as {
+        off: (
+          k: string,
+          h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void,
+        ) => void;
+      }
+    ).off(startedKey, onStarted as (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void);
+    (
+      agentboardBus as unknown as {
+        off: (
+          k: string,
+          h: (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void,
+        ) => void;
+      }
+    ).off(
+      finishedKey,
+      onFinished as (e: SkillScanStartedPayload | SkillScanFinishedPayload) => void,
+    );
   };
 
   req.on('close', cleanup);

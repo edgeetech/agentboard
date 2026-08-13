@@ -3391,3 +3391,81 @@ button.linkish:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+.health-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.health-strip-loading {
+  min-height: 52px;
+}
+.health-item,
+.status-cell,
+.doctor-check {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+.health-item {
+  min-height: 52px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+.health-item span,
+.status-cell span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.health-item strong,
+.status-cell strong {
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.health-warn,
+.status-warn,
+.doctor-warning,
+.doctor-unknown {
+  border-color: var(--warn);
+}
+.health-bad,
+.status-bad,
+.doctor-error {
+  border-color: var(--danger);
+}
+.tracker-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.status-cell {
+  min-height: 58px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.doctor-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+.doctor-check {
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+}
+.doctor-check p,
+.doctor-check small {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}

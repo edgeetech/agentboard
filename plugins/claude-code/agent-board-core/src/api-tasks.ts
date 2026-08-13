@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import { parseAgentConfig, resolveRoleConfig } from './agent-config.ts';
 import type { DbHandle } from './db.ts';
+import { cancelRun } from './executor.ts';
 import { json, readJson, matchRoute } from './http-util.ts';
 import type { ProjectDb } from './project-registry.ts';
 import { getActiveDb, getDb } from './project-registry.ts';
@@ -19,12 +21,10 @@ import {
   listRunsForTask,
   enqueueRun,
 } from './repo.ts';
-import { cancelRun } from './executor.ts';
 import type { TaskRow } from './repo.ts';
 import { isoNow } from './time.ts';
 import type { AgentProvider, AssigneeRole, RunRole, TaskStatus } from './types.ts';
 import { AGENT_PROVIDERS } from './types.ts';
-import { parseAgentConfig, resolveRoleConfig } from './agent-config.ts';
 
 const MIN_REJECT_COMMENT = 10;
 
@@ -205,12 +205,7 @@ async function handleRunAgent(
       : executor_override !== null
         ? ` [executor: ${executor_override}]`
         : '';
-  addComment(
-    db,
-    task.id,
-    'human',
-    `RUN_AGENT: manually dispatched ${role} (run ${runId})${tag}`,
-  );
+  addComment(db, task.id, 'human', `RUN_AGENT: manually dispatched ${role} (run ${runId})${tag}`);
   json(res, 201, { run_id: runId, role });
   return true;
 }
@@ -483,7 +478,10 @@ export async function handleTasks(
     type AssigneeRoleStr = (typeof ALLOWED_ROLES)[number];
     const rawAssignee = rawBody.assignee_role;
     let assignee_role: AssigneeRoleStr | null = null;
-    if (typeof rawAssignee === 'string' && (ALLOWED_ROLES as readonly string[]).includes(rawAssignee)) {
+    if (
+      typeof rawAssignee === 'string' &&
+      (ALLOWED_ROLES as readonly string[]).includes(rawAssignee)
+    ) {
       assignee_role = rawAssignee as AssigneeRoleStr;
     }
     const result = createTask(db, {
