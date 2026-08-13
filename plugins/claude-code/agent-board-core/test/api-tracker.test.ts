@@ -233,6 +233,14 @@ describe('handleTracker', () => {
     expect(mockState.getDbCalls).toEqual([]);
   });
 
+  it('rejects invalid percent-encoded project paths before opening project databases', async () => {
+    const res = await callTracker('GET', '/api/projects/%E0%A4%A/tracker');
+
+    expect(res.statusCode).toBe(400);
+    expect(readJson(res)).toMatchObject({ error: expect.stringContaining('encoding') });
+    expect(mockState.getDbCalls).toEqual([]);
+  });
+
   it('returns empty tracker config with persisted status shape', async () => {
     const res = await callTracker('GET', '/api/projects/TST/tracker');
 

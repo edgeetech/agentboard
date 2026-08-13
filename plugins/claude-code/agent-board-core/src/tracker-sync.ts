@@ -149,14 +149,22 @@ export function recordTrackerPollState(
   patch: Partial<Omit<TrackerPollStateRow, 'project_id' | 'updated_at'>>,
 ): TrackerPollStateRow {
   const current = getTrackerPollState(db, projectId);
+  const has = (key: keyof typeof patch): boolean =>
+    Object.prototype.hasOwnProperty.call(patch, key);
   const next: TrackerPollStateRow = {
     project_id: projectId,
-    last_poll_at: patch.last_poll_at ?? current?.last_poll_at ?? null,
-    last_success_at: patch.last_success_at ?? current?.last_success_at ?? null,
-    last_error: patch.last_error ?? current?.last_error ?? null,
+    last_poll_at: has('last_poll_at')
+      ? (patch.last_poll_at ?? null)
+      : (current?.last_poll_at ?? null),
+    last_success_at: has('last_success_at')
+      ? (patch.last_success_at ?? null)
+      : (current?.last_success_at ?? null),
+    last_error: has('last_error') ? (patch.last_error ?? null) : (current?.last_error ?? null),
     last_issue_count: patch.last_issue_count ?? current?.last_issue_count ?? 0,
     rate_limited: patch.rate_limited ?? current?.rate_limited ?? 0,
-    next_poll_at: patch.next_poll_at ?? current?.next_poll_at ?? null,
+    next_poll_at: has('next_poll_at')
+      ? (patch.next_poll_at ?? null)
+      : (current?.next_poll_at ?? null),
     updated_at: isoNow(),
   };
   db.prepare(

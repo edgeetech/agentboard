@@ -114,7 +114,7 @@ describe('tracker schema migrations', () => {
     db.close();
   });
 
-  it('re-enables foreign keys when legacy tracker migration hits a backup-name conflict', async () => {
+  it('drops a conflicting backup view before preserving legacy tracker_config rows', async () => {
     const path = tempDbPath('legacy-conflict.db');
     const mod = await import('node:sqlite');
     const legacy = new mod.DatabaseSync(path);
@@ -141,6 +141,8 @@ describe('tracker schema migrations', () => {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+      INSERT INTO tracker_config(id, provider, created_at, updated_at)
+      VALUES ('OLD', 'github', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
       CREATE VIEW tracker_config_legacy_pre_v7 AS SELECT 'backup-conflict' AS id;
     `);
     legacy.close();
@@ -150,8 +152,14 @@ describe('tracker schema migrations', () => {
       name: string;
     }[];
     const foreignKeys = db.prepare(`PRAGMA foreign_keys`).get() as { foreign_keys: number };
+    const legacyBackup = db
+      .prepare(`SELECT name, type FROM sqlite_master WHERE name='tracker_config_legacy_pre_v7'`)
+      .get() as { name: string; type: string } | undefined;
+    const backupRows = db.prepare(`SELECT id, provider FROM tracker_config_legacy_pre_v7`).all();
 
     expect(trackerColumns.map((c) => c.name)).toContain('api_key_env_var');
+    expect(legacyBackup).toEqual({ name: 'tracker_config_legacy_pre_v7', type: 'table' });
+    expect(backupRows).toEqual([{ id: 'OLD', provider: 'github' }]);
     expect(foreignKeys.foreign_keys).toBe(1);
     db.close();
   });

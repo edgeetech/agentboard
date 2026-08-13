@@ -285,4 +285,28 @@ describe('tracker sync', () => {
     expect(state?.rate_limited).toBe(1);
     expect(Date.parse(state?.next_poll_at ?? '')).toBeGreaterThanOrEqual(before + 59_000);
   });
+
+  it('clears previous tracker errors after a successful sync', async () => {
+    const db = await makeDb();
+    const cfg = getTrackerConfig(db, 'P1');
+    if (!cfg) throw new Error('missing tracker config');
+    const rateLimit = Object.assign(new Error('Too Many Requests'), {
+      status: 429,
+      retryAfterMs: 60_000,
+    });
+
+    await syncTracker(db, 'TST', cfg, () => failingTracker(rateLimit));
+    expect(trackerStatus(db, 'P1', cfg)).toMatchObject({
+      last_error: 'Too Many Requests',
+      rate_limited: true,
+    });
+
+    const result = await syncTracker(db, 'TST', cfg, () => fakeTracker([issue()]));
+
+    expect(result.ok).toBe(true);
+    expect(trackerStatus(db, 'P1', cfg)).toMatchObject({
+      last_error: null,
+      rate_limited: false,
+    });
+  });
 });

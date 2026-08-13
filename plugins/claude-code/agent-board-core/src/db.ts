@@ -324,6 +324,17 @@ function hasColumns(db: DbHandle, table: string, columns: string[]): boolean {
   return columns.every((c) => present.has(c));
 }
 
+function dropTrackerBackupObject(db: DbHandle): void {
+  const existing = db
+    .prepare(`SELECT type FROM sqlite_master WHERE name='tracker_config_legacy_pre_v7'`)
+    .get() as { type: string } | undefined;
+  if (existing?.type === 'view') {
+    db.exec(`DROP VIEW tracker_config_legacy_pre_v7`);
+  } else {
+    db.exec(`DROP TABLE IF EXISTS tracker_config_legacy_pre_v7`);
+  }
+}
+
 function migrateTrackerTables(db: DbHandle): void {
   const requiredConfig = [
     'id',
@@ -345,7 +356,7 @@ function migrateTrackerTables(db: DbHandle): void {
     db.exec('PRAGMA foreign_keys=OFF');
     try {
       try {
-        db.exec(`DROP TABLE IF EXISTS tracker_config_legacy_pre_v7`);
+        dropTrackerBackupObject(db);
         db.exec(`ALTER TABLE tracker_config RENAME TO tracker_config_legacy_pre_v7`);
       } catch {
         db.exec(`DROP TABLE IF EXISTS tracker_config`);

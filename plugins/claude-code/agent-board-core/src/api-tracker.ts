@@ -150,7 +150,13 @@ export async function handleTracker(
   const m = /^\/api\/projects\/([^/]+)\/tracker(\/[a-z]+)?$/.exec(url.pathname);
   if (!m) return null;
 
-  const code = decodeURIComponent(String(m[1])).trim().toUpperCase();
+  let code: string;
+  try {
+    code = decodeURIComponent(String(m[1])).trim().toUpperCase();
+  } catch {
+    json(res, 400, { error: 'invalid project code encoding' });
+    return true;
+  }
   const codeErr = validateCode(code);
   if (codeErr !== null) {
     json(res, 400, { error: codeErr });
