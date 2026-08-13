@@ -60,16 +60,16 @@ import { handlePrompts } from './src/api-prompts.ts';
 import { handleSessions } from './src/api-sessions.ts';
 import { handleSkills } from './src/api-skills.ts';
 import { handleTasks } from './src/api-tasks.ts';
+import { handleTracker } from './src/api-tracker.ts';
 import { generateServerToken } from './src/auth.ts';
 import { readConfig, writeConfig } from './src/config.ts';
 import { startExecutor } from './src/executor.ts';
 import { json } from './src/http-util.ts';
 import { ensureDirs } from './src/paths.ts';
 import { getActiveDb } from './src/project-registry.ts';
-import {
-  startAllSkillScanWorkers,
-  stopAllSkillScanWorkers,
-} from './src/skill-scan-runtime.ts';
+import { dispatchRestHandlers } from './src/rest-dispatch.ts';
+import { startAllSkillScanWorkers, stopAllSkillScanWorkers } from './src/skill-scan-runtime.ts';
+import { startTrackerPoller } from './src/tracker-poller.ts';
 
 // Debug: Check Copilot auth env vars at server startup
 console.warn('[SERVER STARTUP] Checking Copilot auth environment:');
@@ -197,6 +197,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     // REST routers (first non-null handler wins)
     const handlers = [
       handleProjects,
+      handleTracker,
       handleTasks,
       handleCosts,
       handleLogs,
@@ -204,12 +205,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       handlePrompts,
       handleSkills,
     ];
-    for (const h of handlers) {
-      const done = await h(req, res, url);
-      if (done !== null && done !== undefined && done !== false) return;
-      if (res.headersSent) return;
-    }
-    if (res.headersSent) return;
+    if (await dispatchRestHandlers(handlers, req, res, url)) return;
 
     json(res, 404, { error: 'not found', path: p });
   } catch (e) {
@@ -232,6 +228,7 @@ const onReady = (): void => {
   writeConfig({ port, pid: process.pid });
   console.warn(`READY http://127.0.0.1:${port}`);
   startExecutor({ port, serverToken: token });
+  startTrackerPoller();
   // Skill-scan workers: one per project DB. Mirrors executor's per-project
   // iteration but spun up as long-lived per-DB polling loops (see
   // src/skill-scan-runtime.ts). New projects created via POST /api/projects

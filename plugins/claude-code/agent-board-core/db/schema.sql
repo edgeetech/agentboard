@@ -166,6 +166,17 @@ CREATE TABLE IF NOT EXISTS tracker_issue (
   UNIQUE(project_id, tracker_kind, external_id)
 );
 
+CREATE TABLE IF NOT EXISTS tracker_poll_state (
+  project_id       TEXT PRIMARY KEY REFERENCES project(id),
+  last_poll_at     TEXT,
+  last_success_at  TEXT,
+  last_error       TEXT,
+  last_issue_count INTEGER NOT NULL DEFAULT 0,
+  rate_limited     INTEGER NOT NULL DEFAULT 0,
+  next_poll_at     TEXT,
+  updated_at       TEXT NOT NULL
+);
+
 -- noskills-style inner phase machine (per-run). Outer task FSM stays untouched.
 -- These columns/tables are created on fresh DBs; idempotent migrations in db.mjs
 -- apply the same shape to existing DBs.
@@ -227,4 +238,4 @@ CREATE INDEX IF NOT EXISTS skill_scan_project_idx ON skill_scan(project_code, st
 CREATE INDEX IF NOT EXISTS skill_scan_created_idx ON skill_scan(project_code, created_at DESC);
 
 -- schema_version seed (app upserts on init)
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '6');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '7');
