@@ -3,14 +3,13 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { AgentProvider } from '../src/types.ts';
 
 vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return { ...actual, appendFileSync: vi.fn() };
+  const actual = await importOriginal();
+  return { ...(actual as object), appendFileSync: vi.fn() };
 });
 
 const { appendFileSync } = await import('node:fs');
-const { maybeRegisterInteractiveHistory, providerFor } = await import(
-  '../src/provider-registry.ts'
-);
+const { maybeRegisterInteractiveHistory, providerFor } =
+  await import('../src/provider-registry.ts');
 
 describe('providerFor', () => {
   it('returns adapter with matching provider for each known provider', () => {
@@ -37,7 +36,9 @@ describe('providerFor', () => {
   });
 
   it('resume.command prefixes cd when repoPath is provided', () => {
-    expect(providerFor('claude').resume.command('s', '/repo')).toBe('cd "/repo"; claude --resume s');
+    expect(providerFor('claude').resume.command('s', '/repo')).toBe(
+      'cd "/repo"; claude --resume s',
+    );
   });
 });
 
@@ -83,8 +84,8 @@ describe('maybeRegisterInteractiveHistory', () => {
     vi.mocked(appendFileSync).mockImplementationOnce(() => {
       throw new Error('EACCES: permission denied');
     });
-    expect(() =>
-      maybeRegisterInteractiveHistory('claude', 'sess-err', '/repo', 'x'),
-    ).not.toThrow();
+    expect(() => {
+      maybeRegisterInteractiveHistory('claude', 'sess-err', '/repo', 'x');
+    }).not.toThrow();
   });
 });

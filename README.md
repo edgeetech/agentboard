@@ -93,7 +93,9 @@ Multi-agent AI is powerful, but the day-to-day is messy:
 | 🎯 **Concern packs** | Pluggable concern lists steer PM/Worker/Reviewer prompts. Built-in packs: `well-engineered`, `beautiful-product`, `long-lived`. Custom packs per project via `concerns_json`. |
 | 🔁 **Bounded rework loop** | Max 3 reviewer rejects per task. After that, task stalls with "Retry from Worker" button — no runaway agents. |
 | 🔄 **Automatic retry with backoff** | Failed runs automatically re-enqueue with exponential backoff (1s → 2s → 4s, capped at 5min, max 3 attempts). Retry history logged in `retry_state` per run. Configurable via `max_retry_attempts` / `max_retry_backoff_ms`. |
-| 🔗 **External tracker sync** | Connect Linear, GitHub Issues, or GitLab to a project. Background poller creates agentboard tasks from incoming issues, marks tasks done when issues hit terminal state. Config via `tracker_config` table; REST API at `/api/projects/{code}/tracker`. |
+| 🔗 **External tracker sync** | Connect Linear, GitHub Issues, or GitLab to a project. Project settings show config, credential env-var presence, poll health, issue counts, rate limits, and manual sync. |
+| 🧪 **Setup + runtime health** | Project doctor checks and the board health strip surface provider CLI, DB schema, tracker, skill scan, queue, cost, and uncosted-run state without reading logs first. |
+| 📦 **Task audit export** | Export a task audit as JSON or Markdown, including comments, history, runs, costs, activity, debt, attachments, and tracker links with credential redaction. |
 | 🛡️ **Workspace path safety** | Per-task workspaces validated against path traversal (`../`) and symlink attacks before creation. Artifact caches (`.cache`, `node_modules/.cache`, `.vite`, `.turbo`, etc.) cleaned between runs. Shell lifecycle hooks (`afterCreate`, `beforeRun`, `afterRun`, `beforeRemove`) with 30s timeout. |
 | 🔒 **Local-only by design** | Binds `127.0.0.1`, DNS-rebind guard, Bearer + per-run rotated tokens, whitelisted child env. AWS / GitHub / SSH secrets in your shell are **not** passed to spawned agents. |
 | 🪝 **Step into any run** | Each run gets `--session-id`. One click copies `claude --resume <id>` so you can jump into the live transcript from your terminal. |
@@ -235,7 +237,7 @@ Outside the repo, untouched by plugin upgrades:
 | **UI** | React 18 · Vite · TanStack Query · Zustand · @dnd-kit · react-i18next |
 | **MCP** | Two surfaces — `abrun` (HTTP, for spawned agents) and `agentboard` (stdio, for your interactive session). Names differ deliberately so `--strict-mcp-config` filters cleanly. |
 | **Pricing** | Opus 4.7 / Sonnet 4.6 / Haiku 4.5 + Copilot Pro, versioned. Unknown model → `$0` + `uncosted` flag — never silently wrong numbers. See [AGENTS.md § Supported Agents](AGENTS.md#2-supported-agents--status-table) for per-agent pricing. |
-| **Tests** | Vitest · 231 tests across 27 files (state machine, phase machine, phase repo, postflight phase gate, retry, tracker, workspace safety/manager, supervisor, turn timeout, rate limiter, prompt builder, event bus, executor resolution, cost computation, skill repo, skill scanner, skill scan worker, api-skills, api-mcp use_skill, concerns, discovery modes, codex config, copilot runner, run hooks, folder rules, string distance, project triggers). Run via `npm test`. Quality gate: `npm run check` (`typecheck && lint && format:check`). |
+| **Tests** | Vitest coverage for state machine, phase machine/repo, postflight gates, retry, tracker runtime/API/migrations, audit export, doctor, health summary, workspace safety/manager, supervisor, turn timeout, rate limiter, prompt builder, event bus, executor resolution, cost computation, skill repo/scanner/worker, api-skills, api-mcp use_skill, concerns, discovery modes, codex config, copilot runner, run hooks, folder rules, string distance, and project triggers. Run via `npm test`. Quality gate: `npm run check` (`typecheck && lint && format:check`). |
 
 ---
 
@@ -265,7 +267,28 @@ POST /api/projects/{code}/tracker/sync
 GET /api/projects/{code}/tracker/issues
 ```
 
-The background `TrackerPoller` starts 5 s after boot, checks each configured project on its own schedule, and syncs new/updated issues as agentboard tasks. Deleted or terminal issues are resolved automatically.
+The background `TrackerPoller` starts after boot, repeatedly reconciles enabled project configs, and syncs new/updated issues as agentboard tasks. Manual sync and scheduled sync share the same transactional path, so duplicate external issues stay idempotent. Terminal issues complete linked tasks. Tracker health is persisted in `tracker_poll_state`; local rollback is to restore a pre-migration project DB backup and run the older app version.
+
+## 🧾 Audit export and health
+
+Task detail exposes JSON and Markdown audit export:
+
+```bash
+GET /api/projects/{code}/tasks/{taskCode}/audit?format=json
+GET /api/projects/{code}/tasks/{taskCode}/audit?format=md
+```
+
+Exports include task, acceptance criteria, comments, task history, attachments, agent runs, activity, debt, tracker links, and computed task cost totals. Credential-adjacent fields and bearer/token-like strings are redacted. Oversized exports return `413` with a remediation instead of silently truncating.
+
+Project health endpoints back the Project page doctor panel and Board health strip:
+
+```bash
+GET /api/doctor
+GET /api/projects/{code}/doctor
+GET /api/projects/{code}/health-summary
+```
+
+Doctor checks are timeout-bounded and return `ok`, `warning`, `error`, or `unknown` with an action for every non-ok result. Health summary is lightweight and does not run provider CLI probes.
 
 ---
 
@@ -342,5 +365,4 @@ Crafted at **EdgeeTech Limited** · [github.com/edgeetech/agentboard](https://gi
 ⭐ If AgentBoard helps you ship cleaner agent workflows, drop a star — helps others find it.
 
 </div>
-
 

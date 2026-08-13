@@ -120,7 +120,11 @@ async function makeDb(repoPath: string): Promise<DbHandle> {
   } as unknown as DbHandle;
 }
 
-function mkSkill(name: string, relPath: string, overrides: Partial<ScannedSkill> = {}): ScannedSkill {
+function mkSkill(
+  name: string,
+  relPath: string,
+  overrides: Partial<ScannedSkill> = {},
+): ScannedSkill {
   return {
     name,
     description: `${name} desc`,
@@ -175,9 +179,8 @@ function mkRes(): MockRes {
 }
 
 function mkReq(method: string, body?: unknown): IncomingMessage {
-  const stream = body === undefined
-    ? Readable.from([])
-    : Readable.from([Buffer.from(JSON.stringify(body))]);
+  const stream =
+    body === undefined ? Readable.from([]) : Readable.from([Buffer.from(JSON.stringify(body))]);
   const req = stream as unknown as IncomingMessage;
   (req as unknown as { method: string }).method = method;
   (req as unknown as { headers: Record<string, string> }).headers = {};
@@ -228,7 +231,10 @@ describe('handleSkills', () => {
   it('GET /api/skills lists populated skills with search + dir filters', async () => {
     upsertSkillIndex(dbOrFail(), PROJECT_CODE, [
       mkSkill('alpha', '.claude/skills/alpha/SKILL.md'),
-      mkSkill('beta', '.claude/skills/beta/SKILL.md', { relDir: '.claude/skills', description: 'special' }),
+      mkSkill('beta', '.claude/skills/beta/SKILL.md', {
+        relDir: '.claude/skills',
+        description: 'special',
+      }),
       mkSkill('gamma', 'sub/.claude/skills/gamma/SKILL.md', { relDir: 'sub/.claude/skills' }),
     ]);
 
@@ -303,9 +309,7 @@ describe('handleSkills', () => {
     const content = `---\nname: demo\ndescription: demo desc\nemblem: DEM\ntags:\n  - x\nallowed-tools:\n  - Read\n---\nHello body`;
     writeFileSync(skillPath, content, 'utf8');
 
-    upsertSkillIndex(dbOrFail(), PROJECT_CODE, [
-      mkSkill('demo', '.claude/skills/demo/SKILL.md'),
-    ]);
+    upsertSkillIndex(dbOrFail(), PROJECT_CODE, [mkSkill('demo', '.claude/skills/demo/SKILL.md')]);
     const list = listSkills(dbOrFail(), PROJECT_CODE);
     const id = list[0]?.id ?? '';
 
@@ -325,11 +329,13 @@ describe('handleSkills', () => {
   it('GET /api/skills/:id returns 400 for path traversal attempts', async () => {
     // Inject a row whose rel_path attempts to escape repo_path.
     const evil = '../../etc/passwd';
-    dbOrFail().prepare(
-      `INSERT INTO skill (id, project_code, name, description, emblem, tags_json,
+    dbOrFail()
+      .prepare(
+        `INSERT INTO skill (id, project_code, name, description, emblem, tags_json,
          rel_dir, rel_path, layout, allowed_tools_json, scanned_at)
        VALUES ('evil', ?, 'evil', '', '', '[]', '..', ?, 'file', '[]', '2026-01-01T00:00:00Z')`,
-    ).run(PROJECT_CODE, evil);
+      )
+      .run(PROJECT_CODE, evil);
 
     const res = mkRes();
     await handleSkills(
@@ -343,11 +349,7 @@ describe('handleSkills', () => {
   it('PUT /api/skills/:id writes file and updates row', async () => {
     mkdirSync(join(tmpRoot, '.claude', 'skills', 'demo'), { recursive: true });
     const skillPath = join(tmpRoot, '.claude', 'skills', 'demo', 'SKILL.md');
-    writeFileSync(
-      skillPath,
-      `---\nname: demo\ndescription: old\nemblem: DEM\n---\nbody`,
-      'utf8',
-    );
+    writeFileSync(skillPath, `---\nname: demo\ndescription: old\nemblem: DEM\n---\nbody`, 'utf8');
     upsertSkillIndex(dbOrFail(), PROJECT_CODE, [mkSkill('demo', '.claude/skills/demo/SKILL.md')]);
     const id = listSkills(dbOrFail(), PROJECT_CODE)[0]?.id ?? '';
 
@@ -430,12 +432,14 @@ describe('handleSkills', () => {
       'utf8',
     );
     const id = `${PROJECT_CODE}:9a0780d76bce`;
-    dbOrFail().prepare(
-      `INSERT INTO skill (id, project_code, name, description, emblem, tags_json,
+    dbOrFail()
+      .prepare(
+        `INSERT INTO skill (id, project_code, name, description, emblem, tags_json,
          rel_dir, rel_path, layout, allowed_tools_json, scanned_at)
        VALUES (?, ?, 'enc', 'enc desc', 'ENC', '[]',
          '.claude/skills', '.claude/skills/enc/SKILL.md', 'folder', '[]', '2026-01-01T00:00:00Z')`,
-    ).run(id, PROJECT_CODE);
+      )
+      .run(id, PROJECT_CODE);
 
     const encoded = encodeURIComponent(id);
     expect(encoded).toContain('%3A');
@@ -467,9 +471,7 @@ describe('handleSkills', () => {
   });
 
   it('GET /api/skills places built-ins after scanned skills', async () => {
-    upsertSkillIndex(dbOrFail(), PROJECT_CODE, [
-      mkSkill('alpha', '.claude/skills/alpha/SKILL.md'),
-    ]);
+    upsertSkillIndex(dbOrFail(), PROJECT_CODE, [mkSkill('alpha', '.claude/skills/alpha/SKILL.md')]);
     const res = mkRes();
     await handleSkills(
       mkReq('GET'),
@@ -545,9 +547,7 @@ describe('handleSkills', () => {
   });
 
   it('GET /api/skills/dirs includes "builtin"', async () => {
-    upsertSkillIndex(dbOrFail(), PROJECT_CODE, [
-      mkSkill('a', '.claude/skills/a/SKILL.md'),
-    ]);
+    upsertSkillIndex(dbOrFail(), PROJECT_CODE, [mkSkill('a', '.claude/skills/a/SKILL.md')]);
     const res = mkRes();
     await handleSkills(
       mkReq('GET'),

@@ -45,7 +45,30 @@ export function ProjectPage() {
   const [agentConfig, setAgentConfig] = useState<AgentConfig>({});
   const [scanIgnore, setScanIgnore] = useState<string[]>([]);
   const [scanIgnoreText, setScanIgnoreText] = useState('');
+  const [trackerKind, setTrackerKind] = useState<'linear' | 'github' | 'gitlab'>('github');
+  const [trackerEndpoint, setTrackerEndpoint] = useState('');
+  const [trackerEnv, setTrackerEnv] = useState('');
+  const [trackerSlug, setTrackerSlug] = useState('');
+  const [trackerActiveStates, setTrackerActiveStates] = useState('Todo\nIn Progress');
+  const [trackerTerminalStates, setTrackerTerminalStates] = useState(
+    'Done\nCancelled\nCanceled\nDuplicate',
+  );
+  const [trackerAssignee, setTrackerAssignee] = useState('');
+  const [trackerInterval, setTrackerInterval] = useState(30_000);
   const [saved, setSaved] = useState<string | null>(null);
+
+  const trackerQ = useQuery({
+    queryKey: ['tracker', project?.code],
+    queryFn: () => api.projectTracker(project.code),
+    enabled: !!project,
+    refetchInterval: 15_000,
+  });
+  const doctorQ = useQuery({
+    queryKey: ['doctor', project?.code],
+    queryFn: () => api.projectDoctor(project.code),
+    enabled: !!project,
+    refetchInterval: 30_000,
+  });
 
   useEffect(() => {
     if (!project) return;
@@ -59,6 +82,19 @@ export function ProjectPage() {
     setScanIgnore(ig);
     setScanIgnoreText(ig.join('\n'));
   }, [project?.version]);
+
+  useEffect(() => {
+    const tracker = trackerQ.data?.tracker;
+    if (!tracker) return;
+    setTrackerKind(tracker.kind);
+    setTrackerEndpoint(tracker.endpoint ?? '');
+    setTrackerEnv(tracker.api_key_env_var);
+    setTrackerSlug(tracker.project_slug);
+    setTrackerActiveStates((tracker.active_states ?? []).join('\n'));
+    setTrackerTerminalStates((tracker.terminal_states ?? []).join('\n'));
+    setTrackerAssignee(tracker.assignee ?? '');
+    setTrackerInterval(tracker.poll_interval_ms);
+  }, [trackerQ.data?.tracker?.updated_at]);
 
   const mut = useMutation({
     mutationFn: () => project
@@ -79,6 +115,54 @@ export function ProjectPage() {
       qc.invalidateQueries({ queryKey: ['projects-list'] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
       setTimeout(() => { setSaved(null); }, 2500);
+    },
+  });
+
+  const saveTracker = useMutation({
+    mutationFn: () =>
+      project
+        ? api.saveProjectTracker(project.code, {
+            kind: trackerKind,
+            endpoint: trackerEndpoint.trim() || null,
+            api_key_env_var: trackerEnv.trim(),
+            project_slug: trackerSlug.trim(),
+            active_states: lines(trackerActiveStates),
+            terminal_states: lines(trackerTerminalStates),
+            assignee: trackerAssignee.trim() || null,
+            poll_interval_ms: Number(trackerInterval),
+          })
+        : Promise.reject(new Error('no project')),
+    onSuccess: () => {
+      if (!project) return;
+      qc.invalidateQueries({ queryKey: ['tracker', project.code] });
+      qc.invalidateQueries({ queryKey: ['health-summary', project.code] });
+    },
+  });
+  const enableTracker = useMutation({
+    mutationFn: () =>
+      project ? api.enableProjectTracker(project.code) : Promise.reject(new Error('no project')),
+    onSuccess: () => {
+      if (!project) return;
+      qc.invalidateQueries({ queryKey: ['tracker', project.code] });
+      qc.invalidateQueries({ queryKey: ['health-summary', project.code] });
+    },
+  });
+  const disableTracker = useMutation({
+    mutationFn: () =>
+      project ? api.disableProjectTracker(project.code) : Promise.reject(new Error('no project')),
+    onSuccess: () => {
+      if (!project) return;
+      qc.invalidateQueries({ queryKey: ['tracker', project.code] });
+      qc.invalidateQueries({ queryKey: ['health-summary', project.code] });
+    },
+  });
+  const syncTracker = useMutation({
+    mutationFn: () =>
+      project ? api.syncProjectTracker(project.code) : Promise.reject(new Error('no project')),
+    onSuccess: () => {
+      if (!project) return;
+      qc.invalidateQueries({ queryKey: ['tracker', project.code] });
+      qc.invalidateQueries({ queryKey: ['health-summary', project.code] });
     },
   });
 
@@ -195,6 +279,203 @@ export function ProjectPage() {
           {mut.isError && <div className="err">{(mut.error).message}</div>}
         </div>
       </form>
+
+      <section className="form-card project-form">
+        <div className="project-form-scroll">
+          <div className="form-grid project-form-grid">
+            <label>
+              Tracker
+              <select
+                value={trackerKind}
+                onChange={(e) => {
+                  setTrackerKind(e.target.value as 'linear' | 'github' | 'gitlab');
+                }}
+              >
+                <option value="github">GitHub</option>
+                <option value="linear">Linear</option>
+                <option value="gitlab">GitLab</option>
+              </select>
+            </label>
+            <label>
+              Project slug
+              <input
+                value={trackerSlug}
+                onChange={(e) => { setTrackerSlug(e.target.value); }}
+                placeholder="owner/repo or team/project"
+              />
+            </label>
+            <label>
+              API key env var
+              <input
+                value={trackerEnv}
+                onChange={(e) => { setTrackerEnv(e.target.value); }}
+                placeholder="AGENTBOARD_TRACKER_TOKEN"
+              />
+            </label>
+            <label>
+              Endpoint
+              <input
+                value={trackerEndpoint}
+                onChange={(e) => { setTrackerEndpoint(e.target.value); }}
+                placeholder="optional"
+              />
+            </label>
+            <label>
+              Poll interval ms
+              <input
+                type="number"
+                min={5000}
+                max={86400000}
+                value={trackerInterval}
+                onChange={(e) => { setTrackerInterval(parseInt(e.target.value, 10) || 30000); }}
+              />
+            </label>
+            <label>
+              Assignee
+              <input
+                value={trackerAssignee}
+                onChange={(e) => { setTrackerAssignee(e.target.value); }}
+                placeholder="optional"
+              />
+            </label>
+            <label>
+              Active states
+              <textarea
+                value={trackerActiveStates}
+                onChange={(e) => { setTrackerActiveStates(e.target.value); }}
+                rows={4}
+              />
+            </label>
+            <label>
+              Terminal states
+              <textarea
+                value={trackerTerminalStates}
+                onChange={(e) => { setTrackerTerminalStates(e.target.value); }}
+                rows={4}
+              />
+            </label>
+          </div>
+          <TrackerStatusPanel data={trackerQ.data} />
+        </div>
+        <div className="form-actions project-form-actions">
+          <button
+            className="primary"
+            type="button"
+            disabled={saveTracker.isPending || !trackerEnv.trim() || !trackerSlug.trim()}
+            onClick={() => { saveTracker.mutate(); }}
+          >
+            Save tracker
+          </button>
+          <button
+            className="ghost"
+            type="button"
+            disabled={enableTracker.isPending || !trackerQ.data?.tracker}
+            onClick={() => { enableTracker.mutate(); }}
+          >
+            Enable
+          </button>
+          <button
+            className="ghost"
+            type="button"
+            disabled={disableTracker.isPending || !trackerQ.data?.tracker}
+            onClick={() => { disableTracker.mutate(); }}
+          >
+            Disable
+          </button>
+          <button
+            className="ghost"
+            type="button"
+            disabled={syncTracker.isPending || !trackerQ.data?.tracker}
+            onClick={() => { syncTracker.mutate(); }}
+          >
+            Sync now
+          </button>
+          {(saveTracker.isError ||
+            enableTracker.isError ||
+            disableTracker.isError ||
+            syncTracker.isError) && (
+            <div className="err">
+              {
+                (saveTracker.error ??
+                  enableTracker.error ??
+                  disableTracker.error ??
+                  syncTracker.error)?.message
+              }
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="form-card project-form">
+        <div className="project-form-scroll">
+          <h2>Doctor</h2>
+          <div className="doctor-list">
+            {(doctorQ.data?.checks ?? []).map((check) => (
+              <div key={check.id} className={`doctor-check doctor-${check.status}`}>
+                <strong>{check.label}</strong>
+                <span>{check.status}</span>
+                <p>{check.detail}</p>
+                {check.action && <small>{check.action}</small>}
+              </div>
+            ))}
+            {doctorQ.isLoading && <div className="muted">Checking setup...</div>}
+            {doctorQ.isError && <div className="err">{doctorQ.error.message}</div>}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function lines(value: string): string[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function TrackerStatusPanel({ data }: { data?: Awaited<ReturnType<typeof api.projectTracker>> }) {
+  const status = data?.status;
+  if (!status) return <div className="muted">No tracker status yet.</div>;
+  return (
+    <div className="tracker-status-grid">
+      <StatusCell label="Enabled" value={status.enabled ? 'yes' : 'no'} />
+      <StatusCell
+        label="Env present"
+        value={status.env_present ? 'yes' : 'no'}
+        tone={status.env_present ? 'ok' : 'bad'}
+      />
+      <StatusCell label="Issues" value={String(status.issues_count)} />
+      <StatusCell label="Last poll" value={status.last_poll_at ?? '-'} />
+      <StatusCell label="Last success" value={status.last_success_at ?? '-'} />
+      <StatusCell label="Next poll" value={status.next_poll_at ?? '-'} />
+      <StatusCell
+        label="Rate limited"
+        value={status.rate_limited ? 'yes' : 'no'}
+        tone={status.rate_limited ? 'warn' : 'ok'}
+      />
+      <StatusCell
+        label="Last error"
+        value={status.last_error ?? '-'}
+        tone={status.last_error ? 'bad' : 'ok'}
+      />
+    </div>
+  );
+}
+
+function StatusCell({
+  label,
+  value,
+  tone = 'ok',
+}: {
+  label: string;
+  value: string;
+  tone?: 'ok' | 'warn' | 'bad';
+}) {
+  return (
+    <div className={`status-cell status-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }

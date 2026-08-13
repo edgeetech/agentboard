@@ -26,7 +26,12 @@ import {
   resolveDebt,
   setRunPhase,
 } from './phase-repo.ts';
-import { checkPhaseGate, checkPostflight, checkReassignAudit, isNonFinalCouncilMember } from './postflight.ts';
+import {
+  checkPhaseGate,
+  checkPostflight,
+  checkReassignAudit,
+  isNonFinalCouncilMember,
+} from './postflight.ts';
 import { getActiveDb, getDbForRunId, getDbForRunToken } from './project-registry.ts';
 import {
   addComment,
@@ -311,7 +316,7 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
       if (!ok) throw new Error('claim CAS failed');
       if (existing.role === 'reviewer') {
         setRunPhase(db, run_id, {
-          phase: 'VERIFICATION' as Phase,
+          phase: 'VERIFICATION',
           appendHistoryEntry: {
             from: 'DISCOVERY',
             to: 'VERIFICATION',
@@ -321,7 +326,7 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
         });
       } else if (existing.role === 'pm') {
         setRunPhase(db, run_id, {
-          phase: 'REFINEMENT' as Phase,
+          phase: 'REFINEMENT',
           appendHistoryEntry: {
             from: 'DISCOVERY',
             to: 'REFINEMENT',
@@ -619,7 +624,8 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
       const run = requireRunToken();
       // Validate just the `name` field; run_token is consumed by requireRunToken.
       const parsed = USE_SKILL_INPUT.safeParse({ name: args.name });
-      if (!parsed.success) throw new Error(`use_skill: ${parsed.error.issues[0]?.message ?? 'invalid input'}`);
+      if (!parsed.success)
+        throw new Error(`use_skill: ${parsed.error.issues[0]?.message ?? 'invalid input'}`);
       const requested = parsed.data.name.trim();
 
       const project = getProject(db);
