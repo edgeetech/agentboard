@@ -20,6 +20,12 @@ import {
   type ProviderRuntimeContext,
   type SdkMcpServer,
 } from './provider-runtime.ts';
+import {
+  recordRunFinished,
+  recordRunRetry,
+  recordRunStarted,
+  type RunOutcome,
+} from './observability.ts';
 import { getDb, listProjectDbs } from './project-registry.ts';
 import type { SkillContext } from './prompt-builder.ts';
 import { buildRolePrompt, renderSystemPrompt } from './prompt-builder.ts';
@@ -310,6 +316,14 @@ async function tryClaimAndRun(
   }
 
   agentboardBus.emit('run.started', { runId: run.id, role: run.role, taskCode: task.code });
+  const runStartedAt = Date.now();
+  let runOutcomeRecorded = false;
+  const recordOutcome = (outcome: RunOutcome): void => {
+    if (runOutcomeRecorded) return;
+    runOutcomeRecorded = true;
+    recordRunFinished(outcome, Date.now() - runStartedAt);
+  };
+  recordRunStarted();
 
   // Emit a typed activity event for the live board feed.
   try {
@@ -494,6 +508,7 @@ async function tryClaimAndRun(
           logErr(e);
         }
         finishRun(db, run.id, 'failed', null, `postflight: ${pfErr} (no finish_run called)`);
+        recordOutcome('postflight_failed');
         const retry = scheduleRetry(db as unknown as DatabaseSync, {
           runId: run.id,
           taskId: task.id,
@@ -501,6 +516,7 @@ async function tryClaimAndRun(
           attempt: run.attempt,
           error: `postflight: ${pfErr}`,
         });
+        recordRunRetry(retry.scheduled);
         if (!retry.scheduled) {
           agentboardBus.emit('run.failed', {
             runId: run.id,
@@ -518,16 +534,19 @@ async function tryClaimAndRun(
         }
       } else {
         finishRun(db, run.id, 'succeeded', null, null);
+        recordOutcome('completed');
         agentboardBus.emit('run.completed', { runId: run.id, role: run.role, taskCode: task.code });
       }
     } else if (result.status === 'cancelled') {
       finishRun(db, run.id, 'failed', null, `cancelled: ${result.error ?? ''}`);
+      recordOutcome('cancelled');
       agentboardBus.emit('run.failed', { runId: run.id, error: result.error });
     } else {
       const err = result.error ?? 'unknown error';
       finishRun(db, run.id, 'failed', null, err);
       const isTimeout = result.errorKind === 'timeout' || /Turn timed out after \d+ms/.test(err);
       if (isTimeout) {
+        recordOutcome('timeout');
         agentboardBus.emit('run.failed', {
           runId: run.id,
           error: err,
@@ -542,6 +561,8 @@ async function tryClaimAndRun(
           attempt: run.attempt,
           error: err,
         });
+        recordOutcome('failed');
+        recordRunRetry(retry.scheduled);
         if (!retry.scheduled) {
           agentboardBus.emit('run.failed', { runId: run.id, error: err, permanent: true });
         } else {
@@ -558,6 +579,7 @@ async function tryClaimAndRun(
       const isTimeout =
         (e as Error | null)?.name === 'TimeoutError' || /Turn timed out after \d+ms/.test(err);
       if (isTimeout) {
+        recordOutcome('timeout');
         agentboardBus.emit('run.failed', {
           runId: run.id,
           error: err,
@@ -572,6 +594,8 @@ async function tryClaimAndRun(
           attempt: run.attempt,
           error: err,
         });
+        recordOutcome('failed');
+        recordRunRetry(retry.scheduled);
         if (!retry.scheduled) {
           agentboardBus.emit('run.failed', { runId: run.id, error: err, permanent: true });
         } else {

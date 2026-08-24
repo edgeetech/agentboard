@@ -159,7 +159,7 @@ Quality checks:
 
 - lint: not rerun globally; existing baseline still fails.
 - typecheck: passed through root `npm run typecheck`.
-- unit: passed through root `npm run test`, 32 existing files / 256 tests plus 5 Engine files / 41 tests.
+- unit: passed through root `npm run test`, 33 existing files / 258 tests plus 5 Engine files / 41 tests.
 - integration: no separate command yet.
 - e2e: placeholder only.
 - build: not rerun after Phase 2 extraction.
@@ -293,3 +293,31 @@ Architecture improvements:
 Quality checks:
 
 - workflow syntax is static YAML only; local validation covered by existing root gate commands from the previous chunk.
+
+## Observability
+
+Status: Initial in-memory observability snapshot complete.
+
+Moved / Added:
+
+- Added `plugins/claude-code/agent-board-core/src/observability.ts`.
+- Added `plugins/claude-code/agent-board-core/test/observability.test.ts`.
+- Added SSE counters in `api-activity.ts`.
+- Added run outcome, duration and retry counters in `executor.ts`.
+- Added authenticated `/healthz` observability snapshot in `server.ts`.
+
+Behaviour preserved:
+
+- No database schema changes.
+- No HTTP route shape changes except additional `/healthz.observability` fields.
+- Metrics are process-local and best-effort.
+
+Architecture improvements:
+
+- Run lifecycle and SSE health now have a typed snapshot surface.
+- Observability can evolve toward SLOs without coupling to persistence.
+
+Quality checks:
+
+- targeted observability test: passed.
+- root typecheck: passed.

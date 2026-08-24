@@ -64,6 +64,7 @@ import { generateServerToken } from './src/auth.ts';
 import { readConfig, writeConfig } from './src/config.ts';
 import { startExecutor } from './src/executor.ts';
 import { json } from './src/http-util.ts';
+import { getObservabilitySnapshot } from './src/observability.ts';
 import { ensureDirs } from './src/paths.ts';
 import { getActiveDb } from './src/project-registry.ts';
 import {
@@ -180,6 +181,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         plugin_version: PLUGIN_VERSION,
         uptime_ms: Date.now() - startedAt,
         active_project: active ? active.code : null,
+        observability: getObservabilitySnapshot(),
       });
       return;
     }
