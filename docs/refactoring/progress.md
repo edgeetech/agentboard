@@ -271,3 +271,25 @@ Quality checks:
 - root typecheck: passed.
 - root test/build/architecture: passed.
 - formatting: passed for provider/progress files; `executor.ts` not formatted to avoid baseline churn.
+
+## CI Enforcement
+
+Status: Initial GitHub Actions validation workflow complete.
+
+Moved / Added:
+
+- Added `.github/workflows/ci.yml`.
+
+Behaviour preserved:
+
+- No runtime code changed.
+- Existing baseline lint/format commands are not added to CI yet because they currently fail.
+
+Architecture improvements:
+
+- Pull requests and pushes to `main`/`refactor/**` now run typecheck, unit tests, architecture checks and build.
+- CI runs on Ubuntu and Windows with Node 22.x.
+
+Quality checks:
+
+- workflow syntax is static YAML only; local validation covered by existing root gate commands from the previous chunk.
