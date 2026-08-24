@@ -2,6 +2,8 @@ import { appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import { createCopilotProviderAdapter } from '../../../providers/copilot/src/index.ts';
+
 import { AgentRunner } from './agent-runner.ts';
 import { CodexRunner } from './codex-runner.ts';
 import { CopilotRunner } from './copilot-runner.ts';
@@ -48,41 +50,6 @@ class ClaudeProviderAdapter implements ProviderRuntimeAdapter {
   }
 }
 
-class CopilotProviderAdapter implements ProviderRuntimeAdapter {
-  readonly provider = 'github_copilot' as const;
-  readonly enforcement = {
-    enforced: ['cwd', 'mcpServerNames', 'abortSignal', 'rateLimitBackoff'],
-    intentionallyIgnored: [
-      'maxTurns',
-      'allowedTools',
-      'hooksEnabled',
-      'approvalMode',
-      'filesystemSandbox',
-    ],
-    notes: [
-      'Copilot runner currently uses approveAll and does not enforce maxTurns or allowedTools.',
-      'Requested approvalMode is intentionally ignored until provider-specific approval mapping is implemented.',
-    ],
-  } as const;
-  readonly resume = {
-    interactive: true,
-    command: (sessionId: string, repoPath?: string | null) =>
-      buildResumeCommand(this.provider, sessionId, repoPath),
-  };
-
-  async run(ctx: ProviderRuntimeContext): Promise<ProviderRuntimeResult> {
-    const runner = new CopilotRunner(ctx);
-    const result = await runner.run();
-    return {
-      ...result,
-      sessionRef:
-        typeof result.sessionId === 'string' && result.sessionId.length > 0
-          ? { provider: this.provider, sessionId: result.sessionId }
-          : null,
-    };
-  }
-}
-
 class CodexProviderAdapter implements ProviderRuntimeAdapter {
   readonly provider = 'codex' as const;
   readonly enforcement = {
@@ -113,7 +80,10 @@ class CodexProviderAdapter implements ProviderRuntimeAdapter {
 }
 
 const claudeProvider = new ClaudeProviderAdapter();
-const copilotProvider = new CopilotProviderAdapter();
+const copilotProvider = createCopilotProviderAdapter<ProviderRuntimeContext>({
+  Runner: CopilotRunner,
+  buildResumeCommand,
+}) satisfies ProviderRuntimeAdapter;
 const codexProvider = new CodexProviderAdapter();
 
 const PROVIDERS: Record<AgentProvider, ProviderRuntimeAdapter> = {

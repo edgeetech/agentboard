@@ -345,6 +345,7 @@ Follow-up fixes:
 - Narrowed provider runtime support dependencies to `ProviderRateLimiter` and `ProviderSessionLog` interfaces so runners no longer require concrete rate-limit/session-log implementations.
 - Added executable Copilot SDK-path tests for session configuration, MCP server normalization, usage/model mapping and cleanup.
 - Copilot turn timeouts now propagate into the active SDK session and are classified as `timeout` even when the SDK abort rejection wins the race.
+- Moved Copilot provider adapter shell wiring into the target provider package behind an injected runner constructor, keeping the package free of legacy runtime imports while preserving current execution.
 
 ## CI Enforcement
 
