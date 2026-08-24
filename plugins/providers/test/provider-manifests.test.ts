@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { validateProviderManifest } from "../../../packages/plugin-sdk/src/index.ts";
 import { claudeProviderManifest } from "../claude/src/index.ts";
-import { codexProviderManifest } from "../codex/src/index.ts";
+import {
+  codexProviderManifest,
+  createCodexProviderAdapter,
+  type CodexRuntimeResult,
+} from "../codex/src/index.ts";
 import {
   copilotProviderManifest,
   createCopilotProviderAdapter,
@@ -65,5 +69,39 @@ describe("provider package manifests", () => {
       sessionRef: { provider: "github_copilot", sessionId: "copilot-session" },
     });
     expect(calls).toEqual([{ runId: "run-1" }]);
+  });
+
+  it("creates a Codex adapter shell around an injected runner", async () => {
+    const calls: unknown[] = [];
+    class FakeCodexRunner {
+      constructor(ctx: unknown) {
+        calls.push(ctx);
+      }
+
+      run(): Promise<CodexRuntimeResult> {
+        return Promise.resolve({
+          status: "completed",
+          sessionId: "codex-session",
+          model: "gpt-5-codex",
+        });
+      }
+    }
+
+    const adapter = createCodexProviderAdapter({
+      Runner: FakeCodexRunner,
+      buildResumeCommand: (_provider, sessionId, repoPath) =>
+        `${repoPath ?? "<none>"}:${sessionId}`,
+    });
+
+    expect(adapter.provider).toBe("codex");
+    expect(adapter.enforcement).toEqual(codexProviderManifest.enforcement);
+    expect(adapter.resume.command("s1", "/repo")).toBe("/repo:s1");
+
+    await expect(adapter.run({ runId: "run-2" })).resolves.toMatchObject({
+      status: "completed",
+      sessionId: "codex-session",
+      sessionRef: { provider: "codex", sessionId: "codex-session" },
+    });
+    expect(calls).toEqual([{ runId: "run-2" }]);
   });
 });
