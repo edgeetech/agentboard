@@ -77,6 +77,7 @@ Architecture improvements:
 
 - Target package boundaries now exist in the repository tree.
 - Architecture boundary checks are executable.
+- Architecture boundary checks now cover contracts, infrastructure, plugin-sdk and provider package imports.
 - Distribution risk is documented before runtime file moves.
 
 Compatibility concerns:

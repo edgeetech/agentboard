@@ -87,6 +87,62 @@ scanImports("apps/ui", [
   },
 ]);
 
+scanImports("packages/contracts", [
+  {
+    test: (s) => s.includes("packages/engine"),
+    reason: "contracts must not import engine",
+  },
+  {
+    test: (s) => s.includes("packages/infrastructure"),
+    reason: "contracts must not import infrastructure",
+  },
+  {
+    test: (s) => s.includes("plugins/"),
+    reason: "contracts must not import plugins",
+  },
+  { test: (s) => s.includes("server/"), reason: "contracts must not import server" },
+  { test: (s) => s.includes("apps/"), reason: "contracts must not import UI" },
+]);
+
+scanImports("packages/infrastructure", [
+  {
+    test: (s) => s.includes("plugins/"),
+    reason: "infrastructure must not import plugins",
+  },
+  { test: (s) => s.includes("server/"), reason: "infrastructure must not import server" },
+  { test: (s) => s.includes("apps/"), reason: "infrastructure must not import UI" },
+]);
+
+scanImports("packages/plugin-sdk", [
+  {
+    test: (s) => s.includes("plugins/"),
+    reason: "plugin SDK must not import plugin implementations",
+  },
+  {
+    test: (s) => s.includes("packages/infrastructure"),
+    reason: "plugin SDK must not import infrastructure",
+  },
+  { test: (s) => s.includes("server/"), reason: "plugin SDK must not import server" },
+  { test: (s) => s.includes("apps/"), reason: "plugin SDK must not import UI" },
+]);
+
+scanImports("plugins/providers", [
+  {
+    test: (s) => s.includes("agent-board-core"),
+    reason: "provider packages must not import legacy runtime internals",
+  },
+  {
+    test: (s) => s.includes("packages/engine"),
+    reason: "provider packages should implement plugin SDK contracts, not engine internals",
+  },
+  {
+    test: (s) => s.includes("packages/infrastructure"),
+    reason: "provider packages must not import infrastructure",
+  },
+  { test: (s) => s.includes("server/"), reason: "provider packages must not import server" },
+  { test: (s) => s.includes("apps/"), reason: "provider packages must not import UI" },
+]);
+
 scanImports("server", [
   {
     test: (s) =>
