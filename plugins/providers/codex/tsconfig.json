@@ -6,5 +6,9 @@
     "rootDir": "../../../",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "../../../packages/plugin-sdk/src/provider.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../../../packages/plugin-sdk/src/provider.ts",
+    "../../../packages/plugin-sdk/src/runtime.ts"
+  ]
 }

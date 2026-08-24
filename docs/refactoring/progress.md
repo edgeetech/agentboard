@@ -350,6 +350,7 @@ Follow-up fixes:
 - Moved Claude provider adapter shell wiring into the target provider package behind an injected runner constructor, completing the package-owned adapter shell pattern for all current providers.
 - Declared Copilot provider package runtime/test dependencies and moved its adapter-shell test into the package test tree so future Copilot runtime tests have a package-owned home.
 - Added plugin SDK runtime support primitives for provider run results, token usage, session logging, rate-limit ports, turn timeouts and legacy-runner-to-SDK response mapping.
+- Updated provider package adapter shells to consume the plugin SDK provider run-result type instead of duplicating local runtime result shapes.
 
 ## CI Enforcement
 

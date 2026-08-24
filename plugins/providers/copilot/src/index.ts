@@ -1,4 +1,5 @@
 import type { ProviderManifest } from "../../../../packages/plugin-sdk/src/provider.ts";
+import type { ProviderRunResult } from "../../../../packages/plugin-sdk/src/runtime.ts";
 
 export const copilotProviderManifest = {
   id: "github_copilot",
@@ -27,20 +28,7 @@ export const copilotProviderManifest = {
   },
 } as const satisfies ProviderManifest;
 
-export interface CopilotRuntimeResult {
-  status: "completed" | "failed" | "cancelled";
-  sessionId?: string | null;
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-    cache_creation_tokens: number;
-    cache_read_tokens: number;
-  };
-  model?: string | null;
-  totalCostUsd?: number | null;
-  error?: string;
-  errorKind?: "timeout" | "error";
-}
+export type CopilotRuntimeResult = ProviderRunResult;
 
 export interface CopilotRuntimeSessionRef {
   provider: typeof copilotProviderManifest.id;

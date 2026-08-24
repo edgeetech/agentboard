@@ -1,4 +1,5 @@
 import type { ProviderManifest } from "../../../../packages/plugin-sdk/src/provider.ts";
+import type { ProviderRunResult } from "../../../../packages/plugin-sdk/src/runtime.ts";
 
 export const codexProviderManifest = {
   id: "codex",
@@ -32,20 +33,7 @@ export const codexProviderManifest = {
   },
 } as const satisfies ProviderManifest;
 
-export interface CodexRuntimeResult {
-  status: "completed" | "failed" | "cancelled";
-  sessionId?: string | null;
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-    cache_creation_tokens: number;
-    cache_read_tokens: number;
-  };
-  model?: string | null;
-  totalCostUsd?: number | null;
-  error?: string;
-  errorKind?: "timeout" | "error";
-}
+export type CodexRuntimeResult = ProviderRunResult;
 
 export interface CodexRuntimeSessionRef {
   provider: typeof codexProviderManifest.id;
