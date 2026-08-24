@@ -24,6 +24,7 @@ import {
   recordRunFinished,
   recordRunRetry,
   recordRunStarted,
+  runOutcomeForTerminalStatus,
   type RunOutcome,
 } from './observability.ts';
 import { getDb, listProjectDbs } from './project-registry.ts';
@@ -480,7 +481,10 @@ async function tryClaimAndRun(
     }
 
     const live = getRun(db, run.id);
-    if (live?.status !== 'running') return; // already reaped
+    if (live?.status !== 'running') {
+      recordOutcome(runOutcomeForTerminalStatus(live?.status) ?? 'failed');
+      return; // already finished through MCP or reaped
+    }
 
     if (result.status === 'completed') {
       // Agent ended its SDK turn naturally without calling mcp__abrun__finish_run

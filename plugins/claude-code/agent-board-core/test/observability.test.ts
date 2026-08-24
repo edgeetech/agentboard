@@ -11,6 +11,7 @@ import {
   recordSseReplay,
   recordSseReplayFailure,
   resetObservabilityForTest,
+  runOutcomeForTerminalStatus,
 } from '../src/observability.ts';
 
 describe('observability counters', () => {
@@ -37,6 +38,15 @@ describe('observability counters', () => {
     });
     expect(Date.parse(snapshot.process_started_at)).not.toBeNaN();
     expect(Date.parse(snapshot.snapshot_at)).not.toBeNaN();
+  });
+
+  it('maps terminal DB statuses to run outcomes', () => {
+    expect(runOutcomeForTerminalStatus('succeeded')).toBe('completed');
+    expect(runOutcomeForTerminalStatus('failed')).toBe('failed');
+    expect(runOutcomeForTerminalStatus('blocked')).toBe('failed');
+    expect(runOutcomeForTerminalStatus('cancelled')).toBe('cancelled');
+    expect(runOutcomeForTerminalStatus('running')).toBeNull();
+    expect(runOutcomeForTerminalStatus(undefined)).toBeNull();
   });
 
   it('records SSE connection lifecycle and replay metrics', () => {

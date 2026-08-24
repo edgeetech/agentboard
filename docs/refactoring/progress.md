@@ -325,6 +325,11 @@ Quality checks:
 - targeted observability test: passed.
 - root typecheck: passed.
 
+Follow-up fixes:
+
+- Recorded terminal run outcomes when a provider returns after MCP `finish_run` already changed the DB row out of `running`.
+- Added terminal DB status to observability outcome mapping coverage.
+
 ## API Versioning
 
 Status: Initial API versioning/deprecation contract complete.

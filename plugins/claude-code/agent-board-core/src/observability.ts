@@ -62,6 +62,13 @@ export function recordRunFinished(outcome: RunOutcome, durationMs: number): void
   runs.max_duration_ms = Math.max(runs.max_duration_ms, boundedDuration);
 }
 
+export function runOutcomeForTerminalStatus(status: string | null | undefined): RunOutcome | null {
+  if (status === 'succeeded') return 'completed';
+  if (status === 'cancelled') return 'cancelled';
+  if (status === 'failed' || status === 'blocked') return 'failed';
+  return null;
+}
+
 export function recordRunRetry(scheduled: boolean): void {
   if (scheduled) runs.retries_scheduled += 1;
   else runs.retries_exhausted += 1;
