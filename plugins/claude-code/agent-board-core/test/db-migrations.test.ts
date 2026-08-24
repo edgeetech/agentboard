@@ -190,12 +190,16 @@ describe('project database migrations', () => {
     try {
       expect(
         db
-          .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='project'")
+          .prepare(
+            "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='project'",
+          )
           .get(),
       ).toEqual({ count: 1 } satisfies CountRow);
       expect(
         db
-          .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='project_new'")
+          .prepare(
+            "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='project_new'",
+          )
           .get(),
       ).toEqual({ count: 0 } satisfies CountRow);
     } finally {

@@ -1,9 +1,11 @@
+import type * as NodeFs from 'node:fs';
+
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { AgentProvider } from '../src/types.ts';
 
 vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
+  const actual = await importOriginal<typeof NodeFs>();
   return { ...actual, appendFileSync: vi.fn() };
 });
 
@@ -96,6 +98,8 @@ describe('maybeRegisterInteractiveHistory', () => {
     vi.mocked(appendFileSync).mockImplementationOnce(() => {
       throw new Error('EACCES: permission denied');
     });
-    expect(() => maybeRegisterInteractiveHistory('claude', 'sess-err', '/repo', 'x')).not.toThrow();
+    expect(() => {
+      maybeRegisterInteractiveHistory('claude', 'sess-err', '/repo', 'x');
+    }).not.toThrow();
   });
 });

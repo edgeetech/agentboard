@@ -101,7 +101,11 @@ async function makeDb(): Promise<DbHandle> {
   } as unknown as DbHandle;
 }
 
-function mkSkill(name: string, relPath: string, overrides: Partial<ScannedSkill> = {}): ScannedSkill {
+function mkSkill(
+  name: string,
+  relPath: string,
+  overrides: Partial<ScannedSkill> = {},
+): ScannedSkill {
   return {
     name,
     description: `${name} desc`,
@@ -168,7 +172,9 @@ describe('skill-repo', () => {
   });
 
   it('getSkill / getSkillByName resolves case-insensitively', () => {
-    upsertSkillIndex(db, PROJECT_CODE, [mkSkill('AlphaSkill', '.claude/skills/AlphaSkill/SKILL.md')]);
+    upsertSkillIndex(db, PROJECT_CODE, [
+      mkSkill('AlphaSkill', '.claude/skills/AlphaSkill/SKILL.md'),
+    ]);
     const live = listSkills(db, PROJECT_CODE);
     const id = live[0]?.id ?? '';
     expect(getSkill(db, id)?.name).toBe('AlphaSkill');
@@ -179,14 +185,18 @@ describe('skill-repo', () => {
 
   it('listSkills search filters by name and description', () => {
     upsertSkillIndex(db, PROJECT_CODE, [
-      mkSkill('payment-flow', '.claude/skills/payment-flow/SKILL.md', { description: 'handles cards' }),
+      mkSkill('payment-flow', '.claude/skills/payment-flow/SKILL.md', {
+        description: 'handles cards',
+      }),
       mkSkill('user-auth', '.claude/skills/user-auth/SKILL.md', { description: 'login + signup' }),
       mkSkill('logger', '.claude/skills/logger/SKILL.md', { description: 'pretty logs' }),
     ]);
     expect(listSkills(db, PROJECT_CODE, { search: 'payment' }).map((s) => s.name)).toEqual([
       'payment-flow',
     ]);
-    expect(listSkills(db, PROJECT_CODE, { search: 'login' }).map((s) => s.name)).toEqual(['user-auth']);
+    expect(listSkills(db, PROJECT_CODE, { search: 'login' }).map((s) => s.name)).toEqual([
+      'user-auth',
+    ]);
     expect(listSkills(db, PROJECT_CODE, { search: 'pretty' }).map((s) => s.name)).toEqual([
       'logger',
     ]);
@@ -214,7 +224,12 @@ describe('skill-repo', () => {
     expect(a?.endedAt).toBeNull();
     expect(a?.foundCount).toBe(0);
 
-    updateScan(db, id, { status: 'succeeded', endedAt: '2026-02-01T00:01:00Z', foundCount: 5, addedCount: 3 });
+    updateScan(db, id, {
+      status: 'succeeded',
+      endedAt: '2026-02-01T00:01:00Z',
+      foundCount: 5,
+      addedCount: 3,
+    });
     const b = getScan(db, id);
     expect(b?.status).toBe('succeeded');
     expect(b?.endedAt).toBe('2026-02-01T00:01:00Z');

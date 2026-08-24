@@ -13,8 +13,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   {
     id: 'builtin:code-review',
     name: 'Code Review',
-    description:
-      'Inspect a diff against coding standards, flag bugs, suggest fixes inline.',
+    description: 'Inspect a diff against coding standards, flag bugs, suggest fixes inline.',
     emblem: 'CR',
     tags: ['reviewer', 'default'],
     allowedTools: [],
@@ -65,8 +64,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   {
     id: 'builtin:tech-spec',
     name: 'Tech Spec Drafting',
-    description:
-      'Turn a loose description into acceptance criteria, risks, and a work breakdown.',
+    description: 'Turn a loose description into acceptance criteria, risks, and a work breakdown.',
     emblem: 'TS',
     tags: ['pm', 'default'],
     allowedTools: [],
@@ -115,8 +113,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   {
     id: 'builtin:api-client',
     name: 'API Client',
-    description:
-      'Wire a typed API client to a remote service, including retry and error handling.',
+    description: 'Wire a typed API client to a remote service, including retry and error handling.',
     emblem: 'AC',
     tags: ['worker', 'typescript'],
     allowedTools: [],
@@ -139,8 +136,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   {
     id: 'builtin:release-notes',
     name: 'Release Notes',
-    description:
-      'Summarise merged PRs into concise release notes grouped by scope and impact.',
+    description: 'Summarise merged PRs into concise release notes grouped by scope and impact.',
     emblem: 'RN',
     tags: ['reviewer'],
     allowedTools: [],

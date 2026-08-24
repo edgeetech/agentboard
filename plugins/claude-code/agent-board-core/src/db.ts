@@ -293,13 +293,13 @@ function applyMigrations(db: DbHandle): void {
   for (const m of MIGRATIONS) {
     runMigration(db, m);
   }
-  runMigrationStep('add project scan_ignore_json column', () => migrateProjectScanIgnoreJson(db));
-  runMigrationStep('ensure v6 agent config columns', () => migrateAgentConfigColumns(db));
+  runMigrationStep('add project scan_ignore_json column', () => { migrateProjectScanIgnoreJson(db); });
+  runMigrationStep('ensure v6 agent config columns', () => { migrateAgentConfigColumns(db); });
   runMigrationStep('expand project provider CHECK constraint', () =>
-    migrateProjectAgentProviderCheck(db),
+    { migrateProjectAgentProviderCheck(db); },
   );
   runMigrationStep('expand task provider override CHECK constraint', () =>
-    migrateTaskProviderOverrideCheck(db),
+    { migrateTaskProviderOverrideCheck(db); },
   );
 }
 

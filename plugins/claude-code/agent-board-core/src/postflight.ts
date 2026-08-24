@@ -27,7 +27,8 @@ export function isNonFinalCouncilMember(run: {
   council_size?: number | null;
 }): boolean {
   if (!run.parent_run_id) return false;
-  if (run.member_index == null || run.council_size == null) return false;
+  if (run.member_index === null || run.member_index === undefined) return false;
+  if (run.council_size === null || run.council_size === undefined) return false;
   return run.member_index < run.council_size - 1;
 }
 

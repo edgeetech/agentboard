@@ -19,7 +19,15 @@ describe('buildCodexExecArgs', () => {
 
     expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
     expect(args).toEqual(
-      expect.arrayContaining(['exec', '--json', '--sandbox', 'workspace-write', '--approve-for-me', '-C', '/repo']),
+      expect.arrayContaining([
+        'exec',
+        '--json',
+        '--sandbox',
+        'workspace-write',
+        '--approve-for-me',
+        '-C',
+        '/repo',
+      ]),
     );
     expect(args.slice(-2)).toEqual(['-c', 'model="gpt-5"']);
   });

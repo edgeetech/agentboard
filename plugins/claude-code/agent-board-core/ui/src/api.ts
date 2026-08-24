@@ -229,7 +229,9 @@ export const api = {
     call<{ skill: ApiSkillDetail }>('GET', `/api/skills/${encodeURIComponent(id)}`),
   updateSkill: (
     id: string,
-    patch: Partial<Pick<ApiSkillDetail, 'name' | 'description' | 'emblem' | 'tags' | 'allowedTools' | 'body'>>,
+    patch: Partial<
+      Pick<ApiSkillDetail, 'name' | 'description' | 'emblem' | 'tags' | 'allowedTools' | 'body'>
+    >,
   ) => call<{ skill: ApiSkill }>('PUT', `/api/skills/${encodeURIComponent(id)}`, patch),
   scanSkills: (trigger: ScanTrigger = 'manual') =>
     call<{ scanId: string; status: 'queued' }>('POST', '/api/skills/scan', { trigger }),

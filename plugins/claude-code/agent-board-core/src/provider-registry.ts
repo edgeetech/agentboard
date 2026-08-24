@@ -79,13 +79,7 @@ class CopilotProviderAdapter implements ProviderRuntimeAdapter {
 class CodexProviderAdapter implements ProviderRuntimeAdapter {
   readonly provider = 'codex' as const;
   readonly enforcement = {
-    enforced: [
-      'cwd',
-      'mcpServerNames',
-      'abortSignal',
-      'rateLimitBackoff',
-      'filesystemSandbox',
-    ],
+    enforced: ['cwd', 'mcpServerNames', 'abortSignal', 'rateLimitBackoff', 'filesystemSandbox'],
     intentionallyIgnored: ['maxTurns', 'allowedTools', 'hooksEnabled', 'approvalMode'],
     notes: [
       'Codex runner launches with workspace-write sandboxing and fixed approve-for-me automation.',

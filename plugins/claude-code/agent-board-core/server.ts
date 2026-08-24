@@ -67,10 +67,7 @@ import { json } from './src/http-util.ts';
 import { getObservabilitySnapshot } from './src/observability.ts';
 import { ensureDirs } from './src/paths.ts';
 import { getActiveDb } from './src/project-registry.ts';
-import {
-  startAllSkillScanWorkers,
-  stopAllSkillScanWorkers,
-} from './src/skill-scan-runtime.ts';
+import { startAllSkillScanWorkers, stopAllSkillScanWorkers } from './src/skill-scan-runtime.ts';
 
 // Debug: Check Copilot auth env vars at server startup
 console.warn('[SERVER STARTUP] Checking Copilot auth environment:');
@@ -208,10 +205,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     ];
     for (const h of handlers) {
       const done = await h(req, res, url);
-      if (done !== null && done !== undefined && done !== false) return;
-      if (res.headersSent) return;
+      if (done !== null) return;
     }
-    if (res.headersSent) return;
 
     json(res, 404, { error: 'not found', path: p });
   } catch (e) {

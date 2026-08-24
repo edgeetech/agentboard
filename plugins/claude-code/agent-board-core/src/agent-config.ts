@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import {
   providerId,
   resolveRoleConfig as resolveEngineRoleConfig,
@@ -39,7 +40,7 @@ export const agentConfigSchema = z
   .strict();
 
 export function parseAgentConfig(raw: unknown): AgentConfig | null {
-  if (raw == null) return null;
+  if (raw === null || raw === undefined) return null;
   if (typeof raw === 'string') {
     if (raw.trim() === '') return null;
     try {
@@ -113,7 +114,7 @@ export function providerLabel(p: AgentProvider): string {
 export function validateAgentConfigInput(
   raw: unknown,
 ): { ok: true; value: AgentConfig | null } | { ok: false; error: string } {
-  if (raw == null || raw === '') return { ok: true, value: null };
+  if (raw === null || raw === undefined || raw === '') return { ok: true, value: null };
   let candidate: unknown = raw;
   if (typeof raw === 'string') {
     try {

@@ -4,22 +4,12 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
-import type { TokenUsage } from './agent-runner.ts';
 import { parseAgentConfig, resolveRoleConfig } from './agent-config.ts';
+import type { TokenUsage } from './agent-runner.ts';
 import { emitActivity } from './api-activity.ts';
 import { executeCouncilRun } from './council-runner.ts';
 import type { DbHandle } from './db.ts';
 import { agentboardBus } from './event-bus.ts';
-import { logPath } from './paths.ts';
-import { recordActivity, setRunPhase } from './phase-repo.ts';
-import { checkPostflight } from './postflight.ts';
-import { computeCost } from './pricing.ts';
-import { maybeRegisterInteractiveHistory, providerFor } from './provider-registry.ts';
-import {
-  buildProviderRuntimePolicy,
-  type ProviderRuntimeContext,
-  type SdkMcpServer,
-} from './provider-runtime.ts';
 import {
   recordRunFinished,
   recordRunRetry,
@@ -27,9 +17,19 @@ import {
   runOutcomeForTerminalStatus,
   type RunOutcome,
 } from './observability.ts';
+import { logPath } from './paths.ts';
+import { recordActivity, setRunPhase } from './phase-repo.ts';
+import { checkPostflight } from './postflight.ts';
+import { computeCost } from './pricing.ts';
 import { getDb, listProjectDbs } from './project-registry.ts';
 import type { SkillContext } from './prompt-builder.ts';
 import { buildRolePrompt, renderSystemPrompt } from './prompt-builder.ts';
+import { maybeRegisterInteractiveHistory, providerFor } from './provider-registry.ts';
+import {
+  buildProviderRuntimePolicy,
+  type ProviderRuntimeContext,
+  type SdkMcpServer,
+} from './provider-runtime.ts';
 import { RateLimitTracker } from './rate-limit-tracker.ts';
 import type { AgentRunRow, ProjectRow, TaskRow } from './repo.ts';
 import {
@@ -201,7 +201,11 @@ async function tryClaimAndRun(
   const effectiveProvider: 'claude' | 'github_copilot' | 'codex' =
     roleCfg.type === 'single'
       ? roleCfg.provider
-      : (roleCfg.members[roleCfg.members.length - 1] as 'claude' | 'github_copilot' | 'codex');
+      : (() => {
+          const provider = roleCfg.members.at(-1);
+          if (provider === undefined) throw new Error('council role config has no members');
+          return provider;
+        })();
   const isCouncil = roleCfg.type === 'council';
 
   const run_token = randomBytes(24).toString('hex');
@@ -230,9 +234,7 @@ async function tryClaimAndRun(
         tags: s.tags,
       }));
     } catch (e) {
-      console.warn(
-        `[executor] listSkills failed for ${project.code}: ${(e as Error).message}`,
-      );
+      console.warn(`[executor] listSkills failed for ${project.code}: ${(e as Error).message}`);
       return [];
     }
   })();
@@ -427,7 +429,7 @@ async function tryClaimAndRun(
           parentRunId: run.id,
           taskId: task.id,
           baseOpts,
-          config: roleCfg as Extract<typeof roleCfg, { type: 'council' }>,
+          config: roleCfg,
           buildMemberBasePrompt: (childId, childToken) =>
             buildRolePrompt(
               run.role,

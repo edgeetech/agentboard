@@ -201,9 +201,7 @@ export class CodexRunner {
     });
 
     const fullPrompt =
-      systemPrompt.trim().length > 0
-        ? `${systemPrompt}\n\n---\n\n${prompt}`
-        : prompt;
+      systemPrompt.trim().length > 0 ? `${systemPrompt}\n\n---\n\n${prompt}` : prompt;
 
     const launch = resolveCodexLaunch(env, args);
     const child = spawn(launch.command, launch.args, {
