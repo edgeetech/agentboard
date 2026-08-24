@@ -54,11 +54,13 @@ async function loadAdapter(): Promise<Adapter> {
       },
     };
     return adapter;
-  } catch { /* fall through to optional better-sqlite3 */ }
+  } catch {
+    /* fall through to optional better-sqlite3 */
+  }
 
   try {
     // @ts-expect-error better-sqlite3 is optional — no @types package required
-    const mod = await import('better-sqlite3') as { default: new (path: string) => BetterLikeDb };
+    const mod = (await import('better-sqlite3')) as { default: new (path: string) => BetterLikeDb };
     adapter = {
       open(path: string): DbHandle {
         const db = new mod.default(path);
@@ -72,7 +74,8 @@ async function loadAdapter(): Promise<Adapter> {
   } catch (e) {
     throw new Error(
       'agentboard: node:sqlite unavailable (need Node ≥22 with --experimental-sqlite) and better-sqlite3 not installed. ' +
-      'Root cause: ' + (e instanceof Error ? e.message : String(e))
+        'Root cause: ' +
+        (e instanceof Error ? e.message : String(e)),
     );
   }
 }
@@ -88,8 +91,11 @@ function wrapBetter(db: BetterLikeDb): DbHandle {
         all: (...args: unknown[]): unknown[] => stmt.all(...args),
       };
     },
-    transaction: <T>(fn: (...args: unknown[]) => T): ((...args: unknown[]) => T) => db.transaction(fn),
-    close: (): void => { db.close(); },
+    transaction: <T>(fn: (...args: unknown[]) => T): ((...args: unknown[]) => T) =>
+      db.transaction(fn),
+    close: (): void => {
+      db.close();
+    },
   };
 }
 
@@ -115,11 +121,19 @@ function wrapNode(db: NodeLikeDb): DbHandle {
     transaction: <T>(fn: (...args: unknown[]) => T): ((...args: unknown[]) => T) => {
       return (...args: unknown[]): T => {
         db.exec('BEGIN');
-        try { const r = fn(...args); db.exec('COMMIT'); return r; }
-        catch (e) { db.exec('ROLLBACK'); throw e; }
+        try {
+          const r = fn(...args);
+          db.exec('COMMIT');
+          return r;
+        } catch (e) {
+          db.exec('ROLLBACK');
+          throw e;
+        }
       };
     },
-    close: (): void => { db.close(); },
+    close: (): void => {
+      db.close();
+    },
   };
 }
 
@@ -134,27 +148,35 @@ interface Migration {
 // expected after SCHEMA_SQL has already created current tables.
 const MIGRATIONS: Migration[] = [
   // Add agent_provider column to project table (for agent provider selection)
-  { sql: `ALTER TABLE project ADD COLUMN agent_provider TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot','codex'))`,
-    why: 'add agent_provider column to support claude/github_copilot/codex selection' },
+  {
+    sql: `ALTER TABLE project ADD COLUMN agent_provider TEXT NOT NULL DEFAULT 'claude'`,
+    why: 'add agent_provider column to support claude/github_copilot/codex selection',
+  },
   // task_attachment: create if not exists (existing DBs opened before schema bump).
-  { sql: `CREATE TABLE IF NOT EXISTS task_attachment (
+  {
+    sql: `CREATE TABLE IF NOT EXISTS task_attachment (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES task(id),
     file_path TEXT NOT NULL,
     label TEXT,
     created_at TEXT NOT NULL
-  )`, why: 'add task_attachment table for file path attachments' },
-  { sql: `CREATE INDEX IF NOT EXISTS idx_attachment_task ON task_attachment(task_id, created_at)`,
-    why: 'index for attachment lookups' },
+  )`,
+    why: 'add task_attachment table for file path attachments',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS idx_attachment_task ON task_attachment(task_id, created_at)`,
+    why: 'index for attachment lookups',
+  },
   // Ensure agent_run table and indices exist (re-enabled agent spawning system)
-  { sql: `CREATE TABLE IF NOT EXISTS agent_run (
+  {
+    sql: `CREATE TABLE IF NOT EXISTS agent_run (
     id                     TEXT PRIMARY KEY,
     task_id                TEXT NOT NULL REFERENCES task(id),
     role                   TEXT NOT NULL CHECK (role IN ('pm','worker','reviewer')),
     status                 TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','failed','blocked','cancelled')),
     token                  TEXT,
     pid                    INTEGER,
-    session_provider       TEXT CHECK (session_provider IS NULL OR session_provider IN ('claude','github_copilot','codex')),
+    session_provider       TEXT,
     session_id             TEXT,
     claude_session_id      TEXT,
     error                  TEXT,
@@ -173,36 +195,65 @@ const MIGRATIONS: Migration[] = [
     started_at             TEXT,
     ended_at               TEXT,
     prompt_template        TEXT
-  )`, why: 'add agent_run table for agent execution queue' },
-  { sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_running ON agent_run(status, last_heartbeat_at)`,
-    why: 'index for finding running runs' },
-  { sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_task_queued ON agent_run(task_id, queued_at DESC)`,
-    why: 'index for task run history' },
-  { sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_cost ON agent_run(task_id, ended_at) WHERE status IN ('succeeded','failed','blocked','cancelled')`,
-    why: 'index for cost calculations' },
-  { sql: `ALTER TABLE task ADD COLUMN workspace_path TEXT`,
-    why: 'add workspace_path column for workspace isolation' },
-  { sql: `ALTER TABLE task ADD COLUMN agent_provider_override TEXT CHECK (agent_provider_override IN ('claude', 'github_copilot', 'codex', NULL))`,
-    why: 'add agent_provider_override column for task-level executor selection' },
+  )`,
+    why: 'add agent_run table for agent execution queue',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_running ON agent_run(status, last_heartbeat_at)`,
+    why: 'index for finding running runs',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_task_queued ON agent_run(task_id, queued_at DESC)`,
+    why: 'index for task run history',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_cost ON agent_run(task_id, ended_at) WHERE status IN ('succeeded','failed','blocked','cancelled')`,
+    why: 'index for cost calculations',
+  },
+  {
+    sql: `ALTER TABLE task ADD COLUMN workspace_path TEXT`,
+    why: 'add workspace_path column for workspace isolation',
+  },
+  {
+    sql: `ALTER TABLE task ADD COLUMN agent_provider_override TEXT`,
+    why: 'add agent_provider_override column for task-level executor selection',
+  },
 
   // --- noskills-style inner phase machine (additive) ---
-  { sql: `ALTER TABLE task ADD COLUMN discovery_mode TEXT NOT NULL DEFAULT 'full' CHECK (discovery_mode IN ('full','validate','technical-depth','ship-fast','explore'))`,
-    why: 'noskills discovery mode per task' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN phase TEXT NOT NULL DEFAULT 'DISCOVERY' CHECK (phase IN ('DISCOVERY','REFINEMENT','PLANNING','EXECUTING','VERIFICATION','DONE'))`,
-    why: 'noskills inner phase per run' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN session_provider TEXT CHECK (session_provider IS NULL OR session_provider IN ('claude','github_copilot','codex'))`,
-    why: 'provider-neutral session provider compatibility field' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN session_id TEXT`,
-    why: 'provider-neutral session id compatibility field' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN phase_state_json TEXT NOT NULL DEFAULT '{}'`,
-    why: 'noskills phase progress, AC evidence, debt state' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN phase_history_json TEXT NOT NULL DEFAULT '[]'`,
-    why: 'noskills phase transition audit per run' },
-  { sql: `ALTER TABLE project ADD COLUMN concerns_json TEXT NOT NULL DEFAULT '[]'`,
-    why: 'noskills enabled concerns per project' },
-  { sql: `ALTER TABLE project ADD COLUMN allow_git INTEGER NOT NULL DEFAULT 0`,
-    why: 'noskills allowGit gate (PreToolUse hook reads this)' },
-  { sql: `CREATE TABLE IF NOT EXISTS task_debt (
+  {
+    sql: `ALTER TABLE task ADD COLUMN discovery_mode TEXT NOT NULL DEFAULT 'full' CHECK (discovery_mode IN ('full','validate','technical-depth','ship-fast','explore'))`,
+    why: 'noskills discovery mode per task',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN phase TEXT NOT NULL DEFAULT 'DISCOVERY' CHECK (phase IN ('DISCOVERY','REFINEMENT','PLANNING','EXECUTING','VERIFICATION','DONE'))`,
+    why: 'noskills inner phase per run',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN session_provider TEXT`,
+    why: 'provider-neutral session provider compatibility field',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN session_id TEXT`,
+    why: 'provider-neutral session id compatibility field',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN phase_state_json TEXT NOT NULL DEFAULT '{}'`,
+    why: 'noskills phase progress, AC evidence, debt state',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN phase_history_json TEXT NOT NULL DEFAULT '[]'`,
+    why: 'noskills phase transition audit per run',
+  },
+  {
+    sql: `ALTER TABLE project ADD COLUMN concerns_json TEXT NOT NULL DEFAULT '[]'`,
+    why: 'noskills enabled concerns per project',
+  },
+  {
+    sql: `ALTER TABLE project ADD COLUMN allow_git INTEGER NOT NULL DEFAULT 0`,
+    why: 'noskills allowGit gate (PreToolUse hook reads this)',
+  },
+  {
+    sql: `CREATE TABLE IF NOT EXISTS task_debt (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES task(id),
     run_id TEXT REFERENCES agent_run(id),
@@ -210,24 +261,36 @@ const MIGRATIONS: Migration[] = [
     carried_count INTEGER NOT NULL DEFAULT 0,
     resolved_at TEXT,
     created_at TEXT NOT NULL
-  )`, why: 'noskills debt carryforward' },
-  { sql: `CREATE INDEX IF NOT EXISTS idx_task_debt_open ON task_debt(task_id) WHERE resolved_at IS NULL`,
-    why: 'fast lookup of open debt per task' },
-  { sql: `CREATE TABLE IF NOT EXISTS agent_activity (
+  )`,
+    why: 'noskills debt carryforward',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS idx_task_debt_open ON task_debt(task_id) WHERE resolved_at IS NULL`,
+    why: 'fast lookup of open debt per task',
+  },
+  {
+    sql: `CREATE TABLE IF NOT EXISTS agent_activity (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES agent_run(id),
     task_id TEXT NOT NULL REFERENCES task(id),
     kind TEXT NOT NULL,
     payload TEXT NOT NULL DEFAULT '{}',
     at TEXT NOT NULL
-  )`, why: 'append-only activity log for live UI feed' },
-  { sql: `CREATE INDEX IF NOT EXISTS idx_agent_activity_run ON agent_activity(run_id, at)`,
-    why: 'SSE replay per run' },
-  { sql: `CREATE INDEX IF NOT EXISTS idx_agent_activity_task ON agent_activity(task_id, at DESC)`,
-    why: 'recent activity per task card' },
+  )`,
+    why: 'append-only activity log for live UI feed',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS idx_agent_activity_run ON agent_activity(run_id, at)`,
+    why: 'SSE replay per run',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS idx_agent_activity_task ON agent_activity(task_id, at DESC)`,
+    why: 'recent activity per task card',
+  },
 
   // --- skills scan support ---
-  { sql: `CREATE TABLE IF NOT EXISTS skill (
+  {
+    sql: `CREATE TABLE IF NOT EXISTS skill (
     id TEXT PRIMARY KEY,
     project_code TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -240,12 +303,19 @@ const MIGRATIONS: Migration[] = [
     allowed_tools_json TEXT NOT NULL DEFAULT '[]',
     scanned_at TEXT NOT NULL,
     deleted_at TEXT
-  )`, why: 'skill catalog per project' },
-  { sql: `CREATE INDEX IF NOT EXISTS skill_project_idx ON skill(project_code, deleted_at)`,
-    why: 'fast live skill lookup per project' },
-  { sql: `CREATE INDEX IF NOT EXISTS skill_reldir_idx ON skill(project_code, rel_dir)`,
-    why: 'lookup skills by rel_dir during scan diff' },
-  { sql: `CREATE TABLE IF NOT EXISTS skill_scan (
+  )`,
+    why: 'skill catalog per project',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS skill_project_idx ON skill(project_code, deleted_at)`,
+    why: 'fast live skill lookup per project',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS skill_reldir_idx ON skill(project_code, rel_dir)`,
+    why: 'lookup skills by rel_dir during scan diff',
+  },
+  {
+    sql: `CREATE TABLE IF NOT EXISTS skill_scan (
     id TEXT PRIMARY KEY,
     project_code TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','failed')),
@@ -258,49 +328,82 @@ const MIGRATIONS: Migration[] = [
     error TEXT,
     trigger TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )`, why: 'skill scan run history' },
-  { sql: `CREATE INDEX IF NOT EXISTS skill_scan_project_idx ON skill_scan(project_code, status)`,
-    why: 'find queued/running scans per project' },
-  { sql: `CREATE INDEX IF NOT EXISTS skill_scan_created_idx ON skill_scan(project_code, created_at DESC)`,
-    why: 'recent scan history per project' },
-  { sql: `INSERT INTO meta(key, value) VALUES ('schema_version', '5')
+  )`,
+    why: 'skill scan run history',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS skill_scan_project_idx ON skill_scan(project_code, status)`,
+    why: 'find queued/running scans per project',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS skill_scan_created_idx ON skill_scan(project_code, created_at DESC)`,
+    why: 'recent scan history per project',
+  },
+  {
+    sql: `INSERT INTO meta(key, value) VALUES ('schema_version', '5')
           ON CONFLICT(key) DO UPDATE SET value='5' WHERE meta.value < '5'`,
-    why: 'bump schema_version to 5 for skill+scan tables and project.scan_ignore_json' },
+    why: 'bump schema_version to 5 for skill+scan tables and project.scan_ignore_json',
+  },
 
   // --- v6: per-role agent config + council persona ---
-  { sql: `ALTER TABLE project ADD COLUMN agent_config_json TEXT`,
-    why: 'per-role agent provider config (single or council) at project level' },
-  { sql: `ALTER TABLE task ADD COLUMN agent_config_json TEXT`,
-    why: 'per-role agent provider config override at task level' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN parent_run_id TEXT`,
-    why: 'council parent run reference for member runs (FK omitted; SQLite ALTER ADD COLUMN restriction)' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN member_index INTEGER`,
-    why: 'council member 0-based debate position' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN council_size INTEGER`,
-    why: 'council size on parent row (NULL for non-council)' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN session_provider_override TEXT CHECK (session_provider_override IS NULL OR session_provider_override IN ('claude','github_copilot','codex'))`,
-    why: 'one-shot manual provider override for a single run' },
-  { sql: `ALTER TABLE agent_run ADD COLUMN cost_breakdown_json TEXT NOT NULL DEFAULT '{}'`,
-    why: 'per-member cost breakdown for council parent rows' },
-  { sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_parent ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL`,
-    why: 'fast lookup of council member rows by parent' },
-  { sql: `INSERT INTO meta(key, value) VALUES ('schema_version', '6')
+  {
+    sql: `ALTER TABLE project ADD COLUMN agent_config_json TEXT`,
+    why: 'per-role agent provider config (single or council) at project level',
+  },
+  {
+    sql: `ALTER TABLE task ADD COLUMN agent_config_json TEXT`,
+    why: 'per-role agent provider config override at task level',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN parent_run_id TEXT`,
+    why: 'council parent run reference for member runs (FK omitted; SQLite ALTER ADD COLUMN restriction)',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN member_index INTEGER`,
+    why: 'council member 0-based debate position',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN council_size INTEGER`,
+    why: 'council size on parent row (NULL for non-council)',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN session_provider_override TEXT`,
+    why: 'one-shot manual provider override for a single run',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN cost_breakdown_json TEXT NOT NULL DEFAULT '{}'`,
+    why: 'per-member cost breakdown for council parent rows',
+  },
+  {
+    sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_parent ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL`,
+    why: 'fast lookup of council member rows by parent',
+  },
+  {
+    sql: `INSERT INTO meta(key, value) VALUES ('schema_version', '6')
           ON CONFLICT(key) DO UPDATE SET value='6' WHERE meta.value < '6'`,
-    why: 'bump schema_version to 6 for per-role agent config + council' },
+    why: 'bump schema_version to 6 for per-role agent config + council',
+  },
 ];
 
 function applyMigrations(db: DbHandle): void {
   for (const m of MIGRATIONS) {
     runMigration(db, m);
   }
-  runMigrationStep('add project scan_ignore_json column', () => { migrateProjectScanIgnoreJson(db); });
-  runMigrationStep('ensure v6 agent config columns', () => { migrateAgentConfigColumns(db); });
-  runMigrationStep('expand project provider CHECK constraint', () =>
-    { migrateProjectAgentProviderCheck(db); },
-  );
-  runMigrationStep('expand task provider override CHECK constraint', () =>
-    { migrateTaskProviderOverrideCheck(db); },
-  );
+  runMigrationStep('add project scan_ignore_json column', () => {
+    migrateProjectScanIgnoreJson(db);
+  });
+  runMigrationStep('ensure v6 agent config columns', () => {
+    migrateAgentConfigColumns(db);
+  });
+  runMigrationStep('remove project provider CHECK constraint', () => {
+    migrateProjectAgentProviderCheck(db);
+  });
+  runMigrationStep('remove task provider override CHECK constraint', () => {
+    migrateTaskProviderOverrideCheck(db);
+  });
+  runMigrationStep('remove run provider CHECK constraints', () => {
+    migrateAgentRunProviderCheck(db);
+  });
 }
 
 function runMigration(db: DbHandle, migration: Migration): void {
@@ -345,7 +448,9 @@ function migrateAgentConfigColumns(db: DbHandle): void {
   ensure('agent_run', 'council_size', 'council_size INTEGER');
   ensure('agent_run', 'session_provider_override', 'session_provider_override TEXT');
   ensure('agent_run', 'cost_breakdown_json', `cost_breakdown_json TEXT NOT NULL DEFAULT '{}'`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_run_parent ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL`);
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_agent_run_parent ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL`,
+  );
 }
 
 function migrateProjectScanIgnoreJson(db: DbHandle): void {
@@ -364,6 +469,12 @@ function tableSql(db: DbHandle, table: string): string {
   return '';
 }
 
+function hasProviderCheckConstraint(sql: string): boolean {
+  return /\b(?:agent_provider|agent_provider_override|session_provider|session_provider_override)\s+[^,]*\bCHECK\s*\([^)]*\bIN\s*\(/i.test(
+    sql,
+  );
+}
+
 function recreateProjectTrigger(db: DbHandle): void {
   db.exec(`
 DROP TRIGGER IF EXISTS project_workflow_immutable;
@@ -374,7 +485,11 @@ BEGIN
 END;`);
 }
 
-function rebuildTableWithForeignKeysOff(db: DbHandle, tempTable: string, rebuild: () => void): void {
+function rebuildTableWithForeignKeysOff(
+  db: DbHandle,
+  tempTable: string,
+  rebuild: () => void,
+): void {
   db.exec('PRAGMA foreign_keys=OFF');
   try {
     db.exec(`DROP TABLE IF EXISTS ${tempTable}`);
@@ -394,7 +509,7 @@ function rebuildTableWithForeignKeysOff(db: DbHandle, tempTable: string, rebuild
 
 function migrateProjectAgentProviderCheck(db: DbHandle): void {
   const sql = tableSql(db, 'project');
-  if (!sql || sql.includes("'codex'")) return;
+  if (!sql || !hasProviderCheckConstraint(sql)) return;
   rebuildTableWithForeignKeysOff(db, 'project_new', () => {
     db.exec(`
 CREATE TABLE project_new (
@@ -405,7 +520,7 @@ CREATE TABLE project_new (
   workflow_type     TEXT NOT NULL CHECK (workflow_type IN ('WF1','WF2')),
   repo_path         TEXT NOT NULL,
   max_parallel      INTEGER NOT NULL DEFAULT 1 CHECK (max_parallel BETWEEN 1 AND 3),
-  agent_provider    TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot','codex')),
+  agent_provider    TEXT NOT NULL DEFAULT 'claude',
   agent_config_json TEXT,
   scan_ignore_json  TEXT NOT NULL DEFAULT '[]',
   concerns_json     TEXT NOT NULL DEFAULT '[]',
@@ -426,7 +541,7 @@ ALTER TABLE project_new RENAME TO project;`);
 
 function migrateTaskProviderOverrideCheck(db: DbHandle): void {
   const sql = tableSql(db, 'task');
-  if (!sql || sql.includes("'codex'")) return;
+  if (!sql || !hasProviderCheckConstraint(sql)) return;
   rebuildTableWithForeignKeysOff(db, 'task_new', () => {
     db.exec(`
 CREATE TABLE task_new (
@@ -440,7 +555,7 @@ CREATE TABLE task_new (
   status                   TEXT NOT NULL CHECK (status IN ('todo','agent_working','agent_review','human_approval','done')),
   assignee_role            TEXT CHECK (assignee_role IN ('pm','worker','reviewer','human')),
   rework_count             INTEGER NOT NULL DEFAULT 0,
-  agent_provider_override  TEXT CHECK (agent_provider_override IN ('claude', 'github_copilot', 'codex', NULL)),
+  agent_provider_override  TEXT,
   agent_config_json        TEXT,
   workspace_path           TEXT,
   discovery_mode           TEXT NOT NULL DEFAULT 'full' CHECK (discovery_mode IN ('full','validate','technical-depth','ship-fast','explore')),
@@ -459,6 +574,58 @@ CREATE INDEX IF NOT EXISTS idx_task_status_live ON task(status) WHERE deleted_at
   });
 }
 
+function migrateAgentRunProviderCheck(db: DbHandle): void {
+  const sql = tableSql(db, 'agent_run');
+  if (!sql || !hasProviderCheckConstraint(sql)) return;
+  rebuildTableWithForeignKeysOff(db, 'agent_run_new', () => {
+    db.exec(`
+CREATE TABLE agent_run_new (
+  id                     TEXT PRIMARY KEY,
+  task_id                TEXT NOT NULL REFERENCES task(id),
+  role                   TEXT NOT NULL CHECK (role IN ('pm','worker','reviewer')),
+  status                 TEXT NOT NULL CHECK (status IN ('queued','running','succeeded','failed','blocked','cancelled')),
+  token                  TEXT,
+  pid                    INTEGER,
+  session_provider       TEXT,
+  session_id             TEXT,
+  claude_session_id      TEXT,
+  error                  TEXT,
+  logs_path              TEXT,
+  summary                TEXT,
+  model                  TEXT,
+  input_tokens           INTEGER NOT NULL DEFAULT 0,
+  output_tokens          INTEGER NOT NULL DEFAULT 0,
+  cache_creation_tokens  INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens      INTEGER NOT NULL DEFAULT 0,
+  cost_usd               REAL NOT NULL DEFAULT 0,
+  cost_version           INTEGER NOT NULL DEFAULT 0,
+  attempt                INTEGER NOT NULL DEFAULT 1,
+  last_heartbeat_at      TEXT,
+  queued_at              TEXT NOT NULL,
+  started_at             TEXT,
+  ended_at               TEXT,
+  prompt_template        TEXT,
+  phase                  TEXT NOT NULL DEFAULT 'DISCOVERY' CHECK (phase IN ('DISCOVERY','REFINEMENT','PLANNING','EXECUTING','VERIFICATION','DONE')),
+  phase_state_json       TEXT NOT NULL DEFAULT '{}',
+  phase_history_json     TEXT NOT NULL DEFAULT '[]',
+  parent_run_id          TEXT REFERENCES agent_run(id),
+  member_index           INTEGER,
+  council_size           INTEGER,
+  session_provider_override TEXT,
+  cost_breakdown_json    TEXT NOT NULL DEFAULT '{}'
+);
+INSERT INTO agent_run_new(id, task_id, role, status, token, pid, session_provider, session_id, claude_session_id, error, logs_path, summary, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cost_usd, cost_version, attempt, last_heartbeat_at, queued_at, started_at, ended_at, prompt_template, phase, phase_state_json, phase_history_json, parent_run_id, member_index, council_size, session_provider_override, cost_breakdown_json)
+SELECT id, task_id, role, status, token, pid, session_provider, session_id, claude_session_id, error, logs_path, summary, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cost_usd, cost_version, attempt, last_heartbeat_at, queued_at, started_at, ended_at, prompt_template, phase, phase_state_json, phase_history_json, parent_run_id, member_index, council_size, session_provider_override, cost_breakdown_json
+FROM agent_run;
+DROP TABLE agent_run;
+ALTER TABLE agent_run_new RENAME TO agent_run;
+CREATE INDEX IF NOT EXISTS idx_agent_run_running ON agent_run(status, last_heartbeat_at);
+CREATE INDEX IF NOT EXISTS idx_agent_run_task_queued ON agent_run(task_id, queued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_run_cost ON agent_run(task_id, ended_at) WHERE status IN ('succeeded','failed','blocked','cancelled');
+CREATE INDEX IF NOT EXISTS idx_agent_run_parent ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL;`);
+  });
+}
+
 // Open project DB, run idempotent schema, apply migrations, return handle.
 export async function openProjectDb(path: string): Promise<DbHandle> {
   const a = await loadAdapter();
@@ -473,4 +640,6 @@ export async function openProjectDb(path: string): Promise<DbHandle> {
   }
 }
 
-export function dbExists(path: string): boolean { return existsSync(path); }
+export function dbExists(path: string): boolean {
+  return existsSync(path);
+}

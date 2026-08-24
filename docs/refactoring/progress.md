@@ -270,6 +270,7 @@ Follow-up fixes:
 - Added invalid legacy provider data coverage to prove migration failures are not swallowed.
 - Provider CHECK table rebuilds now run in a transaction and clean temporary tables after failed copies.
 - Added core `npm run test:migrations`, root `npm run verify:db-migrations` and a named CI migration verification step.
+- Removed SQLite provider enum-style CHECK constraints from fresh schema and migration rebuilds so future provider IDs are not blocked by persistence.
 
 ## Contracts
 

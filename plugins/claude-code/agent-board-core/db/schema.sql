@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS project (
   workflow_type     TEXT NOT NULL CHECK (workflow_type IN ('WF1','WF2')),
   repo_path         TEXT NOT NULL,
   max_parallel      INTEGER NOT NULL DEFAULT 1 CHECK (max_parallel BETWEEN 1 AND 3),
-  agent_provider    TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot','codex')),
+  agent_provider    TEXT NOT NULL DEFAULT 'claude',
   agent_config_json TEXT,
   scan_ignore_json  TEXT NOT NULL DEFAULT '[]',
   version           INTEGER NOT NULL DEFAULT 0,
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS task (
   status                   TEXT NOT NULL CHECK (status IN ('todo','agent_working','agent_review','human_approval','done')),
   assignee_role            TEXT CHECK (assignee_role IN ('pm','worker','reviewer','human')),
   rework_count             INTEGER NOT NULL DEFAULT 0,
-  agent_provider_override  TEXT CHECK (agent_provider_override IN ('claude', 'github_copilot', 'codex', NULL)),
+  agent_provider_override  TEXT,
   agent_config_json        TEXT,
   workspace_path           TEXT,
   version                  INTEGER NOT NULL DEFAULT 0,
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS agent_run (
   parent_run_id          TEXT REFERENCES agent_run(id),
   member_index           INTEGER,
   council_size           INTEGER,
-  session_provider_override TEXT CHECK (session_provider_override IS NULL OR session_provider_override IN ('claude','github_copilot','codex')),
+  session_provider_override TEXT,
   cost_breakdown_json    TEXT NOT NULL DEFAULT '{}'
 );
 
