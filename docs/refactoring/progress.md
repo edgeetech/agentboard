@@ -159,7 +159,7 @@ Quality checks:
 
 - lint: not rerun globally; existing baseline still fails.
 - typecheck: passed through root `npm run typecheck`.
-- unit: passed through root `npm run test`, 32 existing files / 253 tests plus 5 Engine files / 41 tests.
+- unit: passed through root `npm run test`, 32 existing files / 256 tests plus 5 Engine files / 41 tests.
 - integration: no separate command yet.
 - e2e: placeholder only.
 - build: not rerun after Phase 2 extraction.
@@ -241,3 +241,33 @@ Quality checks:
 
 - contracts typecheck: passed.
 - root typecheck: passed.
+
+## Provider Runtime Limits
+
+Status: Initial provider sandbox/resource contract complete.
+
+Moved / Added:
+
+- Added explicit `ProviderRuntimeLimits`, `ProviderSandboxPolicy` and `ProviderRuntimeEnforcement` contracts in `provider-runtime.ts`.
+- Added `buildProviderRuntimePolicy` for deterministic context policy construction.
+- Populated provider runtime limits/sandbox policy in `executor.ts`.
+- Added provider enforcement declarations for Claude, Copilot and Codex adapters.
+- Expanded provider runtime and registry tests.
+
+Behaviour preserved:
+
+- Provider execution behavior is unchanged.
+- Current unsupported controls are declared as intentionally ignored rather than enforced.
+
+Architecture improvements:
+
+- Provider adapters now expose which controls they enforce versus ignore.
+- Copilot `approveAll` and Codex disabled sandbox behavior are explicit in adapter metadata.
+- Future sandbox/resource-limit work has a typed contract and test seam.
+
+Quality checks:
+
+- targeted provider tests: passed.
+- root typecheck: passed.
+- root test/build/architecture: passed.
+- formatting: passed for provider/progress files; `executor.ts` not formatted to avoid baseline churn.

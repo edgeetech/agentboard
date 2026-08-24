@@ -15,6 +15,20 @@ import type { AgentProvider } from './types.ts';
 
 class ClaudeProviderAdapter implements ProviderRuntimeAdapter {
   readonly provider = 'claude' as const;
+  readonly enforcement = {
+    enforced: [
+      'cwd',
+      'maxTurns',
+      'allowedTools',
+      'mcpServerNames',
+      'hooksEnabled',
+      'abortSignal',
+      'rateLimitBackoff',
+      'approvalMode',
+    ],
+    intentionallyIgnored: ['filesystemSandbox'],
+    notes: ['Claude runner receives cwd, maxTurns, allowedTools, hooks and abort signal.'],
+  } as const;
   readonly resume = {
     interactive: true,
     command: (sessionId: string, repoPath?: string | null) =>
@@ -36,6 +50,13 @@ class ClaudeProviderAdapter implements ProviderRuntimeAdapter {
 
 class CopilotProviderAdapter implements ProviderRuntimeAdapter {
   readonly provider = 'github_copilot' as const;
+  readonly enforcement = {
+    enforced: ['cwd', 'mcpServerNames', 'abortSignal', 'rateLimitBackoff'],
+    intentionallyIgnored: ['maxTurns', 'allowedTools', 'hooksEnabled', 'filesystemSandbox'],
+    notes: [
+      'Copilot runner currently uses approveAll and does not enforce maxTurns or allowedTools.',
+    ],
+  } as const;
   readonly resume = {
     interactive: true,
     command: (sessionId: string, repoPath?: string | null) =>
@@ -57,6 +78,11 @@ class CopilotProviderAdapter implements ProviderRuntimeAdapter {
 
 class CodexProviderAdapter implements ProviderRuntimeAdapter {
   readonly provider = 'codex' as const;
+  readonly enforcement = {
+    enforced: ['cwd', 'mcpServerNames', 'abortSignal', 'rateLimitBackoff'],
+    intentionallyIgnored: ['maxTurns', 'allowedTools', 'hooksEnabled', 'filesystemSandbox'],
+    notes: ['Codex runner currently launches with approvals disabled and sandbox disabled.'],
+  } as const;
   readonly resume = {
     interactive: true,
     command: (sessionId: string, repoPath?: string | null) =>

@@ -8,9 +8,8 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 const { appendFileSync } = await import('node:fs');
-const { maybeRegisterInteractiveHistory, providerFor } = await import(
-  '../src/provider-registry.ts'
-);
+const { maybeRegisterInteractiveHistory, providerFor } =
+  await import('../src/provider-registry.ts');
 
 describe('providerFor', () => {
   it('returns adapter with matching provider for each known provider', () => {
@@ -28,6 +27,17 @@ describe('providerFor', () => {
     }
   });
 
+  it('declares runtime controls each provider enforces or ignores', () => {
+    expect(providerFor('claude').enforcement.enforced).toContain('maxTurns');
+    expect(providerFor('claude').enforcement.enforced).toContain('allowedTools');
+
+    expect(providerFor('github_copilot').enforcement.intentionallyIgnored).toContain('maxTurns');
+    expect(providerFor('github_copilot').enforcement.notes.join(' ')).toMatch(/approveAll/);
+
+    expect(providerFor('codex').enforcement.intentionallyIgnored).toContain('filesystemSandbox');
+    expect(providerFor('codex').enforcement.notes.join(' ')).toMatch(/sandbox disabled/);
+  });
+
   it('resume.command omits cd prefix when repoPath is null', () => {
     expect(providerFor('claude').resume.command('sess-1', null)).toBe('claude --resume sess-1');
     expect(providerFor('codex').resume.command('sess-2', null)).toBe('codex resume sess-2');
@@ -37,7 +47,9 @@ describe('providerFor', () => {
   });
 
   it('resume.command prefixes cd when repoPath is provided', () => {
-    expect(providerFor('claude').resume.command('s', '/repo')).toBe('cd "/repo"; claude --resume s');
+    expect(providerFor('claude').resume.command('s', '/repo')).toBe(
+      'cd "/repo"; claude --resume s',
+    );
   });
 });
 
@@ -83,8 +95,6 @@ describe('maybeRegisterInteractiveHistory', () => {
     vi.mocked(appendFileSync).mockImplementationOnce(() => {
       throw new Error('EACCES: permission denied');
     });
-    expect(() =>
-      maybeRegisterInteractiveHistory('claude', 'sess-err', '/repo', 'x'),
-    ).not.toThrow();
+    expect(() => maybeRegisterInteractiveHistory('claude', 'sess-err', '/repo', 'x')).not.toThrow();
   });
 });

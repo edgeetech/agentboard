@@ -15,7 +15,11 @@ import { recordActivity, setRunPhase } from './phase-repo.ts';
 import { checkPostflight } from './postflight.ts';
 import { computeCost } from './pricing.ts';
 import { maybeRegisterInteractiveHistory, providerFor } from './provider-registry.ts';
-import type { ProviderRuntimeContext, SdkMcpServer } from './provider-runtime.ts';
+import {
+  buildProviderRuntimePolicy,
+  type ProviderRuntimeContext,
+  type SdkMcpServer,
+} from './provider-runtime.ts';
 import { getDb, listProjectDbs } from './project-registry.ts';
 import type { SkillContext } from './prompt-builder.ts';
 import { buildRolePrompt, renderSystemPrompt } from './prompt-builder.ts';
@@ -373,6 +377,15 @@ async function tryClaimAndRun(
     }
   };
 
+  const allowedTools = allowlistFor(run.role);
+  const runtimePolicy = buildProviderRuntimePolicy({
+    cwd: workspacePath,
+    maxTurns: DEFAULT_MAX_TURNS,
+    allowedTools,
+    mcpServers,
+    ...(sdkHooks !== undefined ? { hooks: sdkHooks } : {}),
+  });
+
   const baseOpts: ProviderRuntimeContext = {
     runId: run.id,
     role: run.role,
@@ -380,8 +393,10 @@ async function tryClaimAndRun(
     systemPrompt,
     cwd: workspacePath,
     maxTurns: DEFAULT_MAX_TURNS,
-    allowedTools: allowlistFor(run.role),
+    allowedTools,
     mcpServers,
+    limits: runtimePolicy.limits,
+    sandbox: runtimePolicy.sandbox,
     ...(sdkHooks !== undefined ? { hooks: sdkHooks } : {}),
     abortController,
     rateLimiter,

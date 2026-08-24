@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildResumeCommand } from '../src/provider-runtime.ts';
+import { buildProviderRuntimePolicy, buildResumeCommand } from '../src/provider-runtime.ts';
 
 describe('buildResumeCommand', () => {
   it('builds claude resume commands', () => {
@@ -19,5 +19,49 @@ describe('buildResumeCommand', () => {
     expect(buildResumeCommand('github_copilot', 'sess-3', 'C:/repo')).toBe(
       'cd "C:/repo"; gh copilot -- --resume=sess-3',
     );
+  });
+});
+
+describe('buildProviderRuntimePolicy', () => {
+  it('normalizes requested runtime limits', () => {
+    const policy = buildProviderRuntimePolicy({
+      cwd: 'C:/repo/.agentboard/workspaces/t1',
+      maxTurns: 12,
+      allowedTools: 'Read, Edit, Bash ',
+      mcpServers: {
+        zed: { url: 'http://127.0.0.1:1/mcp' },
+        abrun: { url: 'http://127.0.0.1:2/mcp' },
+      },
+      hooks: { PreToolUse: [] },
+    });
+
+    expect(policy.limits).toEqual({
+      cwd: 'C:/repo/.agentboard/workspaces/t1',
+      maxTurns: 12,
+      allowedTools: ['Read', 'Edit', 'Bash'],
+      mcpServerNames: ['abrun', 'zed'],
+      hooksEnabled: true,
+      abortSignal: true,
+      rateLimitBackoff: true,
+    });
+    expect(policy.sandbox).toMatchObject({
+      workspaceCwd: 'C:/repo/.agentboard/workspaces/t1',
+      restrictToWorkspace: true,
+      allowUserMcpServers: true,
+      approvalMode: 'provider-default',
+    });
+  });
+
+  it('handles empty optional controls', () => {
+    const policy = buildProviderRuntimePolicy({
+      cwd: '/repo',
+      maxTurns: 3,
+      allowedTools: '',
+      mcpServers: {},
+    });
+
+    expect(policy.limits.allowedTools).toEqual([]);
+    expect(policy.limits.mcpServerNames).toEqual([]);
+    expect(policy.limits.hooksEnabled).toBe(false);
   });
 });
