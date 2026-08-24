@@ -485,6 +485,8 @@ Follow-up additions:
 
 - `assertProviderContract` now checks declared streaming, resume and usage capabilities against normalized fake responses.
 - `createDeterministicProviderAdapter` provides stable events, session refs, model and usage for provider extensibility tests.
+- Provider package targets now export validated SDK manifests for Claude, Codex and GitHub Copilot without moving legacy runtime execution.
+- Root `npm run typecheck` and `npm run test` now include provider package manifest seams.
 
 ## PR Feedback
 
