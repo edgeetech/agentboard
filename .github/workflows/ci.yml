@@ -34,10 +34,10 @@ jobs:
             plugins/claude-code/agent-board-core/package.json
 
       - name: Install root dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Install core dependencies
-        run: npm --prefix plugins/claude-code/agent-board-core install
+        run: npm --prefix plugins/claude-code/agent-board-core install --legacy-peer-deps
 
       - name: Typecheck
         run: npm run typecheck

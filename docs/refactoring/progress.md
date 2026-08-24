@@ -274,7 +274,7 @@ Quality checks:
 
 ## CI Enforcement
 
-Status: Initial GitHub Actions validation workflow complete.
+Status: Initial GitHub Actions validation workflow complete, with dependency-resolution compatibility fix.
 
 Moved / Added:
 
@@ -289,6 +289,7 @@ Architecture improvements:
 
 - Pull requests and pushes to `main`/`refactor/**` now run typecheck, unit tests, architecture checks and build.
 - CI runs on Ubuntu and Windows with Node 22.x.
+- CI installs with `--legacy-peer-deps` to match the current SDK/Zod dependency baseline until dependency modernization is handled separately.
 
 Quality checks:
 
