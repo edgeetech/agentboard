@@ -290,6 +290,7 @@ Architecture improvements:
 - Pull requests and pushes to `main`/`refactor/**` now run typecheck, unit tests, architecture checks and build.
 - CI runs on Ubuntu and Windows with Node 22.x.
 - CI installs with `--legacy-peer-deps` to match the current SDK/Zod dependency baseline until dependency modernization is handled separately.
+- Added missing `apps/ui/tsconfig.json` scaffold required by root TypeScript references and fresh CI installs.
 
 Quality checks:
 
