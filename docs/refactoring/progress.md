@@ -159,7 +159,7 @@ Quality checks:
 
 - lint: not rerun globally; existing baseline still fails.
 - typecheck: passed through root `npm run typecheck`.
-- unit: passed through root `npm run test`, 31 existing files / 252 tests plus 5 Engine files / 41 tests.
+- unit: passed through root `npm run test`, 32 existing files / 253 tests plus 5 Engine files / 41 tests.
 - integration: no separate command yet.
 - e2e: placeholder only.
 - build: not rerun after Phase 2 extraction.
@@ -190,3 +190,28 @@ Architecture improvements:
 Quality checks:
 
 - formatting: passed for touched governance files.
+
+## Migration Verification
+
+Status: Initial DB migration verification complete.
+
+Moved / Added:
+
+- Added `plugins/claude-code/agent-board-core/test/db-migrations.test.ts`.
+- Updated provider CHECK table rebuild migrations in `plugins/claude-code/agent-board-core/src/db.ts`.
+
+Behaviour preserved:
+
+- Existing `openProjectDb` entry point is unchanged.
+- Fresh schema still seeds `schema_version` 6.
+
+Architecture improvements:
+
+- Older project DBs are now migrated through a file-backed `openProjectDb` test.
+- Migration idempotence is covered by reopening the same migrated DB.
+- Provider CHECK rebuilds now preserve current project/task columns added by later migrations.
+
+Quality checks:
+
+- targeted db migration test: passed.
+- typecheck: passed.

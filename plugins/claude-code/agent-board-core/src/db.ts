@@ -293,10 +293,26 @@ function applyMigrations(db: DbHandle): void {
   for (const m of MIGRATIONS) {
     try { db.exec(m.sql); } catch { /* idempotent: column/table already present */ }
   }
-  try { migrateProjectAgentProviderCheck(db); } catch { /* ignore */ }
-  try { migrateTaskProviderOverrideCheck(db); } catch { /* ignore */ }
-  try { migrateProjectScanIgnoreJson(db); } catch { /* ignore */ }
-  try { migrateAgentConfigColumns(db); } catch (e) { console.warn('[db] v6 column migrate:', (e as Error).message); }
+  try {
+    migrateProjectScanIgnoreJson(db);
+  } catch {
+    /* ignore */
+  }
+  try {
+    migrateAgentConfigColumns(db);
+  } catch (e) {
+    console.warn('[db] v6 column migrate:', (e as Error).message);
+  }
+  try {
+    migrateProjectAgentProviderCheck(db);
+  } catch {
+    /* ignore */
+  }
+  try {
+    migrateTaskProviderOverrideCheck(db);
+  } catch {
+    /* ignore */
+  }
 }
 
 function migrateAgentConfigColumns(db: DbHandle): void {
@@ -361,13 +377,17 @@ CREATE TABLE project_new (
   repo_path         TEXT NOT NULL,
   max_parallel      INTEGER NOT NULL DEFAULT 1 CHECK (max_parallel BETWEEN 1 AND 3),
   agent_provider    TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot','codex')),
+  agent_config_json TEXT,
+  scan_ignore_json  TEXT NOT NULL DEFAULT '[]',
+  concerns_json     TEXT NOT NULL DEFAULT '[]',
+  allow_git         INTEGER NOT NULL DEFAULT 0,
   version           INTEGER NOT NULL DEFAULT 0,
   deleted_at        TEXT,
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL
 );
-INSERT INTO project_new(id, code, name, description, workflow_type, repo_path, max_parallel, agent_provider, version, deleted_at, created_at, updated_at)
-SELECT id, code, name, description, workflow_type, repo_path, max_parallel, agent_provider, version, deleted_at, created_at, updated_at
+INSERT INTO project_new(id, code, name, description, workflow_type, repo_path, max_parallel, agent_provider, agent_config_json, scan_ignore_json, concerns_json, allow_git, version, deleted_at, created_at, updated_at)
+SELECT id, code, name, description, workflow_type, repo_path, max_parallel, agent_provider, agent_config_json, scan_ignore_json, concerns_json, allow_git, version, deleted_at, created_at, updated_at
 FROM project;
 DROP TABLE project;
 ALTER TABLE project_new RENAME TO project;`);
@@ -392,15 +412,17 @@ CREATE TABLE task_new (
   assignee_role            TEXT CHECK (assignee_role IN ('pm','worker','reviewer','human')),
   rework_count             INTEGER NOT NULL DEFAULT 0,
   agent_provider_override  TEXT CHECK (agent_provider_override IN ('claude', 'github_copilot', 'codex', NULL)),
+  agent_config_json        TEXT,
   workspace_path           TEXT,
+  discovery_mode           TEXT NOT NULL DEFAULT 'full' CHECK (discovery_mode IN ('full','validate','technical-depth','ship-fast','explore')),
   version                  INTEGER NOT NULL DEFAULT 0,
   deleted_at               TEXT,
   created_at               TEXT NOT NULL,
   updated_at               TEXT NOT NULL,
   UNIQUE(project_id, seq)
 );
-INSERT INTO task_new(id, project_id, seq, code, title, description, acceptance_criteria_json, status, assignee_role, rework_count, agent_provider_override, workspace_path, version, deleted_at, created_at, updated_at)
-SELECT id, project_id, seq, code, title, description, acceptance_criteria_json, status, assignee_role, rework_count, agent_provider_override, workspace_path, version, deleted_at, created_at, updated_at
+INSERT INTO task_new(id, project_id, seq, code, title, description, acceptance_criteria_json, status, assignee_role, rework_count, agent_provider_override, agent_config_json, workspace_path, discovery_mode, version, deleted_at, created_at, updated_at)
+SELECT id, project_id, seq, code, title, description, acceptance_criteria_json, status, assignee_role, rework_count, agent_provider_override, agent_config_json, workspace_path, discovery_mode, version, deleted_at, created_at, updated_at
 FROM task;
 DROP TABLE task;
 ALTER TABLE task_new RENAME TO task;
