@@ -348,6 +348,7 @@ Follow-up fixes:
 - Moved Copilot provider adapter shell wiring into the target provider package behind an injected runner constructor, keeping the package free of legacy runtime imports while preserving current execution.
 - Moved Codex provider adapter shell wiring into the target provider package behind an injected runner constructor, matching the Copilot package-safe transition pattern.
 - Moved Claude provider adapter shell wiring into the target provider package behind an injected runner constructor, completing the package-owned adapter shell pattern for all current providers.
+- Declared Copilot provider package runtime/test dependencies and moved its adapter-shell test into the package test tree so future Copilot runtime tests have a package-owned home.
 
 ## CI Enforcement
 

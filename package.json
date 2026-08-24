@@ -30,7 +30,7 @@
     "test:engine": "node plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run packages/engine/test",
     "test:plugin-sdk": "node plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run packages/plugin-sdk/test",
     "test:infrastructure": "npm --prefix packages/infrastructure run test",
-    "test:providers": "node plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run plugins/providers/test",
+    "test:providers": "node plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run plugins/providers/test plugins/providers/copilot/test",
     "test:hosts": "node plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run plugins/hosts/test",
     "test:host-startup": "node scripts/check-host-startup.mjs",
     "test:integration": "npm --prefix plugins/claude-code/agent-board-core run test",

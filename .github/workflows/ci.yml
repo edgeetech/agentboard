@@ -32,6 +32,7 @@ jobs:
           cache-dependency-path: |
             package.json
             plugins/claude-code/agent-board-core/package.json
+            plugins/providers/copilot/package.json
 
       - name: Install root dependencies
         run: npm install --legacy-peer-deps
