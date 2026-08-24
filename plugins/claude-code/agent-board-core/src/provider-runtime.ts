@@ -48,10 +48,19 @@ export interface ProviderSandboxPolicy {
   notes: readonly string[];
 }
 
-export type ProviderRuntimeControl =
-  | keyof ProviderRuntimeLimits
-  | 'approvalMode'
-  | 'filesystemSandbox';
+export const PROVIDER_RUNTIME_CONTROLS = [
+  'cwd',
+  'maxTurns',
+  'allowedTools',
+  'mcpServerNames',
+  'hooksEnabled',
+  'abortSignal',
+  'rateLimitBackoff',
+  'approvalMode',
+  'filesystemSandbox',
+] as const;
+
+export type ProviderRuntimeControl = (typeof PROVIDER_RUNTIME_CONTROLS)[number];
 
 export interface ProviderRuntimeEnforcement {
   enforced: readonly ProviderRuntimeControl[];

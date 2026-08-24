@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildProviderRuntimePolicy, buildResumeCommand } from '../src/provider-runtime.ts';
+import { PROVIDER_RUNTIME_CONTROLS as SDK_PROVIDER_RUNTIME_CONTROLS } from '../../../../packages/plugin-sdk/src/provider.ts';
+import {
+  buildProviderRuntimePolicy,
+  buildResumeCommand,
+  PROVIDER_RUNTIME_CONTROLS,
+} from '../src/provider-runtime.ts';
+
+describe('provider runtime contract parity', () => {
+  it('keeps legacy runtime controls aligned with the plugin SDK', () => {
+    expect(PROVIDER_RUNTIME_CONTROLS).toEqual(SDK_PROVIDER_RUNTIME_CONTROLS);
+  });
+});
 
 describe('buildResumeCommand', () => {
   it('builds claude resume commands', () => {
