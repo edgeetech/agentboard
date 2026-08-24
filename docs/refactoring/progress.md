@@ -330,6 +330,7 @@ Follow-up fixes:
 - Added Codex launch argument regression coverage.
 - Codex provider metadata now marks `approvalMode` intentionally ignored because the runner uses fixed approve-for-me automation.
 - Added an explicit non-inheriting child-process environment policy contract and regression tests for credential allowlisting.
+- Added MCP route/tool characterization tests for JSON-RPC envelopes, queue claiming, tool policy blocking and audit activity.
 
 ## CI Enforcement
 
