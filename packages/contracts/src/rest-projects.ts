@@ -1,8 +1,19 @@
 export type RestMethod = "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
 
-export type RestRouteGroup = "project" | "activity" | "board" | "run" | "task";
+export type RestRouteGroup =
+  | "activity"
+  | "board"
+  | "cost"
+  | "health"
+  | "log"
+  | "project"
+  | "prompt"
+  | "run"
+  | "session"
+  | "skill"
+  | "task";
 
-export type RestResponseMode = "json" | "sse";
+export type RestResponseMode = "json" | "ndjson" | "sse";
 
 export interface RestRouteContract {
   readonly id: string;

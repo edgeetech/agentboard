@@ -414,6 +414,8 @@ Follow-up additions:
 - Added DTO contracts for project rows, project list/active responses, suggested project codes and active run state responses.
 - Root `npm run test` now includes contracts package tests.
 - Added task/run/board/activity REST route snapshots for active-project and explicit project-scoped task APIs.
+- Added project mutation, skill, session, prompt, cost, log and health route snapshots in `packages/contracts/src/rest-legacy.ts`.
+- Added REST contract uniqueness checks for route ids and method/path pairs.
 
 ## AI Asset Schema
 
