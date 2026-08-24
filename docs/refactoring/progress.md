@@ -201,6 +201,7 @@ Follow-up additions:
 - Added `createSqlitePersistence` in Infrastructure as the first SQLite adapter behind Engine persistence ports.
 - Added Infrastructure SQLite repository tests covering project CAS updates, task creation/transition history, run queue/finish and comments.
 - Root `npm run test` now includes Infrastructure adapter tests.
+- Added offline SQLite backup/restore helpers and tests for migration rollback preparation.
 
 ## Governance
 

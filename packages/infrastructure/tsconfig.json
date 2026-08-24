@@ -4,7 +4,8 @@
     "allowImportingTsExtensions": true,
     "composite": true,
     "rootDir": "..",
-    "outDir": "dist"
+    "outDir": "dist",
+    "types": ["node"]
   },
   "include": ["src/**/*.ts", "../engine/src/**/*.ts"]
 }

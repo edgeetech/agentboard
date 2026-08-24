@@ -27,6 +27,7 @@ Also run any release-specific checks introduced by later refactor phases, includ
 
 - Confirm database migrations are forward-tested from representative fixtures.
 - Confirm rollback guidance exists for irreversible or manual changes.
+- Confirm SQLite backup/restore helpers are covered before destructive persistence changes.
 - Confirm provider-specific changes are sandboxed and do not broaden environment or filesystem access unexpectedly.
 - Confirm observability changes preserve run, task and activity audit trails.
 
