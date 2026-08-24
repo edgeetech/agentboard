@@ -472,6 +472,7 @@ Follow-up additions:
 - Infrastructure now has a filesystem-port loader for built-in AI assets.
 - Infrastructure tests cover built-in skill/concern loading and duplicate-ID rejection.
 - Added a Node filesystem adapter for built-in AI assets with root escape protection and real `/ai` loading coverage.
+- Added legacy built-in skill parity coverage against `/ai/skills/*/SKILL.md` before switching runtime loading to Markdown sources.
 
 ## Plugin SDK
 
