@@ -122,6 +122,7 @@ Behaviour preserved:
 
 Tests added/updated:
 
+- Added `plugins/claude-code/agent-board-core/test/agent-config.test.ts`.
 - Added `packages/engine/test/task-state.test.ts`.
 - Added `packages/engine/test/run-phase.test.ts`.
 - Added `packages/engine/test/retry-policy.test.ts`.
@@ -136,13 +137,13 @@ Architecture improvements:
 - Retry, config precedence and rate-limit rules now exist in provider-free Engine code.
 - Legacy rate-limit callers now consume Engine policy through a compatibility adapter.
 - Legacy retry scheduling now consumes Engine retry decisions while retaining local DB/timer side effects.
+- Legacy role config resolution now consumes Engine config precedence while retaining legacy parsing validation.
 - Engine package typechecks independently.
 - Engine tests run without SQLite, HTTP, browser, filesystem workspace or provider SDKs.
 
 Compatibility concerns:
 
 - Current and Engine workflow implementations are duplicated temporarily.
-- Current and Engine config implementations are duplicated temporarily.
 - Core TypeScript `rootDir` is temporarily widened so the legacy package can typecheck Engine source imports before package distribution is finalized.
 - A later phase must switch runtime imports to Engine and delete the old copies.
 
@@ -156,7 +157,7 @@ Quality checks:
 
 - lint: not rerun globally; existing baseline still fails.
 - typecheck: passed through root `npm run typecheck`.
-- unit: passed through root `npm run test`, 30 existing files / 246 tests plus 5 Engine files / 41 tests.
+- unit: passed through root `npm run test`, 31 existing files / 252 tests plus 5 Engine files / 41 tests.
 - integration: no separate command yet.
 - e2e: placeholder only.
 - build: not rerun after Phase 2 extraction.

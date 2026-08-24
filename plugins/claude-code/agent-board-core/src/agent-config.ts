@@ -1,5 +1,12 @@
 import { z } from 'zod';
 import {
+  providerId,
+  resolveRoleConfig as resolveEngineRoleConfig,
+  type AgentConfig as EngineAgentConfig,
+  type RoleConfig as EngineRoleConfig,
+} from '../../../../packages/engine/src/configuration/agent-config.ts';
+
+import {
   AGENT_PROVIDERS,
   type AgentConfig,
   type AgentProvider,
@@ -60,14 +67,31 @@ export interface ResolveContext {
 }
 
 export function resolveRoleConfig(role: RunRole, ctx: ResolveContext): RoleConfig {
-  const fromTask = ctx.taskConfig?.[role];
-  if (fromTask) return fromTask;
-  const fromProject = ctx.projectConfig?.[role];
-  if (fromProject) return fromProject;
-  if (ctx.legacyTaskOverride) {
-    return { type: 'single', provider: ctx.legacyTaskOverride };
+  return toLegacyRoleConfig(
+    resolveEngineRoleConfig({
+      role,
+      taskConfig: toEngineAgentConfig(ctx.taskConfig),
+      projectConfig: toEngineAgentConfig(ctx.projectConfig),
+      legacyTaskProviderOverride:
+        ctx.legacyTaskOverride === null ? null : providerId(ctx.legacyTaskOverride),
+      legacyProjectProvider: providerId(ctx.legacyProjectProvider),
+    }),
+  );
+}
+
+function toEngineAgentConfig(config: AgentConfig | null): EngineAgentConfig | null {
+  return config as unknown as EngineAgentConfig | null;
+}
+
+function toLegacyRoleConfig(config: EngineRoleConfig): RoleConfig {
+  if (config.type === 'single') {
+    return { type: 'single', provider: config.provider as AgentProvider };
   }
-  return { type: 'single', provider: ctx.legacyProjectProvider };
+
+  return {
+    type: 'council',
+    members: [...config.members] as AgentProvider[],
+  };
 }
 
 export function describeRoleConfig(cfg: RoleConfig): string {
@@ -86,7 +110,9 @@ export function providerLabel(p: AgentProvider): string {
   }
 }
 
-export function validateAgentConfigInput(raw: unknown): { ok: true; value: AgentConfig | null } | { ok: false; error: string } {
+export function validateAgentConfigInput(
+  raw: unknown,
+): { ok: true; value: AgentConfig | null } | { ok: false; error: string } {
   if (raw == null || raw === '') return { ok: true, value: null };
   let candidate: unknown = raw;
   if (typeof raw === 'string') {
@@ -98,7 +124,10 @@ export function validateAgentConfigInput(raw: unknown): { ok: true; value: Agent
   }
   const result = agentConfigSchema.safeParse(candidate);
   if (!result.success) {
-    return { ok: false, error: result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+    return {
+      ok: false,
+      error: result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+    };
   }
   return { ok: true, value: result.data };
 }
