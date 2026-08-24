@@ -398,6 +398,32 @@ Quality checks:
 - contracts typecheck: passed.
 - root typecheck/test/build/architecture: passed.
 
+## AI Asset Schema
+
+Status: Initial Markdown AI asset normalization seam complete.
+
+Moved / Added:
+
+- Added Markdown frontmatter parser in `packages/engine/src/ai-assets/markdown.ts`.
+- Added role, skill and concern asset normalization in `packages/engine/src/ai-assets/catalog.ts`.
+- Added Engine AI asset tests in `packages/engine/test/ai-assets.test.ts`.
+
+Behaviour preserved:
+
+- Existing prompt, JSON concern and built-in skill runtime paths are unchanged.
+- No files were moved into `ai/` in this chunk.
+
+Architecture improvements:
+
+- Built-in role prompts, skills and concerns now have a provider-free Markdown target shape.
+- Concern Markdown parsing supports phase-scoped reminders and review dimensions.
+- Later compatibility adapters can normalize legacy assets into the same catalog shape before moving files.
+
+Quality checks:
+
+- engine typecheck: passed.
+- engine tests: passed, 6 files / 46 tests.
+
 ## Plugin SDK
 
 Status: Initial provider plugin SDK contract complete.

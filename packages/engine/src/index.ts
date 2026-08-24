@@ -1,4 +1,6 @@
 export * from "./domain/types.ts";
+export * from "./ai-assets/catalog.ts";
+export * from "./ai-assets/markdown.ts";
 export * from "./configuration/agent-config.ts";
 export * from "./runs/rate-limit-policy.ts";
 export * from "./runs/retry-policy.ts";
