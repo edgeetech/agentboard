@@ -13,6 +13,7 @@ import {
   readCodexConfig,
 } from './codex-config.ts';
 import { runConfigDir } from './paths.ts';
+import type { ProviderSandboxPolicy } from './provider-runtime.ts';
 import type { RateLimitTracker } from './rate-limit-tracker.ts';
 import { TurnTimeout } from './turn-timeout.ts';
 
@@ -39,6 +40,7 @@ export interface CodexRunnerOptions {
   serverToken: string;
   serverPort: number;
   mcpServers?: Record<string, unknown>;
+  sandbox?: ProviderSandboxPolicy;
   rateLimiter?: RateLimitTracker;
   turnTimeoutMs?: number;
 }
@@ -119,6 +121,7 @@ export class CodexRunner {
       serverToken,
       serverPort,
       mcpServers,
+      sandbox,
     } = this.opts;
     const usage = this.partial.usage;
     const result: RunResult = {
@@ -190,16 +193,12 @@ export class CodexRunner {
     };
     delete env.CLAUDECODE;
 
-    const args = [
-      'exec',
-      '--json',
-      '--output-last-message',
+    const args = buildCodexExecArgs({
       lastMessagePath,
-      '--dangerously-bypass-approvals-and-sandbox',
-      '-C',
       cwd,
-      ...configArgs,
-    ];
+      configArgs,
+      ...(sandbox !== undefined ? { sandbox } : {}),
+    });
 
     const fullPrompt =
       systemPrompt.trim().length > 0
@@ -328,6 +327,31 @@ export class CodexRunner {
       }
     }
   }
+}
+
+export function buildCodexExecArgs(args: {
+  lastMessagePath: string;
+  cwd: string;
+  configArgs?: readonly string[];
+  sandbox?: ProviderSandboxPolicy;
+}): string[] {
+  return [
+    'exec',
+    '--json',
+    '--output-last-message',
+    args.lastMessagePath,
+    ...codexSandboxArgs(args.sandbox),
+    '-C',
+    args.cwd,
+    ...(args.configArgs ?? []),
+  ];
+}
+
+function codexSandboxArgs(sandbox: ProviderSandboxPolicy | undefined): string[] {
+  if (sandbox?.restrictToWorkspace === false) {
+    throw new Error('Codex provider requires workspace-restricted sandbox execution');
+  }
+  return ['--sandbox', 'workspace-write', '--approve-for-me'];
 }
 
 function resolveCodexLaunch(

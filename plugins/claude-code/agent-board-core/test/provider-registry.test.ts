@@ -34,8 +34,9 @@ describe('providerFor', () => {
     expect(providerFor('github_copilot').enforcement.intentionallyIgnored).toContain('maxTurns');
     expect(providerFor('github_copilot').enforcement.notes.join(' ')).toMatch(/approveAll/);
 
-    expect(providerFor('codex').enforcement.intentionallyIgnored).toContain('filesystemSandbox');
-    expect(providerFor('codex').enforcement.notes.join(' ')).toMatch(/sandbox disabled/);
+    expect(providerFor('codex').enforcement.enforced).toContain('filesystemSandbox');
+    expect(providerFor('codex').enforcement.enforced).toContain('approvalMode');
+    expect(providerFor('codex').enforcement.notes.join(' ')).toMatch(/workspace-write sandboxing/);
   });
 
   it('resume.command omits cd prefix when repoPath is null', () => {

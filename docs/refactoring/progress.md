@@ -272,6 +272,12 @@ Quality checks:
 - root test/build/architecture: passed.
 - formatting: passed for provider/progress files; `executor.ts` not formatted to avoid baseline churn.
 
+Follow-up fixes:
+
+- Removed Codex `--dangerously-bypass-approvals-and-sandbox` launch flag.
+- Codex now launches with `--sandbox workspace-write` and `--approve-for-me`.
+- Added Codex launch argument regression coverage.
+
 ## CI Enforcement
 
 Status: Initial GitHub Actions validation workflow complete, with dependency-resolution compatibility fix.
