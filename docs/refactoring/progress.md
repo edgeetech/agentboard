@@ -474,6 +474,7 @@ Follow-up additions:
 - Added a Node filesystem adapter for built-in AI assets with root escape protection and real `/ai` loading coverage.
 - Added legacy built-in skill parity coverage against `/ai/skills/*/SKILL.md` before switching runtime loading to Markdown sources.
 - Added legacy built-in concern parity coverage against `/ai/concerns/*.md` before switching runtime loading to Markdown sources.
+- Legacy built-in skill runtime lookup now loads `/ai/skills` Markdown when present, with the static list retained as plugin-packaging fallback.
 
 ## Plugin SDK
 

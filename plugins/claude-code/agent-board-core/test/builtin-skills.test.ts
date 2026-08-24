@@ -8,7 +8,7 @@ import {
   normalizeAiAsset,
   type AiAssetSource,
 } from '../../../../packages/engine/src/ai-assets/catalog.ts';
-import { BUILTIN_SKILLS } from '../src/builtin-skills.ts';
+import { BUILTIN_SKILLS, findBuiltinSkill } from '../src/builtin-skills.ts';
 
 const repoRoot = fileURLToPath(new URL('../../../..', import.meta.url));
 const skillsRoot = join(repoRoot, 'ai', 'skills');
@@ -46,6 +46,15 @@ describe('built-in skill parity', () => {
         body: skill.body.trimEnd(),
       })).sort((a, b) => a.id.localeCompare(b.id)),
     ).toEqual(markdownSkills.sort((a, b) => a.id.localeCompare(b.id)));
+  });
+
+  it('serves built-in skills through the legacy lookup API', () => {
+    expect(findBuiltinSkill('builtin:code-review')).toMatchObject({
+      id: 'builtin:code-review',
+      name: 'Code Review',
+      relDir: 'builtin',
+      layout: 'file',
+    });
   });
 });
 
