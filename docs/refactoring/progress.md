@@ -410,18 +410,20 @@ Quality checks:
 
 ## AI Asset Schema
 
-Status: Initial Markdown AI asset normalization seam complete.
+Status: Initial Markdown AI asset normalization seam complete, with built-in skill and concern sources added.
 
 Moved / Added:
 
 - Added Markdown frontmatter parser in `packages/engine/src/ai-assets/markdown.ts`.
 - Added role, skill and concern asset normalization in `packages/engine/src/ai-assets/catalog.ts`.
 - Added Engine AI asset tests in `packages/engine/test/ai-assets.test.ts`.
+- Added `/ai` Markdown source tree for built-in skills and concern packs.
+- Added built-in AI asset source validation in `packages/engine/test/built-in-ai-assets.test.ts`.
 
 Behaviour preserved:
 
 - Existing prompt, JSON concern and built-in skill runtime paths are unchanged.
-- No files were moved into `ai/` in this chunk.
+- Runtime still reads legacy prompt, concern and built-in skill paths until loader migration is complete.
 
 Architecture improvements:
 
@@ -433,6 +435,12 @@ Quality checks:
 
 - engine typecheck: passed.
 - engine tests: passed, 6 files / 46 tests.
+
+Follow-up additions:
+
+- Built-in skills now have Markdown source files under `/ai/skills`.
+- Built-in concern packs now have Markdown source files under `/ai/concerns`.
+- Engine tests verify the `/ai` source files normalize through the shared AI asset catalog parser.
 
 ## Plugin SDK
 
