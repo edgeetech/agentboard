@@ -114,6 +114,7 @@ Moved / Added:
 - Added retry policy extraction in `packages/engine/src/runs/retry-policy.ts`.
 - Added provider/config precedence extraction in `packages/engine/src/configuration/agent-config.ts`.
 - Added rate-limit policy extraction in `packages/engine/src/runs/rate-limit-policy.ts`.
+- Added provider-neutral cost usage/rate types, cost computation and pricing catalog port in Engine.
 
 Behaviour preserved:
 
@@ -202,6 +203,7 @@ Follow-up additions:
 - Added Infrastructure SQLite repository tests covering project CAS updates, task creation/transition history, run queue/finish and comments.
 - Root `npm run test` now includes Infrastructure adapter tests.
 - Added offline SQLite backup/restore helpers and tests for migration rollback preparation.
+- Added Infrastructure legacy pricing catalog seam for model-specific rates without changing runtime pricing.
 
 ## Governance
 
