@@ -29,7 +29,7 @@ function tempDbPath(): string {
   return join(tempRoot, 'project.sqlite');
 }
 
-function seedPreV6Db(path: string): void {
+function seedPreV6Db(path: string, options: { invalidProjectProvider?: boolean } = {}): void {
   const db = new DatabaseSync(path);
   try {
     db.exec(`
@@ -73,6 +73,14 @@ function seedPreV6Db(path: string): void {
         UNIQUE(project_id, seq)
       );
     `);
+    if (options.invalidProjectProvider === true) {
+      db.exec(`
+        PRAGMA ignore_check_constraints=ON;
+        INSERT INTO project(id, code, name, workflow_type, repo_path, agent_provider, created_at, updated_at)
+        VALUES ('bad-project', 'BAD', 'Bad Project', 'WF1', '/tmp/repo', 'bogus', 'now', 'now');
+        PRAGMA ignore_check_constraints=OFF;
+      `);
+    }
   } finally {
     db.close();
   }
@@ -164,5 +172,14 @@ describe('project database migrations', () => {
     } finally {
       db.close();
     }
+  });
+
+  it('rejects invalid legacy data instead of swallowing migration failures', async () => {
+    const path = tempDbPath();
+    seedPreV6Db(path, { invalidProjectProvider: true });
+
+    await expect(openProjectDb(path)).rejects.toThrow(
+      /Migration failed \(expand project provider CHECK constraint\)/,
+    );
   });
 });

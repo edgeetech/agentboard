@@ -130,8 +130,8 @@ interface Migration {
   why: string;
 }
 
-// Idempotent migrations for existing DBs. Each runs inside a try/catch so
-// expected failures (table already dropped, column already exists) are silent.
+// Idempotent migrations for existing DBs. Only duplicate ADD COLUMN failures are
+// expected after SCHEMA_SQL has already created current tables.
 const MIGRATIONS: Migration[] = [
   // Add agent_provider column to project table (for agent provider selection)
   { sql: `ALTER TABLE project ADD COLUMN agent_provider TEXT NOT NULL DEFAULT 'claude' CHECK (agent_provider IN ('claude','github_copilot','codex'))`,
@@ -291,28 +291,45 @@ const MIGRATIONS: Migration[] = [
 
 function applyMigrations(db: DbHandle): void {
   for (const m of MIGRATIONS) {
-    try { db.exec(m.sql); } catch { /* idempotent: column/table already present */ }
+    runMigration(db, m);
   }
+  runMigrationStep('add project scan_ignore_json column', () => migrateProjectScanIgnoreJson(db));
+  runMigrationStep('ensure v6 agent config columns', () => migrateAgentConfigColumns(db));
+  runMigrationStep('expand project provider CHECK constraint', () =>
+    migrateProjectAgentProviderCheck(db),
+  );
+  runMigrationStep('expand task provider override CHECK constraint', () =>
+    migrateTaskProviderOverrideCheck(db),
+  );
+}
+
+function runMigration(db: DbHandle, migration: Migration): void {
   try {
-    migrateProjectScanIgnoreJson(db);
-  } catch {
-    /* ignore */
+    db.exec(migration.sql);
+  } catch (error) {
+    if (isAddColumnMigration(migration.sql) && isDuplicateColumnError(error)) return;
+    throw new Error(`Migration failed (${migration.why}): ${errorMessage(error)}`);
   }
+}
+
+function runMigrationStep(why: string, step: () => void): void {
   try {
-    migrateAgentConfigColumns(db);
-  } catch (e) {
-    console.warn('[db] v6 column migrate:', (e as Error).message);
+    step();
+  } catch (error) {
+    throw new Error(`Migration failed (${why}): ${errorMessage(error)}`);
   }
-  try {
-    migrateProjectAgentProviderCheck(db);
-  } catch {
-    /* ignore */
-  }
-  try {
-    migrateTaskProviderOverrideCheck(db);
-  } catch {
-    /* ignore */
-  }
+}
+
+function isAddColumnMigration(sql: string): boolean {
+  return /^\s*ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN\s+/i.test(sql);
+}
+
+function isDuplicateColumnError(error: unknown): boolean {
+  return /duplicate column name/i.test(errorMessage(error));
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function migrateAgentConfigColumns(db: DbHandle): void {
@@ -328,9 +345,7 @@ function migrateAgentConfigColumns(db: DbHandle): void {
   ensure('agent_run', 'council_size', 'council_size INTEGER');
   ensure('agent_run', 'session_provider_override', 'session_provider_override TEXT');
   ensure('agent_run', 'cost_breakdown_json', `cost_breakdown_json TEXT NOT NULL DEFAULT '{}'`);
-  try {
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_run_parent ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL`);
-  } catch { /* ignore */ }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_run_parent ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL`);
 }
 
 function migrateProjectScanIgnoreJson(db: DbHandle): void {
@@ -342,15 +357,11 @@ function migrateProjectScanIgnoreJson(db: DbHandle): void {
 }
 
 function tableSql(db: DbHandle, table: string): string {
-  try {
-    const row = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name=?`).get(table);
-    if (row !== null && row !== undefined && typeof row === 'object' && 'sql' in row) {
-      return String((row as Record<string, unknown>).sql ?? '');
-    }
-    return '';
-  } catch {
-    return '';
+  const row = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name=?`).get(table);
+  if (row !== null && row !== undefined && typeof row === 'object' && 'sql' in row) {
+    return String((row as Record<string, unknown>).sql ?? '');
   }
+  return '';
 }
 
 function recreateProjectTrigger(db: DbHandle): void {
@@ -367,7 +378,8 @@ function migrateProjectAgentProviderCheck(db: DbHandle): void {
   const sql = tableSql(db, 'project');
   if (!sql || sql.includes("'codex'")) return;
   db.exec('PRAGMA foreign_keys=OFF');
-  db.exec(`
+  try {
+    db.exec(`
 CREATE TABLE project_new (
   id                TEXT PRIMARY KEY,
   code              TEXT UNIQUE NOT NULL,
@@ -391,15 +403,18 @@ SELECT id, code, name, description, workflow_type, repo_path, max_parallel, agen
 FROM project;
 DROP TABLE project;
 ALTER TABLE project_new RENAME TO project;`);
-  recreateProjectTrigger(db);
-  db.exec('PRAGMA foreign_keys=ON');
+    recreateProjectTrigger(db);
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
 }
 
 function migrateTaskProviderOverrideCheck(db: DbHandle): void {
   const sql = tableSql(db, 'task');
   if (!sql || sql.includes("'codex'")) return;
   db.exec('PRAGMA foreign_keys=OFF');
-  db.exec(`
+  try {
+    db.exec(`
 CREATE TABLE task_new (
   id                       TEXT PRIMARY KEY,
   project_id               TEXT NOT NULL REFERENCES project(id),
@@ -427,16 +442,23 @@ FROM task;
 DROP TABLE task;
 ALTER TABLE task_new RENAME TO task;
 CREATE INDEX IF NOT EXISTS idx_task_status_live ON task(status) WHERE deleted_at IS NULL;`);
-  db.exec('PRAGMA foreign_keys=ON');
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
 }
 
 // Open project DB, run idempotent schema, apply migrations, return handle.
 export async function openProjectDb(path: string): Promise<DbHandle> {
   const a = await loadAdapter();
   const db = a.open(path);
-  db.exec(SCHEMA_SQL);
-  applyMigrations(db);
-  return db;
+  try {
+    db.exec(SCHEMA_SQL);
+    applyMigrations(db);
+    return db;
+  } catch (error) {
+    db.close();
+    throw error;
+  }
 }
 
 export function dbExists(path: string): boolean { return existsSync(path); }

@@ -216,6 +216,14 @@ Quality checks:
 - targeted db migration test: passed.
 - typecheck: passed.
 
+Follow-up fixes:
+
+- Migration execution now suppresses only duplicate `ALTER TABLE ... ADD COLUMN` errors.
+- Real schema/data migration failures now throw with migration context.
+- Provider CHECK table rebuilds restore `PRAGMA foreign_keys=ON` in `finally`.
+- `openProjectDb` closes the SQLite handle if schema or migration startup fails.
+- Added invalid legacy provider data coverage to prove migration failures are not swallowed.
+
 ## Contracts
 
 Status: Initial MCP contract seam complete.
