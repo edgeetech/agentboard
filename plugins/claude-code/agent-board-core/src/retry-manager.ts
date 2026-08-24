@@ -3,11 +3,14 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 
+import {
+  computeBackoffMs as computeEngineBackoffMs,
+  decideRetry,
+  normalizeRetryConfig,
+} from '../../../../packages/engine/src/runs/retry-policy.ts';
+
 import { isoNow } from './time.ts';
 import { ulid } from './ulid.ts';
-
-const DEFAULT_MAX_ATTEMPTS = 3;
-const DEFAULT_MAX_BACKOFF_MS = 300_000; // 5 minutes
 
 export interface RetryConfig {
   max_retry_attempts?: number;
@@ -27,11 +30,8 @@ export type ScheduleRetryResult =
   | { scheduled: true; delayMs: number; newRunId: string; nextAttempt: number }
   | { scheduled: false; reason: string };
 
-export function computeBackoffMs(
-  attempt: number,
-  maxBackoffMs: number = DEFAULT_MAX_BACKOFF_MS,
-): number {
-  return Math.min(1000 * Math.pow(2, attempt - 1), maxBackoffMs);
+export function computeBackoffMs(attempt: number, maxBackoffMs?: number): number {
+  return computeEngineBackoffMs(attempt, maxBackoffMs);
 }
 
 /**
@@ -43,15 +43,16 @@ export function scheduleRetry(
   db: DatabaseSync,
   { runId, taskId, role, attempt, error, config = {} }: ScheduleRetryOpts,
 ): ScheduleRetryResult {
-  const maxAttempts = config.max_retry_attempts ?? DEFAULT_MAX_ATTEMPTS;
-  const maxBackoffMs = config.max_retry_backoff_ms ?? DEFAULT_MAX_BACKOFF_MS;
+  const retry = decideRetry({
+    attempt,
+    config: normalizeRetryConfig(config),
+  });
 
-  if (attempt >= maxAttempts) {
-    return { scheduled: false, reason: `max attempts (${maxAttempts}) reached` };
+  if (!retry.shouldRetry) {
+    return { scheduled: false, reason: retry.reason };
   }
 
-  const nextAttempt = attempt + 1;
-  const delayMs = computeBackoffMs(nextAttempt - 1, maxBackoffMs);
+  const { delayMs, nextAttempt } = retry;
 
   const stateId = ulid();
   db.prepare(

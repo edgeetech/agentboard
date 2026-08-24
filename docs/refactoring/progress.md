@@ -135,13 +135,14 @@ Architecture improvements:
 - Workflow and phase rules now exist in provider-free Engine code.
 - Retry, config precedence and rate-limit rules now exist in provider-free Engine code.
 - Legacy rate-limit callers now consume Engine policy through a compatibility adapter.
+- Legacy retry scheduling now consumes Engine retry decisions while retaining local DB/timer side effects.
 - Engine package typechecks independently.
 - Engine tests run without SQLite, HTTP, browser, filesystem workspace or provider SDKs.
 
 Compatibility concerns:
 
 - Current and Engine workflow implementations are duplicated temporarily.
-- Current and Engine retry/config implementations are duplicated temporarily.
+- Current and Engine config implementations are duplicated temporarily.
 - Core TypeScript `rootDir` is temporarily widened so the legacy package can typecheck Engine source imports before package distribution is finalized.
 - A later phase must switch runtime imports to Engine and delete the old copies.
 
