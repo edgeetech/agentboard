@@ -191,6 +191,12 @@ Quality checks:
 - engine typecheck: passed.
 - infrastructure typecheck: passed.
 
+Follow-up additions:
+
+- Added `createInMemoryPersistence` as a strict Engine persistence-port contract adapter.
+- Added in-memory persistence tests covering project CAS updates, task creation/transition, run queue/finish and comments.
+- Engine tests now cover persistence ports without SQLite or legacy runtime imports.
+
 ## Governance
 
 Status: Initial repository governance scaffolding complete.
