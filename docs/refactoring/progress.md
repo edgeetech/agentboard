@@ -250,6 +250,7 @@ Follow-up fixes:
 - Provider CHECK table rebuilds restore `PRAGMA foreign_keys=ON` in `finally`.
 - `openProjectDb` closes the SQLite handle if schema or migration startup fails.
 - Added invalid legacy provider data coverage to prove migration failures are not swallowed.
+- Provider CHECK table rebuilds now run in a transaction and clean temporary tables after failed copies.
 
 ## Contracts
 

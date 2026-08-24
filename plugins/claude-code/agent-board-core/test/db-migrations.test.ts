@@ -15,6 +15,10 @@ interface MetaRow {
   value: string;
 }
 
+interface CountRow {
+  count: number;
+}
+
 let tempRoot: string | null = null;
 
 afterEach(() => {
@@ -181,5 +185,21 @@ describe('project database migrations', () => {
     await expect(openProjectDb(path)).rejects.toThrow(
       /Migration failed \(expand project provider CHECK constraint\)/,
     );
+
+    const db = new DatabaseSync(path);
+    try {
+      expect(
+        db
+          .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='project'")
+          .get(),
+      ).toEqual({ count: 1 } satisfies CountRow);
+      expect(
+        db
+          .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='project_new'")
+          .get(),
+      ).toEqual({ count: 0 } satisfies CountRow);
+    } finally {
+      db.close();
+    }
   });
 });

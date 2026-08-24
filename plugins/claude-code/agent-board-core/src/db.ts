@@ -374,11 +374,28 @@ BEGIN
 END;`);
 }
 
+function rebuildTableWithForeignKeysOff(db: DbHandle, tempTable: string, rebuild: () => void): void {
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    db.exec(`DROP TABLE IF EXISTS ${tempTable}`);
+    db.exec('BEGIN');
+    try {
+      rebuild();
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      db.exec(`DROP TABLE IF EXISTS ${tempTable}`);
+      throw error;
+    }
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
 function migrateProjectAgentProviderCheck(db: DbHandle): void {
   const sql = tableSql(db, 'project');
   if (!sql || sql.includes("'codex'")) return;
-  db.exec('PRAGMA foreign_keys=OFF');
-  try {
+  rebuildTableWithForeignKeysOff(db, 'project_new', () => {
     db.exec(`
 CREATE TABLE project_new (
   id                TEXT PRIMARY KEY,
@@ -404,16 +421,13 @@ FROM project;
 DROP TABLE project;
 ALTER TABLE project_new RENAME TO project;`);
     recreateProjectTrigger(db);
-  } finally {
-    db.exec('PRAGMA foreign_keys=ON');
-  }
+  });
 }
 
 function migrateTaskProviderOverrideCheck(db: DbHandle): void {
   const sql = tableSql(db, 'task');
   if (!sql || sql.includes("'codex'")) return;
-  db.exec('PRAGMA foreign_keys=OFF');
-  try {
+  rebuildTableWithForeignKeysOff(db, 'task_new', () => {
     db.exec(`
 CREATE TABLE task_new (
   id                       TEXT PRIMARY KEY,
@@ -442,9 +456,7 @@ FROM task;
 DROP TABLE task;
 ALTER TABLE task_new RENAME TO task;
 CREATE INDEX IF NOT EXISTS idx_task_status_live ON task(status) WHERE deleted_at IS NULL;`);
-  } finally {
-    db.exec('PRAGMA foreign_keys=ON');
-  }
+  });
 }
 
 // Open project DB, run idempotent schema, apply migrations, return handle.
