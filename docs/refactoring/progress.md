@@ -215,3 +215,29 @@ Quality checks:
 
 - targeted db migration test: passed.
 - typecheck: passed.
+
+## Contracts
+
+Status: Initial MCP contract seam complete.
+
+Moved / Added:
+
+- Added `packages/contracts/src/mcp.ts`.
+- Exported MCP contracts from `packages/contracts/src/index.ts`.
+- Added root `typecheck:contracts` and included it in `npm run typecheck`.
+
+Behaviour preserved:
+
+- Runtime HTTP and MCP handlers are unchanged.
+- UI API consumers are unchanged.
+
+Architecture improvements:
+
+- Current MCP protocol version is represented as a typed contract literal.
+- JSON-RPC request/response, MCP initialize, tool definition and tool call result shapes now have a package boundary.
+- Contracts package now participates in root typechecking.
+
+Quality checks:
+
+- contracts typecheck: passed.
+- root typecheck: passed.
