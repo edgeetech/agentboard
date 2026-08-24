@@ -349,3 +349,33 @@ Quality checks:
 
 - contracts typecheck: passed.
 - root typecheck/test/build/architecture: passed.
+
+## Plugin SDK
+
+Status: Initial provider plugin SDK contract complete.
+
+Moved / Added:
+
+- Added `packages/plugin-sdk/src/provider.ts`.
+- Added `packages/plugin-sdk/src/registry.ts`.
+- Added `packages/plugin-sdk/src/testing.ts`.
+- Added `packages/plugin-sdk/test/provider-sdk.test.ts`.
+- Added `docs/contributing/adding-a-plugin.md`.
+- Added root `typecheck:plugin-sdk` and `test:plugin-sdk` scripts.
+
+Behaviour preserved:
+
+- Provider runtime loading and execution remain in the legacy core package.
+- Claude, Codex and Copilot adapters are not moved in this chunk.
+
+Architecture improvements:
+
+- Provider manifests now have an author-facing SDK contract.
+- Provider runtime controls must be declared as enforced or intentionally ignored.
+- Provider registry and fake-provider contract tests now have a package seam.
+- Plugin author documentation now describes sandbox/resource-limit expectations.
+
+Quality checks:
+
+- plugin-sdk typecheck: passed.
+- plugin-sdk test: passed, 1 file / 7 tests.

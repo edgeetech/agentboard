@@ -8,6 +8,6 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "echo \"plugin-sdk tests not migrated yet\""
+    "test": "vitest run test"
   }
 }
