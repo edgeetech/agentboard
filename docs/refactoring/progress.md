@@ -413,6 +413,7 @@ Follow-up additions:
 - Added a focused REST project-read contract snapshot in `packages/contracts/src/rest-projects.ts`.
 - Added DTO contracts for project rows, project list/active responses, suggested project codes and active run state responses.
 - Root `npm run test` now includes contracts package tests.
+- Added task/run/board/activity REST route snapshots for active-project and explicit project-scoped task APIs.
 
 ## AI Asset Schema
 

@@ -1,6 +1,6 @@
 export type RestMethod = "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
 
-export type RestRouteGroup = "project" | "activity";
+export type RestRouteGroup = "project" | "activity" | "board" | "run" | "task";
 
 export type RestResponseMode = "json" | "sse";
 
