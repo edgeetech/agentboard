@@ -53,7 +53,7 @@ export const api = {
   listProjects: () => call<{ projects: any[] }>('GET', '/api/projects/list'),
   activeProject: () => call<{ project: any | null }>('GET', '/api/projects/active'),
   selectActiveProject: (code: string) =>
-    call<{ ok: boolean }>('POST', '/api/projects/active/select', { code }),
+    call<{ ok: boolean }>('PATCH', '/api/projects/active', { code }),
   suggestCode: (name: string) =>
     call<{ code: string }>('GET', `/api/projects/suggest-code?name=${encodeURIComponent(name)}`),
   createProject: (body: {
