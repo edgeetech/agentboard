@@ -59,10 +59,12 @@ Moved / Added:
 - Added root `package.json`.
 - Added root `tsconfig.base.json` and `tsconfig.json`.
 - Added target package scaffolds for `apps/ui`, `packages/engine`, `packages/contracts`, `packages/infrastructure`, `packages/plugin-sdk`, `server` and provider plugin packages.
+- Added target host integration scaffolds for Claude Code, Codex and Copilot.
 - Added `plugins/hosts/README.md` and `plugins/providers/README.md`.
 - Added `scripts/check-architecture.mjs`.
 - Added `docs/refactoring/distribution-plan.md`.
 - Root typechecking now includes the target `server` package scaffold.
+- Root typechecking and tests now include target host integration manifest scaffolds.
 
 Behaviour preserved:
 
@@ -77,6 +79,7 @@ Tests added/updated:
 Architecture improvements:
 
 - Target package boundaries now exist in the repository tree.
+- Host integrations now have explicit target package manifests separate from provider runtime manifests.
 - Architecture boundary checks are executable.
 - Architecture boundary checks now cover contracts, infrastructure, plugin-sdk and provider package imports.
 - Distribution risk is documented before runtime file moves.
