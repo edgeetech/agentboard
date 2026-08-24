@@ -291,6 +291,7 @@ Architecture improvements:
 - CI runs on Ubuntu and Windows with Node 22.x.
 - CI installs with `--legacy-peer-deps` to match the current SDK/Zod dependency baseline until dependency modernization is handled separately.
 - Added missing `apps/ui/tsconfig.json` scaffold required by root TypeScript references and fresh CI installs.
+- CI installs the legacy core UI package before build so Vite plugin dependencies are available on fresh runners.
 
 Quality checks:
 
