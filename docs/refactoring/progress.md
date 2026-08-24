@@ -65,6 +65,7 @@ Moved / Added:
 - Added `docs/refactoring/distribution-plan.md`.
 - Root typechecking now includes the target `server` package scaffold.
 - Root typechecking and tests now include target host integration manifest scaffolds.
+- Root tests now include a static host-startup smoke check for current Claude Code/Codex launchers and shared runtime assets.
 
 Behaviour preserved:
 
@@ -80,6 +81,7 @@ Architecture improvements:
 
 - Target package boundaries now exist in the repository tree.
 - Host integrations now have explicit target package manifests separate from provider runtime manifests.
+- Host startup assumptions are covered by an executable smoke check before runtime files move.
 - Architecture boundary checks are executable.
 - Architecture boundary checks now cover contracts, infrastructure, plugin-sdk and provider package imports.
 - Distribution risk is documented before runtime file moves.
