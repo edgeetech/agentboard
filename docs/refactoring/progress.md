@@ -116,9 +116,10 @@ Moved / Added:
 
 Behaviour preserved:
 
-- Existing runtime still imports current `src/state-machine.ts` and `src/phase-machine.ts`.
+- Existing runtime still imports current `src/state-machine.ts`.
+- Existing runtime imports current `src/phase-machine.ts`, which now adapts to Engine phase policy.
 - Existing runtime imports current `src/rate-limit-tracker.ts`, which now adapts to Engine `RateLimitPolicy`.
-- Workflow and phase production paths have not switched to the new Engine package yet.
+- Outer task workflow production paths have not switched to the new Engine package yet.
 
 Tests added/updated:
 
@@ -135,6 +136,7 @@ Architecture improvements:
 
 - Workflow and phase rules now exist in provider-free Engine code.
 - Retry, config precedence and rate-limit rules now exist in provider-free Engine code.
+- Legacy phase-machine callers now consume Engine phase policy through a compatibility adapter.
 - Legacy rate-limit callers now consume Engine policy through a compatibility adapter.
 - Legacy retry scheduling now consumes Engine retry decisions while retaining local DB/timer side effects.
 - Legacy role config resolution now consumes Engine config precedence while retaining legacy parsing validation.
@@ -143,7 +145,7 @@ Architecture improvements:
 
 Compatibility concerns:
 
-- Current and Engine workflow implementations are duplicated temporarily.
+- Current and Engine outer task workflow implementations are duplicated temporarily.
 - Core TypeScript `rootDir` is temporarily widened so the legacy package can typecheck Engine source imports before package distribution is finalized.
 - A later phase must switch runtime imports to Engine and delete the old copies.
 
