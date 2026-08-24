@@ -475,6 +475,7 @@ Follow-up additions:
 - Added legacy built-in skill parity coverage against `/ai/skills/*/SKILL.md` before switching runtime loading to Markdown sources.
 - Added legacy built-in concern parity coverage against `/ai/concerns/*.md` before switching runtime loading to Markdown sources.
 - Legacy built-in skill runtime lookup now loads `/ai/skills` Markdown when present, with the static list retained as plugin-packaging fallback.
+- Legacy built-in concern runtime lookup now loads `/ai/concerns` Markdown when present, with bundled JSON retained as plugin-packaging fallback.
 
 ## Plugin SDK
 

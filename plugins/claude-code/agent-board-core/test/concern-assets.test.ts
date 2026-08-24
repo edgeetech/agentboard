@@ -9,7 +9,7 @@ import {
   type AiAssetSource,
   type ConcernAsset,
 } from '../../../../packages/engine/src/ai-assets/catalog.ts';
-import type { Concern } from '../src/concerns.ts';
+import { loadConcerns, type Concern } from '../src/concerns.ts';
 
 const repoRoot = fileURLToPath(new URL('../../../..', import.meta.url));
 const aiConcernsRoot = join(repoRoot, 'ai', 'concerns');
@@ -38,6 +38,14 @@ describe('built-in concern parity', () => {
       .sort((a, b) => a.id.localeCompare(b.id));
 
     expect(legacyConcerns).toEqual(markdownConcerns);
+  });
+
+  it('serves built-in concerns through the legacy concern API', () => {
+    expect(
+      loadConcerns(null)
+        .map((concern) => concern.id)
+        .sort(),
+    ).toEqual(['beautiful-product', 'long-lived', 'well-engineered']);
   });
 });
 
