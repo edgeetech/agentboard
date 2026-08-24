@@ -62,6 +62,7 @@ Moved / Added:
 - Added `plugins/hosts/README.md` and `plugins/providers/README.md`.
 - Added `scripts/check-architecture.mjs`.
 - Added `docs/refactoring/distribution-plan.md`.
+- Root typechecking now includes the target `server` package scaffold.
 
 Behaviour preserved:
 
@@ -82,7 +83,7 @@ Architecture improvements:
 
 Compatibility concerns:
 
-- Root `npm run check` still delegates to the existing core check, which fails because existing lint/format baselines fail.
+- Root `npm run check` still delegates to the existing core check.
 - Target packages are scaffolds only; runtime still lives in the old core path.
 
 Remaining follow-ups:
