@@ -417,6 +417,7 @@ Follow-up additions:
 - Added task/run/board/activity REST route snapshots for active-project and explicit project-scoped task APIs.
 - Added project mutation, skill, session, prompt, cost, log and health route snapshots in `packages/contracts/src/rest-legacy.ts`.
 - Added REST contract uniqueness checks for route ids and method/path pairs.
+- Added API surface versioning/deprecation validators and contract tests so deprecated surfaces require replacement, reason and sunset metadata.
 
 ## AI Asset Schema
 
