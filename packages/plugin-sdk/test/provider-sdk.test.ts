@@ -5,9 +5,12 @@ import {
   createDeterministicProviderAdapter,
   createFakeProviderRequest,
   createProviderRegistry,
+  ProviderTimeoutError,
   validateProviderManifest,
+  toProviderRuntimeResponse,
   type ProviderAdapter,
   type ProviderManifest,
+  withProviderTurnTimeout,
 } from "../src/index.ts";
 
 const validManifest: ProviderManifest = {
@@ -168,5 +171,53 @@ describe("provider contract test helpers", () => {
     await expect(assertProviderContract(provider)).rejects.toThrow(
       "Providers declaring streamingEvents must return at least one normalized event",
     );
+  });
+});
+
+describe("provider runtime support", () => {
+  it("maps legacy runner-style token usage into SDK runtime responses", () => {
+    expect(
+      toProviderRuntimeResponse({
+        status: "failed",
+        sessionId: "session-1",
+        model: "fake-model",
+        totalCostUsd: 0.25,
+        usage: {
+          input_tokens: 1,
+          output_tokens: 2,
+          cache_creation_tokens: 3,
+          cache_read_tokens: 4,
+        },
+        error: "Turn timed out after 100ms",
+        errorKind: "timeout",
+      }),
+    ).toEqual({
+      status: "failed",
+      sessionId: "session-1",
+      model: "fake-model",
+      usage: {
+        inputTokens: 1,
+        outputTokens: 2,
+        cacheCreationTokens: 3,
+        cacheReadTokens: 4,
+        costUsd: 0.25,
+      },
+      error: {
+        kind: "timeout",
+        message: "Turn timed out after 100ms",
+      },
+    });
+  });
+
+  it("runs work that completes before provider turn timeout", async () => {
+    await expect(
+      withProviderTurnTimeout(() => Promise.resolve("done"), 5_000),
+    ).resolves.toBe("done");
+  });
+
+  it("rejects with ProviderTimeoutError when provider turn timeout fires", async () => {
+    await expect(
+      withProviderTurnTimeout(() => new Promise(() => undefined), 1),
+    ).rejects.toBeInstanceOf(ProviderTimeoutError);
   });
 });
