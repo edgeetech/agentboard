@@ -63,6 +63,22 @@ await assertProviderContract(provider);
 
 Contract tests should run with a fake or dry-run provider implementation. Normal CI must not call real AI providers.
 
+For deterministic plugin development tests, use the SDK fixture:
+
+```ts
+import {
+  assertProviderContract,
+  createDeterministicProviderAdapter,
+} from "@agentboard/plugin-sdk";
+
+const provider = createDeterministicProviderAdapter({
+  manifest: { id: "gemini" },
+});
+await assertProviderContract(provider);
+```
+
+The fixture records received requests and returns stable session, event, model and usage data so provider registration can be tested without editing Engine code or calling an external AI service.
+
 ## Current Refactor Status
 
 The SDK currently provides:
@@ -70,6 +86,6 @@ The SDK currently provides:
 - provider manifest and runtime request/response types;
 - manifest validation;
 - an in-memory provider registry;
-- fake request and contract assertion test helpers.
+- fake request, deterministic provider and contract assertion test helpers.
 
 The next provider phases will move Claude, Codex and Copilot runtime code out of the legacy core package into provider packages.

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertProviderContract,
+  createDeterministicProviderAdapter,
   createFakeProviderRequest,
   createProviderRegistry,
   validateProviderManifest,
@@ -37,7 +38,9 @@ const validManifest: ProviderManifest = {
   },
 };
 
-function fakeAdapter(manifest: ProviderManifest = validManifest): ProviderAdapter {
+function fakeAdapter(
+  manifest: ProviderManifest = validManifest,
+): ProviderAdapter {
   return {
     manifest,
     async run(request) {
@@ -54,7 +57,10 @@ function fakeAdapter(manifest: ProviderManifest = validManifest): ProviderAdapte
 
 describe("provider manifest validation", () => {
   it("accepts manifests that account for every runtime control", () => {
-    expect(validateProviderManifest(validManifest)).toEqual({ ok: true, errors: [] });
+    expect(validateProviderManifest(validManifest)).toEqual({
+      ok: true,
+      errors: [],
+    });
   });
 
   it("rejects manifests with undeclared controls", () => {
@@ -94,13 +100,17 @@ describe("provider registry", () => {
 
     expect(registry.get("fake")?.manifest.displayName).toBe("Fake Provider");
     expect(registry.require("fake").manifest.id).toBe("fake");
-    expect(registry.list().map((provider) => provider.manifest.id)).toEqual(["fake"]);
+    expect(registry.list().map((provider) => provider.manifest.id)).toEqual([
+      "fake",
+    ]);
   });
 
   it("rejects duplicate provider ids", () => {
     const registry = createProviderRegistry([fakeAdapter()]);
 
-    expect(() => registry.register(fakeAdapter())).toThrow("Provider already registered: fake");
+    expect(() => registry.register(fakeAdapter())).toThrow(
+      "Provider already registered: fake",
+    );
   });
 });
 
@@ -114,6 +124,49 @@ describe("provider contract test helpers", () => {
   });
 
   it("asserts a provider adapter can satisfy the shared contract", async () => {
-    await expect(assertProviderContract(fakeAdapter())).resolves.toBeUndefined();
+    await expect(
+      assertProviderContract(fakeAdapter()),
+    ).resolves.toBeUndefined();
+  });
+
+  it("provides a deterministic fake provider fixture for extensibility tests", async () => {
+    const provider = createDeterministicProviderAdapter({
+      manifest: { id: "gemini" },
+    });
+    const request = createFakeProviderRequest({
+      runId: "run-456",
+      role: "reviewer",
+    });
+
+    const response = await provider.run(request);
+
+    expect(provider.manifest.id).toBe("gemini");
+    expect(provider.requests).toEqual([request]);
+    expect(response).toMatchObject({
+      status: "completed",
+      sessionId: "run-456:session",
+      model: "gemini:model",
+      events: [
+        {
+          name: "provider.started",
+          detail: { providerId: "gemini", runId: "run-456", role: "reviewer" },
+        },
+        {
+          name: "provider.completed",
+          detail: { providerId: "gemini", runId: "run-456" },
+        },
+      ],
+    });
+    await expect(assertProviderContract(provider)).resolves.toBeUndefined();
+  });
+
+  it("rejects providers whose response does not satisfy declared capabilities", async () => {
+    const provider = createDeterministicProviderAdapter({
+      response: { events: [] },
+    });
+
+    await expect(assertProviderContract(provider)).rejects.toThrow(
+      "Providers declaring streamingEvents must return at least one normalized event",
+    );
   });
 });

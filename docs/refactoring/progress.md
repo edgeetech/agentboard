@@ -468,11 +468,17 @@ Architecture improvements:
 - Provider runtime controls must be declared as enforced or intentionally ignored.
 - Provider registry and fake-provider contract tests now have a package seam.
 - Plugin author documentation now describes sandbox/resource-limit expectations.
+- SDK testing now includes a deterministic provider fixture for proving new provider registration without Engine changes.
 
 Quality checks:
 
 - plugin-sdk typecheck: passed.
 - plugin-sdk test: passed, 1 file / 7 tests.
+
+Follow-up additions:
+
+- `assertProviderContract` now checks declared streaming, resume and usage capabilities against normalized fake responses.
+- `createDeterministicProviderAdapter` provides stable events, session refs, model and usage for provider extensibility tests.
 
 ## PR Feedback
 
