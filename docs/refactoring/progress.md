@@ -342,6 +342,9 @@ Follow-up fixes:
 - Centralized legacy REST provider validation on the shared local provider list instead of route-local hard-coded arrays.
 - Added provider manifest parity coverage so target provider package metadata stays aligned with legacy runtime adapter enforcement declarations.
 - Moved legacy provider runtime result/usage/session-log primitives into a provider-neutral local types module as a prerequisite for provider runtime extraction.
+- Narrowed provider runtime support dependencies to `ProviderRateLimiter` and `ProviderSessionLog` interfaces so runners no longer require concrete rate-limit/session-log implementations.
+- Added executable Copilot SDK-path tests for session configuration, MCP server normalization, usage/model mapping and cleanup.
+- Copilot turn timeouts now propagate into the active SDK session and are classified as `timeout` even when the SDK abort rejection wins the race.
 
 ## CI Enforcement
 

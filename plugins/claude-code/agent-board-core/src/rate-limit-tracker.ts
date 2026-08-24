@@ -1,10 +1,6 @@
-export interface RateLimitInfo {
-  isLimited: boolean;
-  retryAfterMs: number | null;
-  lastLimitedAt: Date | null;
-  limitCount: number;
-  source: string;
-}
+import type { ProviderRateLimitInfo, ProviderRateLimiter } from './provider-types.ts';
+
+export type RateLimitInfo = ProviderRateLimitInfo;
 
 interface RateLimitEntry {
   retryAfterMs: number | null;
@@ -13,7 +9,7 @@ interface RateLimitEntry {
   limitedUntilEpochMs: number | null;
 }
 
-export class RateLimitTracker {
+export class RateLimitTracker implements ProviderRateLimiter {
   readonly #entries = new Map<string, RateLimitEntry>();
 
   recordLimit(source: string, retryAfterMs?: number): void {

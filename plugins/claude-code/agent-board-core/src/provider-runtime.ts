@@ -1,6 +1,4 @@
-import type { TokenUsage } from './provider-types.ts';
-import type { RateLimitTracker } from './rate-limit-tracker.ts';
-import type { sessionLogger } from './session-logger.ts';
+import type { ProviderRateLimiter, ProviderSessionLog, TokenUsage } from './provider-types.ts';
 import type { AgentProvider, RunRole } from './types.ts';
 
 export interface SdkMcpServer {
@@ -81,8 +79,8 @@ export interface ProviderRuntimeContext {
   sandbox: ProviderSandboxPolicy;
   hooks?: Record<string, unknown>;
   abortController: AbortController;
-  rateLimiter: RateLimitTracker;
-  sessionLog: ReturnType<typeof sessionLogger.createSessionLog>;
+  rateLimiter: ProviderRateLimiter;
+  sessionLog: ProviderSessionLog;
   serverToken: string;
   serverPort: number;
   onEvent: (eventName: string, detail: Record<string, unknown>) => void;

@@ -3,8 +3,7 @@
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
-import type { RunResult, SessionLog, TokenUsage } from './provider-types.ts';
-import type { RateLimitTracker } from './rate-limit-tracker.ts';
+import type { ProviderRateLimiter, RunResult, SessionLog, TokenUsage } from './provider-types.ts';
 import { TurnTimeout } from './turn-timeout.ts';
 
 const DEFAULT_TURN_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_TURN_TIMEOUT_MS ?? '900000', 10); // 15 min
@@ -27,7 +26,7 @@ export interface AgentRunnerOptions {
   mcpServers: Record<string, unknown>;
   abortController: AbortController;
   turnTimeoutMs?: number;
-  rateLimiter?: RateLimitTracker;
+  rateLimiter?: ProviderRateLimiter;
   sessionLog?: SessionLog | null;
   onEvent?: (eventName: string, detail: Record<string, unknown>) => void;
   /** SDK hooks config (e.g. PreToolUse for noskills phase enforcement). */

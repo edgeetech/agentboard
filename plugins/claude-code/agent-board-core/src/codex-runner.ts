@@ -13,8 +13,12 @@ import {
 } from './codex-config.ts';
 import { runConfigDir } from './paths.ts';
 import type { ProviderSandboxPolicy } from './provider-runtime.ts';
-import type { RunResult, SessionLog, TokenUsage } from './provider-types.ts';
-import type { RateLimitTracker } from './rate-limit-tracker.ts';
+import type {
+  ProviderRateLimiter,
+  ProviderSessionLog,
+  RunResult,
+  TokenUsage,
+} from './provider-types.ts';
 import { TurnTimeout } from './turn-timeout.ts';
 
 const DEFAULT_TURN_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_TURN_TIMEOUT_MS ?? '900000', 10);
@@ -36,12 +40,12 @@ export interface CodexRunnerOptions {
   cwd: string;
   abortController: AbortController;
   onEvent?: (eventName: string, detail: Record<string, unknown>) => void;
-  sessionLog?: (SessionLog & { warn?: (obj: Record<string, unknown>, msg: string) => void }) | null;
+  sessionLog?: ProviderSessionLog | null;
   serverToken: string;
   serverPort: number;
   mcpServers?: Record<string, unknown>;
   sandbox?: ProviderSandboxPolicy;
-  rateLimiter?: RateLimitTracker;
+  rateLimiter?: ProviderRateLimiter;
   turnTimeoutMs?: number;
 }
 

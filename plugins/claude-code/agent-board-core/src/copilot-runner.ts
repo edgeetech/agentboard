@@ -8,8 +8,12 @@ import type {
   MCPServerConfig,
 } from '@github/copilot-sdk';
 
-import type { RunResult, SessionLog, TokenUsage } from './provider-types.ts';
-import type { RateLimitTracker } from './rate-limit-tracker.ts';
+import type {
+  ProviderRateLimiter,
+  ProviderSessionLog,
+  RunResult,
+  TokenUsage,
+} from './provider-types.ts';
 import { TurnTimeout } from './turn-timeout.ts';
 
 const DEFAULT_TURN_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_TURN_TIMEOUT_MS ?? '900000', 10); // 15 min
@@ -26,10 +30,6 @@ interface McpServerEntry {
   tools?: string[];
 }
 
-export interface ExtendedSessionLog extends SessionLog {
-  warn?: (obj: Record<string, unknown>, msg: string) => void;
-}
-
 export interface CopilotRunnerOptions {
   runId: string;
   role: string;
@@ -41,8 +41,8 @@ export interface CopilotRunnerOptions {
   mcpServers: Record<string, unknown>;
   abortController: AbortController;
   turnTimeoutMs?: number;
-  rateLimiter?: RateLimitTracker;
-  sessionLog?: ExtendedSessionLog | null;
+  rateLimiter?: ProviderRateLimiter;
+  sessionLog?: ProviderSessionLog | null;
   onEvent?: (eventName: string, detail: Record<string, unknown>) => void;
 }
 
@@ -67,6 +67,7 @@ export class CopilotRunner {
 
   async run(): Promise<RunResult> {
     const { abortController, turnTimeoutMs = DEFAULT_TURN_TIMEOUT_MS } = this.opts;
+    const timeoutState = { timedOut: false };
 
     if (abortController.signal.aborted) {
       return { status: 'cancelled', error: 'Aborted before start' };
@@ -81,7 +82,23 @@ export class CopilotRunner {
 
     try {
       const result = await TurnTimeout.withTimeout(
-        () => this.executeSession(),
+        async (turnSignal) => {
+          const markTimeout = (): void => {
+            const reason: unknown = turnSignal.reason;
+            if (reason instanceof Error && reason.name === 'TimeoutError')
+              timeoutState.timedOut = true;
+          };
+          if (turnSignal.aborted) {
+            markTimeout();
+          } else {
+            turnSignal.addEventListener('abort', markTimeout, { once: true });
+          }
+          try {
+            return await this.executeSession(turnSignal);
+          } finally {
+            turnSignal.removeEventListener('abort', markTimeout);
+          }
+        },
         turnTimeoutMs,
         abortController.signal,
       );
@@ -93,7 +110,9 @@ export class CopilotRunner {
       // Check if aborted mid-stream (fired after the entry guard at the top).
       const isAborted = checkAborted(abortController.signal);
       const isTimeout =
-        error.name === 'TimeoutError' || /timed out after \d+ms/i.test(error.message);
+        timeoutState.timedOut ||
+        error.name === 'TimeoutError' ||
+        /timed out after \d+ms/i.test(error.message);
       return {
         status: isAborted && !isTimeout ? 'cancelled' : 'failed',
         error: error.message,
@@ -106,7 +125,7 @@ export class CopilotRunner {
     }
   }
 
-  private async executeSession(): Promise<RunResult> {
+  private async executeSession(turnSignal: AbortSignal): Promise<RunResult> {
     const { CopilotClient, approveAll } = await import('@github/copilot-sdk');
 
     const {
@@ -141,6 +160,7 @@ export class CopilotRunner {
       });
     };
     abortController.signal.addEventListener('abort', onAbort);
+    turnSignal.addEventListener('abort', onAbort);
 
     try {
       const sessionConfig: SessionConfig = {
@@ -198,6 +218,7 @@ export class CopilotRunner {
       result.status = 'completed';
     } finally {
       abortController.signal.removeEventListener('abort', onAbort);
+      turnSignal.removeEventListener('abort', onAbort);
       try {
         await session?.disconnect();
       } catch (e) {
