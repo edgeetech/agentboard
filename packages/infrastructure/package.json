@@ -1,0 +1,13 @@
+{
+  "name": "@agentboard/infrastructure",
+  "private": true,
+  "type": "module",
+  "description": "AgentBoard infrastructure adapters for persistence, filesystem, security, logging and trackers.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "echo \"infrastructure tests not migrated yet\""
+  }
+}

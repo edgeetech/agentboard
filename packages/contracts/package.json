@@ -1,0 +1,13 @@
+{
+  "name": "@agentboard/contracts",
+  "private": true,
+  "type": "module",
+  "description": "Public AgentBoard API, MCP and event contracts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "echo \"contract tests not migrated yet\""
+  }
+}

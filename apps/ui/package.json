@@ -1,0 +1,11 @@
+{
+  "name": "@agentboard/ui",
+  "private": true,
+  "type": "module",
+  "description": "Target AgentBoard UI package. Current implementation remains in plugins/claude-code/agent-board-core/ui during migration.",
+  "scripts": {
+    "build": "echo \"apps/ui migration scaffold only\"",
+    "typecheck": "echo \"apps/ui migration scaffold only\"",
+    "test": "echo \"apps/ui migration scaffold only\""
+  }
+}

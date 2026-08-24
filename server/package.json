@@ -1,0 +1,13 @@
+{
+  "name": "@agentboard/server",
+  "private": true,
+  "type": "module",
+  "description": "AgentBoard HTTP/MCP server and bootstrap composition root.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "echo \"server tests not migrated yet\""
+  }
+}

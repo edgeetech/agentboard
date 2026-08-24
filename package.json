@@ -1,0 +1,30 @@
+{
+  "name": "agentboard-workspace",
+  "private": true,
+  "type": "module",
+  "description": "AgentBoard monorepo workspace during architecture refactor.",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "server",
+    "plugins/providers/*",
+    "plugins/hosts/*"
+  ],
+  "scripts": {
+    "check": "npm --prefix plugins/claude-code/agent-board-core run check",
+    "build": "npm --prefix plugins/claude-code/agent-board-core run build",
+    "lint": "npm --prefix plugins/claude-code/agent-board-core run lint",
+    "typecheck": "npm --prefix plugins/claude-code/agent-board-core run typecheck",
+    "test": "npm --prefix plugins/claude-code/agent-board-core run test",
+    "test:unit": "npm --prefix plugins/claude-code/agent-board-core run test",
+    "test:integration": "npm --prefix plugins/claude-code/agent-board-core run test",
+    "test:e2e": "echo \"Playwright suite not introduced yet\"",
+    "test:architecture": "node scripts/check-architecture.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

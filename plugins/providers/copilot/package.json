@@ -1,0 +1,13 @@
+{
+  "name": "@agentboard/provider-copilot",
+  "private": true,
+  "type": "module",
+  "description": "Copilot provider runtime package scaffold.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "echo \"copilot provider tests not migrated yet\""
+  }
+}
