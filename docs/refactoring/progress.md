@@ -441,6 +441,8 @@ Follow-up additions:
 - Built-in skills now have Markdown source files under `/ai/skills`.
 - Built-in concern packs now have Markdown source files under `/ai/concerns`.
 - Engine tests verify the `/ai` source files normalize through the shared AI asset catalog parser.
+- Infrastructure now has a filesystem-port loader for built-in AI assets.
+- Infrastructure tests cover built-in skill/concern loading and duplicate-ID rejection.
 
 ## Plugin SDK
 
