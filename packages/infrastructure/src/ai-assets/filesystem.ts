@@ -3,6 +3,8 @@ import {
   type AiAsset,
   type AiAssetSource,
 } from "../../../engine/src/index.ts";
+import { readdirSync, readFileSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
 
 export interface AiAssetDirectoryEntry {
   readonly name: string;
@@ -16,6 +18,16 @@ export interface AiAssetFilesystemPort {
 
 export interface LoadBuiltInAiAssetsOptions {
   readonly rootPath: string;
+}
+
+export interface NodeAiAssetFilesystemOptions {
+  readonly rootDir: string;
+}
+
+export function createNodeAiAssetFilesystem(
+  options: NodeAiAssetFilesystemOptions,
+): AiAssetFilesystemPort {
+  return new NodeAiAssetFilesystem(options.rootDir);
 }
 
 export function loadBuiltInAiAssets(
@@ -97,4 +109,52 @@ function joinPath(...parts: readonly string[]): string {
     .flatMap((part) => part.split(/[\\/]+/))
     .filter((part) => part.length > 0)
     .join("/");
+}
+
+class NodeAiAssetFilesystem implements AiAssetFilesystemPort {
+  readonly #rootDir: string;
+
+  constructor(rootDir: string) {
+    this.#rootDir = resolve(rootDir);
+  }
+
+  list(path: string): readonly AiAssetDirectoryEntry[] {
+    const absPath = this.#resolve(path);
+    try {
+      return readdirSync(absPath, { withFileTypes: true })
+        .filter((entry) => entry.isFile() || entry.isDirectory())
+        .map(
+          (entry): AiAssetDirectoryEntry => ({
+            name: entry.name,
+            kind: entry.isDirectory() ? "directory" : "file",
+          }),
+        )
+        .sort(compareEntryName);
+    } catch (error) {
+      if (isErrno(error, "ENOENT")) return [];
+      throw error;
+    }
+  }
+
+  readText(path: string): string {
+    return readFileSync(this.#resolve(path), "utf8");
+  }
+
+  #resolve(path: string): string {
+    const absPath = resolve(this.#rootDir, path);
+    const relPath = relative(this.#rootDir, absPath);
+    if (relPath.startsWith("..") || isAbsolute(relPath)) {
+      throw new Error(`AI asset path escapes root: ${path}`);
+    }
+    return absPath;
+  }
+}
+
+function isErrno(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }

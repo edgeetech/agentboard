@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
 
 import {
+  createNodeAiAssetFilesystem,
   loadBuiltInAiAssets,
   type AiAssetDirectoryEntry,
   type AiAssetFilesystemPort,
 } from "../src/index.ts";
+
+const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
 describe("loadBuiltInAiAssets", () => {
   it("loads built-in skills and concerns from a filesystem port", () => {
@@ -88,6 +92,35 @@ description: Engineering quality.
         { rootPath: "ai" },
       ),
     ).toThrow("Duplicate built-in AI asset concern:a");
+  });
+
+  it("loads the repository built-in AI assets through the Node filesystem adapter", () => {
+    const assets = loadBuiltInAiAssets(
+      createNodeAiAssetFilesystem({ rootDir: repoRoot }),
+      {
+        rootPath: "ai",
+      },
+    );
+
+    expect(assets.map((asset) => `${asset.kind}:${asset.id}`)).toEqual([
+      "skill:api-client",
+      "skill:code-review",
+      "skill:refactor",
+      "skill:release-notes",
+      "skill:tech-spec",
+      "skill:unit-tests",
+      "concern:beautiful-product",
+      "concern:long-lived",
+      "concern:well-engineered",
+    ]);
+  });
+
+  it("rejects Node filesystem paths outside the configured root", () => {
+    const fs = createNodeAiAssetFilesystem({ rootDir: repoRoot });
+
+    expect(() => fs.readText("../package.json")).toThrow(
+      "AI asset path escapes root",
+    );
   });
 });
 
