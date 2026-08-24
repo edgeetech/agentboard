@@ -148,6 +148,7 @@ Compatibility concerns:
 
 - Core TypeScript `rootDir` is temporarily widened so the legacy package can typecheck Engine source imports before package distribution is finalized.
 - A later phase must replace relative Engine source imports with packaged workspace imports once distribution is finalized.
+- Legacy runtime modules keep packaging-safe local compatibility mirrors of extracted Engine policy until plugin distribution includes repo-root packages.
 
 Remaining follow-ups:
 
@@ -462,3 +463,18 @@ Quality checks:
 
 - plugin-sdk typecheck: passed.
 - plugin-sdk test: passed, 1 file / 7 tests.
+
+## PR Feedback
+
+Status: Initial review feedback resolved.
+
+Moved / Added:
+
+- Removed legacy runtime deep imports of repo-root Engine files until plugin packaging guarantees workspace packages are present.
+- Added an architecture check rejecting repo-root package imports from the legacy runtime.
+- Updated the architecture checker to resolve the repository root with `fileURLToPath`.
+
+Behaviour preserved:
+
+- Engine package extraction remains available as the target package seam.
+- Legacy runtime callers still use their existing module paths.

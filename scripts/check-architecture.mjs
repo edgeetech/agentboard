@@ -1,10 +1,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname.replace(
-  /^\/([A-Za-z]:)/,
-  "$1",
-);
+const root = fileURLToPath(new URL("..", import.meta.url));
 const failures = [];
 
 function posix(path) {
@@ -94,6 +92,14 @@ scanImports("server", [
     test: (s) =>
       s.includes("packages/infrastructure/src/persistence/sqlite/repositories"),
     reason: "server handlers should not import DB internals directly",
+  },
+]);
+
+scanImports("plugins/claude-code/agent-board-core/src", [
+  {
+    test: (s) => s.includes("packages/"),
+    reason:
+      "legacy runtime must not import repo-root packages until plugin packaging guarantees them",
   },
 ]);
 

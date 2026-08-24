@@ -1,13 +1,6 @@
 import { z } from 'zod';
 
 import {
-  providerId,
-  resolveRoleConfig as resolveEngineRoleConfig,
-  type AgentConfig as EngineAgentConfig,
-  type RoleConfig as EngineRoleConfig,
-} from '../../../../packages/engine/src/configuration/agent-config.ts';
-
-import {
   AGENT_PROVIDERS,
   type AgentConfig,
   type AgentProvider,
@@ -68,31 +61,19 @@ export interface ResolveContext {
 }
 
 export function resolveRoleConfig(role: RunRole, ctx: ResolveContext): RoleConfig {
-  return toLegacyRoleConfig(
-    resolveEngineRoleConfig({
-      role,
-      taskConfig: toEngineAgentConfig(ctx.taskConfig),
-      projectConfig: toEngineAgentConfig(ctx.projectConfig),
-      legacyTaskProviderOverride:
-        ctx.legacyTaskOverride === null ? null : providerId(ctx.legacyTaskOverride),
-      legacyProjectProvider: providerId(ctx.legacyProjectProvider),
-    }),
-  );
+  const fromTask = ctx.taskConfig?.[role];
+  if (fromTask !== undefined) return cloneRoleConfig(fromTask);
+
+  const fromProject = ctx.projectConfig?.[role];
+  if (fromProject !== undefined) return cloneRoleConfig(fromProject);
+
+  if (ctx.legacyTaskOverride !== null) return { type: 'single', provider: ctx.legacyTaskOverride };
+  return { type: 'single', provider: ctx.legacyProjectProvider };
 }
 
-function toEngineAgentConfig(config: AgentConfig | null): EngineAgentConfig | null {
-  return config as unknown as EngineAgentConfig | null;
-}
-
-function toLegacyRoleConfig(config: EngineRoleConfig): RoleConfig {
-  if (config.type === 'single') {
-    return { type: 'single', provider: config.provider as AgentProvider };
-  }
-
-  return {
-    type: 'council',
-    members: [...config.members] as AgentProvider[],
-  };
+function cloneRoleConfig(config: RoleConfig): RoleConfig {
+  if (config.type === 'single') return { type: 'single', provider: config.provider };
+  return { type: 'council', members: [...config.members] };
 }
 
 export function describeRoleConfig(cfg: RoleConfig): string {

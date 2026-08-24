@@ -1,5 +1,3 @@
-import { RateLimitPolicy } from '../../../../packages/engine/src/runs/rate-limit-policy.ts';
-
 export interface RateLimitInfo {
   isLimited: boolean;
   retryAfterMs: number | null;
@@ -8,31 +6,58 @@ export interface RateLimitInfo {
   source: string;
 }
 
+interface RateLimitEntry {
+  retryAfterMs: number | null;
+  lastLimitedAt: Date | null;
+  limitCount: number;
+  limitedUntilEpochMs: number | null;
+}
+
 export class RateLimitTracker {
-  readonly #policy = new RateLimitPolicy();
+  readonly #entries = new Map<string, RateLimitEntry>();
 
   recordLimit(source: string, retryAfterMs?: number): void {
-    if (retryAfterMs === undefined) {
-      this.#policy.recordLimit({ source });
-      return;
-    }
-
-    this.#policy.recordLimit({ source, retryAfterMs });
+    const existing = this.#entries.get(source);
+    const now = Date.now();
+    this.#entries.set(source, {
+      retryAfterMs: retryAfterMs ?? null,
+      lastLimitedAt: new Date(now),
+      limitCount: (existing?.limitCount ?? 0) + 1,
+      limitedUntilEpochMs: retryAfterMs === undefined ? null : now + retryAfterMs,
+    });
   }
 
   recordSuccess(source: string): void {
-    this.#policy.recordSuccess(source);
+    const existing = this.#entries.get(source);
+    if (!existing) return;
+    this.#entries.set(source, {
+      retryAfterMs: null,
+      lastLimitedAt: existing.lastLimitedAt,
+      limitCount: existing.limitCount,
+      limitedUntilEpochMs: 0,
+    });
   }
 
   isLimited(source: string): boolean {
-    return this.#policy.isLimited(source);
+    const entry = this.#entries.get(source);
+    if (!entry) return false;
+    if (entry.limitedUntilEpochMs === null) return true;
+    return entry.limitedUntilEpochMs > Date.now();
   }
 
   getInfo(source: string): RateLimitInfo {
-    const info = this.#policy.getInfo(source);
-
+    const info = this.#entries.get(source);
+    if (!info) {
+      return {
+        isLimited: false,
+        retryAfterMs: null,
+        lastLimitedAt: null,
+        limitCount: 0,
+        source,
+      };
+    }
     return {
-      isLimited: info.isLimited,
+      isLimited: this.isLimited(source),
       retryAfterMs: info.retryAfterMs,
       lastLimitedAt: info.lastLimitedAt,
       limitCount: info.limitCount,
@@ -41,10 +66,10 @@ export class RateLimitTracker {
   }
 
   getAllLimits(): RateLimitInfo[] {
-    return this.#policy.getAllLimits().map((info) => this.getInfo(info.source));
+    return [...this.#entries.keys()].map((source) => this.getInfo(source));
   }
 
   reset(source: string): void {
-    this.#policy.reset(source);
+    this.#entries.delete(source);
   }
 }

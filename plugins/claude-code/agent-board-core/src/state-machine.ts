@@ -1,17 +1,74 @@
-import {
-  allowedPrevStatuses as engineAllowedPrevStatuses,
-  canTransition as engineCanTransition,
-  transitions as engineTransitions,
-  type TransitionResult,
-  type TransitionRule,
-} from '../../../../packages/engine/src/workflows/task-state.ts';
-
 import type { ActorRole, AssigneeRole, TaskStatus, WorkflowType } from './types.ts';
 
-export type { TransitionResult, TransitionRule };
+export interface TransitionRule {
+  readonly from: TaskStatus;
+  readonly to: TaskStatus;
+  readonly allowedAssignees: readonly AssigneeRole[];
+  readonly byRoles: readonly ActorRole[];
+}
+
+export interface TransitionResult {
+  ok: boolean;
+  reason?: string;
+}
+
+// Packaging-safe compatibility mirror of the extracted Engine task workflow.
+const WF1: readonly TransitionRule[] = [
+  { from: 'todo', to: 'agent_working', allowedAssignees: ['worker'], byRoles: ['pm', 'human'] },
+  { from: 'todo', to: 'agent_review', allowedAssignees: ['reviewer'], byRoles: ['pm', 'reviewer'] },
+  {
+    from: 'agent_working',
+    to: 'agent_working',
+    allowedAssignees: ['worker', 'pm'],
+    byRoles: ['worker', 'reviewer', 'human', 'pm'],
+  },
+  {
+    from: 'agent_working',
+    to: 'agent_review',
+    allowedAssignees: ['reviewer'],
+    byRoles: ['worker', 'pm'],
+  },
+  { from: 'agent_working', to: 'todo', allowedAssignees: ['pm'], byRoles: ['worker', 'pm'] },
+  {
+    from: 'agent_review',
+    to: 'agent_working',
+    allowedAssignees: ['worker'],
+    byRoles: ['reviewer'],
+  },
+  { from: 'agent_review', to: 'todo', allowedAssignees: ['pm'], byRoles: ['reviewer'] },
+  {
+    from: 'agent_review',
+    to: 'human_approval',
+    allowedAssignees: ['human'],
+    byRoles: ['reviewer'],
+  },
+  { from: 'human_approval', to: 'agent_working', allowedAssignees: ['worker'], byRoles: ['human'] },
+  { from: 'human_approval', to: 'done', allowedAssignees: ['human'], byRoles: ['human'] },
+  {
+    from: 'todo',
+    to: 'todo',
+    allowedAssignees: ['pm', 'human'],
+    byRoles: ['worker', 'reviewer', 'pm'],
+  },
+];
+
+const WF2: readonly TransitionRule[] = [
+  { from: 'todo', to: 'agent_working', allowedAssignees: ['worker'], byRoles: ['pm', 'human'] },
+  {
+    from: 'agent_working',
+    to: 'agent_working',
+    allowedAssignees: ['worker', 'pm'],
+    byRoles: ['worker', 'human', 'pm'],
+  },
+  { from: 'agent_working', to: 'todo', allowedAssignees: ['pm'], byRoles: ['worker', 'pm'] },
+  { from: 'agent_working', to: 'human_approval', allowedAssignees: ['human'], byRoles: ['worker'] },
+  { from: 'human_approval', to: 'agent_working', allowedAssignees: ['worker'], byRoles: ['human'] },
+  { from: 'human_approval', to: 'done', allowedAssignees: ['human'], byRoles: ['human'] },
+  { from: 'todo', to: 'todo', allowedAssignees: ['pm', 'human'], byRoles: ['worker', 'pm'] },
+];
 
 export function transitions(wf: WorkflowType): TransitionRule[] {
-  return [...engineTransitions(wf)];
+  return [...(wf === 'WF1' ? WF1 : WF2)];
 }
 
 export function canTransition(
@@ -21,9 +78,21 @@ export function canTransition(
   assignee: AssigneeRole | null,
   by: ActorRole,
 ): TransitionResult {
-  return engineCanTransition(wf, from, to, assignee, by);
+  const rule = transitions(wf).find(
+    (transition) => transition.from === from && transition.to === to,
+  );
+  if (!rule) return { ok: false, reason: `no rule ${wf}: ${from} -> ${to}` };
+  if (assignee === null || !rule.allowedAssignees.includes(assignee)) {
+    return { ok: false, reason: `assignee_role '${String(assignee)}' not allowed for ${to}` };
+  }
+  if (!rule.byRoles.includes(by)) {
+    return { ok: false, reason: `role '${by}' cannot perform ${from} -> ${to}` };
+  }
+  return { ok: true };
 }
 
 export function allowedPrevStatuses(wf: WorkflowType, to: TaskStatus): TaskStatus[] {
-  return engineAllowedPrevStatuses(wf, to);
+  return transitions(wf)
+    .filter((transition) => transition.to === to)
+    .map((transition) => transition.from);
 }
