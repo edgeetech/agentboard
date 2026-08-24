@@ -343,12 +343,11 @@ Moved / Added:
 Behaviour preserved:
 
 - No runtime code changed.
-- Existing baseline lint/format commands are not added to CI yet because they currently fail.
 
 Architecture improvements:
 
-- Pull requests and pushes to `main`/`refactor/**` now run typecheck, unit tests, architecture checks and build.
-- CI runs on Ubuntu and Windows with Node 22.x.
+- Pull requests and pushes to `main`/`refactor/**` now run lint/format checks, typecheck, unit tests, database migration verification, architecture checks and build.
+- CI runs on Ubuntu, macOS and Windows with Node 22.x.
 - CI installs with `--legacy-peer-deps` to match the current SDK/Zod dependency baseline until dependency modernization is handled separately.
 - Added missing `apps/ui/tsconfig.json` scaffold required by root TypeScript references and fresh CI installs.
 - CI installs the legacy core UI package before build so Vite plugin dependencies are available on fresh runners.
