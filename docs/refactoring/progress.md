@@ -164,6 +164,33 @@ Quality checks:
 - e2e: placeholder only.
 - build: not rerun after Phase 2 extraction.
 
+## Phase 3
+
+Status: Initial persistence port seam complete.
+
+Moved / Added:
+
+- Added Engine persistence record and repository port types in `packages/engine/src/ports/persistence.ts`.
+- Added Infrastructure SQLite connection/factory port types in `packages/infrastructure/src/persistence/sqlite/connection.ts`.
+- Exported persistence ports from Engine and Infrastructure package entry points.
+- Added root `typecheck:infrastructure` and included it in `npm run typecheck`.
+
+Behaviour preserved:
+
+- Legacy SQLite implementation remains under `plugins/claude-code/agent-board-core/src`.
+- No repository calls or database files were moved in this chunk.
+
+Architecture improvements:
+
+- Engine now has provider-neutral repository interfaces for projects, tasks, runs and comments.
+- Infrastructure now has a SQLite adapter contract target before legacy DB code is moved.
+- Provider identity uses Engine's existing extensible `ProviderId` type instead of adding hard-coded provider unions.
+
+Quality checks:
+
+- engine typecheck: passed.
+- infrastructure typecheck: passed.
+
 ## Governance
 
 Status: Initial repository governance scaffolding complete.
