@@ -101,7 +101,7 @@ Quality checks:
 
 ## Phase 2
 
-Status: Started with first strangler extraction.
+Status: In progress with provider-free policy extractions.
 
 Moved / Added:
 
@@ -110,33 +110,42 @@ Moved / Added:
 - Added run phase rules in `packages/engine/src/workflows/run-phase.ts`.
 - Added Engine workflow exports.
 - Added Engine workflow tests.
+- Added retry policy extraction in `packages/engine/src/runs/retry-policy.ts`.
+- Added provider/config precedence extraction in `packages/engine/src/configuration/agent-config.ts`.
+- Added rate-limit policy extraction in `packages/engine/src/runs/rate-limit-policy.ts`.
 
 Behaviour preserved:
 
 - Existing runtime still imports current `src/state-machine.ts` and `src/phase-machine.ts`.
+- Existing runtime still imports current `src/rate-limit-tracker.ts`.
 - No production execution path has switched to the new Engine package yet.
 
 Tests added/updated:
 
 - Added `packages/engine/test/task-state.test.ts`.
 - Added `packages/engine/test/run-phase.test.ts`.
+- Added `packages/engine/test/retry-policy.test.ts`.
+- Added `packages/engine/test/agent-config.test.ts`.
+- Added `packages/engine/test/rate-limit-policy.test.ts`.
 - Added root `test:engine` and `typecheck:engine` scripts.
 - Root `npm run test` now runs existing core tests plus Engine tests.
 
 Architecture improvements:
 
 - Workflow and phase rules now exist in provider-free Engine code.
+- Retry, config precedence and rate-limit rules now exist in provider-free Engine code.
 - Engine package typechecks independently.
 - Engine tests run without SQLite, HTTP, browser, filesystem workspace or provider SDKs.
 
 Compatibility concerns:
 
 - Current and Engine workflow implementations are duplicated temporarily.
+- Current and Engine retry/config/rate-limit implementations are duplicated temporarily.
 - A later phase must switch runtime imports to Engine and delete the old copies.
 
 Remaining follow-ups:
 
-- Extract retry policy and role/config precedence into Engine.
+- Switch extracted policies into the current runtime behind focused compatibility tests.
 - Add architecture tests preventing provider-specific imports in Engine as files move.
 - Switch existing runtime to use Engine workflow modules after contracts stabilize.
 
@@ -144,7 +153,7 @@ Quality checks:
 
 - lint: not rerun globally; existing baseline still fails.
 - typecheck: passed through root `npm run typecheck`.
-- unit: passed through root `npm run test`, 30 existing files / 246 tests plus 2 Engine files / 20 tests.
+- unit: passed through root `npm run test`, 30 existing files / 246 tests plus 5 Engine files / 41 tests.
 - integration: no separate command yet.
 - e2e: placeholder only.
 - build: not rerun after Phase 2 extraction.
