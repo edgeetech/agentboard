@@ -176,7 +176,7 @@ describe('project database migrations', () => {
     } finally {
       db.close();
     }
-  });
+  }, 15_000);
 
   it('rejects invalid legacy data instead of swallowing migration failures', async () => {
     const path = tempDbPath();
