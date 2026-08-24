@@ -4,13 +4,13 @@
 import { randomBytes } from 'node:crypto';
 
 import { providerLabel } from './agent-config.ts';
-import type { TokenUsage } from './agent-runner.ts';
 import type { DbHandle } from './db.ts';
 import { logPath } from './paths.ts';
 import { setRunPhase } from './phase-repo.ts';
 import { computeCost } from './pricing.ts';
 import { providerFor } from './provider-registry.ts';
 import type { ProviderRuntimeContext, ProviderRuntimeResult } from './provider-runtime.ts';
+import type { TokenUsage } from './provider-types.ts';
 import { addComment, claimRun, finishRun, getRun, setRunCost, setRunSessionRef } from './repo.ts';
 import { buildSdkHooks } from './run-hooks.ts';
 import { isoNow } from './time.ts';

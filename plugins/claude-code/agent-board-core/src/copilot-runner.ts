@@ -8,7 +8,7 @@ import type {
   MCPServerConfig,
 } from '@github/copilot-sdk';
 
-import type { RunResult, TokenUsage, SessionLog } from './agent-runner.ts';
+import type { RunResult, SessionLog, TokenUsage } from './provider-types.ts';
 import type { RateLimitTracker } from './rate-limit-tracker.ts';
 import { TurnTimeout } from './turn-timeout.ts';
 

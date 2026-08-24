@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import type { RunResult, TokenUsage, SessionLog } from './agent-runner.ts';
 import { buildChildEnv } from './child-env.ts';
 import {
   codexBridgedClaudeMcps,
@@ -14,6 +13,7 @@ import {
 } from './codex-config.ts';
 import { runConfigDir } from './paths.ts';
 import type { ProviderSandboxPolicy } from './provider-runtime.ts';
+import type { RunResult, SessionLog, TokenUsage } from './provider-types.ts';
 import type { RateLimitTracker } from './rate-limit-tracker.ts';
 import { TurnTimeout } from './turn-timeout.ts';
 

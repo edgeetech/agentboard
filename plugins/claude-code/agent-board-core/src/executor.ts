@@ -5,7 +5,6 @@ import { readFileSync, statSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { parseAgentConfig, resolveRoleConfig } from './agent-config.ts';
-import type { TokenUsage } from './agent-runner.ts';
 import { emitActivity } from './api-activity.ts';
 import { executeCouncilRun } from './council-runner.ts';
 import type { DbHandle } from './db.ts';
@@ -30,6 +29,7 @@ import {
   type ProviderRuntimeContext,
   type SdkMcpServer,
 } from './provider-runtime.ts';
+import type { TokenUsage } from './provider-types.ts';
 import { RateLimitTracker } from './rate-limit-tracker.ts';
 import type { AgentRunRow, ProjectRow, TaskRow } from './repo.ts';
 import {

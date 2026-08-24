@@ -1,4 +1,4 @@
-import type { TokenUsage } from './agent-runner.ts';
+import type { TokenUsage } from './provider-types.ts';
 import type { RateLimitTracker } from './rate-limit-tracker.ts';
 import type { sessionLogger } from './session-logger.ts';
 import type { AgentProvider, RunRole } from './types.ts';

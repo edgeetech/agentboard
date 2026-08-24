@@ -1,6 +1,6 @@
 {
   "name": "agentboard",
-  "version": "0.1.150",
+  "version": "0.1.151",
   "description": "Local agent management kanban: PM / Worker / Reviewer / Human workflow driven by headless Claude runs. Per-project SQLite + local UI.",
   "author": {
     "name": "edgeetech",

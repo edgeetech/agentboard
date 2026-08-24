@@ -341,6 +341,7 @@ Follow-up fixes:
 - Added a legacy/runtime-to-plugin-SDK provider runtime control parity test while packaging still requires a local compatibility copy.
 - Centralized legacy REST provider validation on the shared local provider list instead of route-local hard-coded arrays.
 - Added provider manifest parity coverage so target provider package metadata stays aligned with legacy runtime adapter enforcement declarations.
+- Moved legacy provider runtime result/usage/session-log primitives into a provider-neutral local types module as a prerequisite for provider runtime extraction.
 
 ## CI Enforcement
 

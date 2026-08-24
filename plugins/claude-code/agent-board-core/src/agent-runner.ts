@@ -3,22 +3,13 @@
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
+import type { RunResult, SessionLog, TokenUsage } from './provider-types.ts';
 import type { RateLimitTracker } from './rate-limit-tracker.ts';
 import { TurnTimeout } from './turn-timeout.ts';
 
 const DEFAULT_TURN_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_TURN_TIMEOUT_MS ?? '900000', 10); // 15 min
 
-export interface TokenUsage {
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-}
-
-export interface SessionLog {
-  info: (obj: Record<string, unknown>, msg: string) => void;
-  error: (obj: Record<string, unknown>, msg: string) => void;
-}
+export type { RunResult, SessionLog, TokenUsage } from './provider-types.ts';
 
 export interface AgentRunnerOptions {
   runId: string;
@@ -41,17 +32,6 @@ export interface AgentRunnerOptions {
   onEvent?: (eventName: string, detail: Record<string, unknown>) => void;
   /** SDK hooks config (e.g. PreToolUse for noskills phase enforcement). */
   hooks?: Record<string, unknown>;
-}
-
-export interface RunResult {
-  status: 'completed' | 'failed' | 'cancelled';
-  sessionId?: string | null;
-  usage?: TokenUsage;
-  model?: string | null;
-  totalCostUsd?: number | null;
-  error?: string;
-  /** Present when status='failed'; 'timeout' marks TurnTimeout aborts so executor can skip auto-retry. */
-  errorKind?: 'timeout' | 'error';
 }
 
 /** Internal mutable accumulator for streaming state. */
