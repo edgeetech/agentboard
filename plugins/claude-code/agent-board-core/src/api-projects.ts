@@ -14,6 +14,7 @@ import { openOrCreate, listProjectDbs, getDb, getActiveDb, closeDb } from './pro
 import { createProject, getProject, updateProject } from './repo.ts';
 import { latestScan, recordScan, type ScanTrigger } from './skill-repo.ts';
 import { ensureSkillScanWorker } from './skill-scan-runtime.ts';
+import { AGENT_PROVIDER_LIST_TEXT, isAgentProvider, type AgentProvider } from './types.ts';
 
 // ── Skill-scan trigger helpers ────────────────────────────────────────────────
 
@@ -189,11 +190,8 @@ export async function handleProjects(
       json(res, 400, { error: 'workflow_type must be WF1 or WF2' });
       return;
     }
-    if (
-      typeof agent_provider === 'string' &&
-      !['claude', 'github_copilot', 'codex'].includes(agent_provider)
-    ) {
-      json(res, 400, { error: 'agent_provider must be "claude", "github_copilot", or "codex"' });
+    if (typeof agent_provider === 'string' && !isAgentProvider(agent_provider)) {
+      json(res, 400, { error: `agent_provider must be one of ${AGENT_PROVIDER_LIST_TEXT}` });
       return;
     }
     const rp = validateRepoPath(repo_path);
@@ -214,7 +212,7 @@ export async function handleProjects(
       workflow_type: workflow_type as 'WF1' | 'WF2',
       repo_path: rp.canonical,
       ...(typeof agent_provider === 'string'
-        ? { agent_provider: agent_provider as 'claude' | 'github_copilot' | 'codex' }
+        ? { agent_provider: agent_provider as AgentProvider }
         : {}),
     });
     const cfg = readConfig();
@@ -308,8 +306,8 @@ export async function handleProjects(
     }
     if ('agent_provider' in patch) {
       const ap = str(patch.agent_provider);
-      if (ap === undefined || !['claude', 'github_copilot', 'codex'].includes(ap)) {
-        json(res, 400, { error: 'agent_provider must be "claude", "github_copilot", or "codex"' });
+      if (ap === undefined || !isAgentProvider(ap)) {
+        json(res, 400, { error: `agent_provider must be one of ${AGENT_PROVIDER_LIST_TEXT}` });
         return;
       }
     }

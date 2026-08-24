@@ -36,6 +36,14 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
   'codex',
 ] as const;
 
+export const AGENT_PROVIDER_LIST_TEXT = AGENT_PROVIDERS.map((provider) => `"${provider}"`).join(
+  ', ',
+);
+
+export function isAgentProvider(provider: string): provider is AgentProvider {
+  return (AGENT_PROVIDERS as readonly string[]).includes(provider);
+}
+
 export interface SingleRoleConfig {
   type: 'single';
   provider: AgentProvider;
