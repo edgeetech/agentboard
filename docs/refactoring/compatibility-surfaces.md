@@ -52,6 +52,14 @@ Migration direction:
 
 Public HTTP surfaces are routed from `server.ts` and handlers under `src/api-*.ts`.
 
+Current versioning status:
+
+- REST routes under `/api` are the current unversioned legacy surface.
+- `/mcp` is the current unversioned HTTP MCP surface.
+- `plugins/claude-code/mcp/agentboard.mjs` is the current unversioned stdio MCP host-plugin surface.
+- `packages/contracts/src/versioning.ts` records these current surfaces and shared deprecation metadata types.
+- No surface is deprecated as of this refactor checkpoint.
+
 Observed surfaces:
 
 - `GET /alive`
@@ -75,6 +83,13 @@ Important behaviours:
 - CORS limited to local origins;
 - CSP nonce and token injection for UI;
 - JSON error shapes consumed by UI and host tools.
+
+Versioning and deprecation policy:
+
+- Introduce new incompatible HTTP surfaces behind an explicit version namespace or version header before removing old routes.
+- Keep old unversioned routes available until a release notes entry, migration note and rollback path exist.
+- Use `Deprecation` and `Sunset` metadata only after the replacement surface exists and is validated.
+- MCP protocol version changes must update the shared contracts package before runtime handlers are migrated.
 
 ## HTTP MCP (`abrun`)
 

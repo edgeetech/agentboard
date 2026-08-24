@@ -321,3 +321,28 @@ Quality checks:
 
 - targeted observability test: passed.
 - root typecheck: passed.
+
+## API Versioning
+
+Status: Initial API versioning/deprecation contract complete.
+
+Moved / Added:
+
+- Added `packages/contracts/src/versioning.ts`.
+- Exported versioning contracts from `packages/contracts/src/index.ts`.
+- Documented current unversioned REST/MCP surfaces and deprecation policy in `docs/refactoring/compatibility-surfaces.md`.
+
+Behaviour preserved:
+
+- Runtime HTTP, HTTP MCP and stdio MCP handlers are unchanged.
+- No API surface is marked deprecated yet.
+
+Architecture improvements:
+
+- REST/MCP surface identifiers and deprecation metadata now have a shared contracts package seam.
+- Future versioned route work has documented compatibility and sunset requirements.
+
+Quality checks:
+
+- contracts typecheck: passed.
+- root typecheck/test/build/architecture: passed.
