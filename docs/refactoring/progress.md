@@ -408,6 +408,12 @@ Quality checks:
 - contracts typecheck: passed.
 - root typecheck/test/build/architecture: passed.
 
+Follow-up additions:
+
+- Added a focused REST project-read contract snapshot in `packages/contracts/src/rest-projects.ts`.
+- Added DTO contracts for project rows, project list/active responses, suggested project codes and active run state responses.
+- Root `npm run test` now includes contracts package tests.
+
 ## AI Asset Schema
 
 Status: Initial Markdown AI asset normalization seam complete, with built-in skill and concern sources added.

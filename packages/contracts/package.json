@@ -8,6 +8,6 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "echo \"contract tests not migrated yet\""
+    "test": "node ../../plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run test"
   }
 }
