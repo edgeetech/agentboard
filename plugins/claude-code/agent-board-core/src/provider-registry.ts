@@ -2,6 +2,7 @@ import { appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import { createClaudeProviderAdapter } from '../../../providers/claude/src/index.ts';
 import { createCodexProviderAdapter } from '../../../providers/codex/src/index.ts';
 import { createCopilotProviderAdapter } from '../../../providers/copilot/src/index.ts';
 
@@ -9,49 +10,13 @@ import { AgentRunner } from './agent-runner.ts';
 import { CodexRunner } from './codex-runner.ts';
 import { CopilotRunner } from './copilot-runner.ts';
 import { buildResumeCommand } from './provider-runtime.ts';
-import type {
-  ProviderRuntimeAdapter,
-  ProviderRuntimeContext,
-  ProviderRuntimeResult,
-} from './provider-runtime.ts';
+import type { ProviderRuntimeAdapter, ProviderRuntimeContext } from './provider-runtime.ts';
 import type { AgentProvider } from './types.ts';
 
-class ClaudeProviderAdapter implements ProviderRuntimeAdapter {
-  readonly provider = 'claude' as const;
-  readonly enforcement = {
-    enforced: [
-      'cwd',
-      'maxTurns',
-      'allowedTools',
-      'mcpServerNames',
-      'hooksEnabled',
-      'abortSignal',
-      'rateLimitBackoff',
-      'approvalMode',
-    ],
-    intentionallyIgnored: ['filesystemSandbox'],
-    notes: ['Claude runner receives cwd, maxTurns, allowedTools, hooks and abort signal.'],
-  } as const;
-  readonly resume = {
-    interactive: true,
-    command: (sessionId: string, repoPath?: string | null) =>
-      buildResumeCommand(this.provider, sessionId, repoPath),
-  };
-
-  async run(ctx: ProviderRuntimeContext): Promise<ProviderRuntimeResult> {
-    const runner = new AgentRunner(ctx);
-    const result = await runner.run();
-    return {
-      ...result,
-      sessionRef:
-        typeof result.sessionId === 'string' && result.sessionId.length > 0
-          ? { provider: this.provider, sessionId: result.sessionId }
-          : null,
-    };
-  }
-}
-
-const claudeProvider = new ClaudeProviderAdapter();
+const claudeProvider = createClaudeProviderAdapter<ProviderRuntimeContext>({
+  Runner: AgentRunner,
+  buildResumeCommand,
+}) satisfies ProviderRuntimeAdapter;
 const copilotProvider = createCopilotProviderAdapter<ProviderRuntimeContext>({
   Runner: CopilotRunner,
   buildResumeCommand,

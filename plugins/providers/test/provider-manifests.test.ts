@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { validateProviderManifest } from "../../../packages/plugin-sdk/src/index.ts";
-import { claudeProviderManifest } from "../claude/src/index.ts";
+import {
+  claudeProviderManifest,
+  createClaudeProviderAdapter,
+  type ClaudeRuntimeResult,
+} from "../claude/src/index.ts";
 import {
   codexProviderManifest,
   createCodexProviderAdapter,
@@ -103,5 +107,39 @@ describe("provider package manifests", () => {
       sessionRef: { provider: "codex", sessionId: "codex-session" },
     });
     expect(calls).toEqual([{ runId: "run-2" }]);
+  });
+
+  it("creates a Claude adapter shell around an injected runner", async () => {
+    const calls: unknown[] = [];
+    class FakeClaudeRunner {
+      constructor(ctx: unknown) {
+        calls.push(ctx);
+      }
+
+      run(): Promise<ClaudeRuntimeResult> {
+        return Promise.resolve({
+          status: "completed",
+          sessionId: "claude-session",
+          model: "claude-sonnet-4.5",
+        });
+      }
+    }
+
+    const adapter = createClaudeProviderAdapter({
+      Runner: FakeClaudeRunner,
+      buildResumeCommand: (_provider, sessionId, repoPath) =>
+        `${repoPath ?? "<none>"}:${sessionId}`,
+    });
+
+    expect(adapter.provider).toBe("claude");
+    expect(adapter.enforcement).toEqual(claudeProviderManifest.enforcement);
+    expect(adapter.resume.command("s1", "/repo")).toBe("/repo:s1");
+
+    await expect(adapter.run({ runId: "run-3" })).resolves.toMatchObject({
+      status: "completed",
+      sessionId: "claude-session",
+      sessionRef: { provider: "claude", sessionId: "claude-session" },
+    });
+    expect(calls).toEqual([{ runId: "run-3" }]);
   });
 });
