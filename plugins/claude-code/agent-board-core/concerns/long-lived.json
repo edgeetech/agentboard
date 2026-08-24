@@ -26,8 +26,8 @@
     },
     "EXECUTING": {
       "reminders": [
-        "Don't introduce new shared mutable state.",
-        "If you touch a load-bearing module, leave it more documented than you found it — only when WHY is non-obvious."
+        "Do not introduce new shared mutable state.",
+        "If you touch a load-bearing module, document why when the reason is non-obvious."
       ],
       "reviewDimensions": ["coupling", "doc-debt"]
     },
