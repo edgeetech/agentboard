@@ -52,9 +52,16 @@ class CopilotProviderAdapter implements ProviderRuntimeAdapter {
   readonly provider = 'github_copilot' as const;
   readonly enforcement = {
     enforced: ['cwd', 'mcpServerNames', 'abortSignal', 'rateLimitBackoff'],
-    intentionallyIgnored: ['maxTurns', 'allowedTools', 'hooksEnabled', 'filesystemSandbox'],
+    intentionallyIgnored: [
+      'maxTurns',
+      'allowedTools',
+      'hooksEnabled',
+      'approvalMode',
+      'filesystemSandbox',
+    ],
     notes: [
       'Copilot runner currently uses approveAll and does not enforce maxTurns or allowedTools.',
+      'Requested approvalMode is intentionally ignored until provider-specific approval mapping is implemented.',
     ],
   } as const;
   readonly resume = {
