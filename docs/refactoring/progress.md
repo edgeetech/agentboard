@@ -312,6 +312,7 @@ Follow-up fixes:
 - Removed Codex `--dangerously-bypass-approvals-and-sandbox` launch flag.
 - Codex now launches with `--sandbox workspace-write` and `--approve-for-me`.
 - Added Codex launch argument regression coverage.
+- Codex provider metadata now marks `approvalMode` intentionally ignored because the runner uses fixed approve-for-me automation.
 
 ## CI Enforcement
 

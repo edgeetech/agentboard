@@ -84,11 +84,13 @@ class CodexProviderAdapter implements ProviderRuntimeAdapter {
       'mcpServerNames',
       'abortSignal',
       'rateLimitBackoff',
-      'approvalMode',
       'filesystemSandbox',
     ],
-    intentionallyIgnored: ['maxTurns', 'allowedTools', 'hooksEnabled'],
-    notes: ['Codex runner launches with workspace-write sandboxing and approve-for-me automation.'],
+    intentionallyIgnored: ['maxTurns', 'allowedTools', 'hooksEnabled', 'approvalMode'],
+    notes: [
+      'Codex runner launches with workspace-write sandboxing and fixed approve-for-me automation.',
+      'Requested approvalMode is intentionally ignored until provider-specific approval mapping is implemented.',
+    ],
   } as const;
   readonly resume = {
     interactive: true,

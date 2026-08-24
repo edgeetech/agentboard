@@ -35,8 +35,8 @@ describe('providerFor', () => {
     expect(providerFor('github_copilot').enforcement.notes.join(' ')).toMatch(/approveAll/);
 
     expect(providerFor('codex').enforcement.enforced).toContain('filesystemSandbox');
-    expect(providerFor('codex').enforcement.enforced).toContain('approvalMode');
-    expect(providerFor('codex').enforcement.notes.join(' ')).toMatch(/workspace-write sandboxing/);
+    expect(providerFor('codex').enforcement.intentionallyIgnored).toContain('approvalMode');
+    expect(providerFor('codex').enforcement.notes.join(' ')).toMatch(/fixed approve-for-me/);
   });
 
   it('resume.command omits cd prefix when repoPath is null', () => {
