@@ -163,3 +163,30 @@ Quality checks:
 - integration: no separate command yet.
 - e2e: placeholder only.
 - build: not rerun after Phase 2 extraction.
+
+## Governance
+
+Status: Initial repository governance scaffolding complete.
+
+Moved / Added:
+
+- Added `.github/CODEOWNERS`.
+- Added `.github/PULL_REQUEST_TEMPLATE.md`.
+- Added `CONTRIBUTING.md`.
+- Added `CHANGELOG.md`.
+- Added `docs/release-checklist.md`.
+
+Behaviour preserved:
+
+- No runtime code changed.
+- No package scripts changed.
+
+Architecture improvements:
+
+- PRs now have explicit validation and refactor-safety prompts.
+- Meaningful phase/chunk commit policy is documented.
+- Release checklist captures migration, rollback, provider and packaging checks.
+
+Quality checks:
+
+- formatting: passed for touched governance files.
