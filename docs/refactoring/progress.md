@@ -196,6 +196,9 @@ Follow-up additions:
 - Added `createInMemoryPersistence` as a strict Engine persistence-port contract adapter.
 - Added in-memory persistence tests covering project CAS updates, task creation/transition, run queue/finish and comments.
 - Engine tests now cover persistence ports without SQLite or legacy runtime imports.
+- Added `createSqlitePersistence` in Infrastructure as the first SQLite adapter behind Engine persistence ports.
+- Added Infrastructure SQLite repository tests covering project CAS updates, task creation/transition history, run queue/finish and comments.
+- Root `npm run test` now includes Infrastructure adapter tests.
 
 ## Governance
 
