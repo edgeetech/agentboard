@@ -35,11 +35,33 @@ export function loadBuiltInAiAssets(
   options: LoadBuiltInAiAssetsOptions,
 ): readonly AiAsset[] {
   const sources = [
+    ...loadRoleSources(fs, options.rootPath),
     ...loadSkillSources(fs, options.rootPath),
     ...loadConcernSources(fs, options.rootPath),
   ];
   assertUniqueIds(sources);
   return sources.map(normalizeAiAsset);
+}
+
+function loadRoleSources(
+  fs: AiAssetFilesystemPort,
+  rootPath: string,
+): AiAssetSource[] {
+  const rolesPath = joinPath(rootPath, "roles");
+  return fs
+    .list(rolesPath)
+    .filter((entry) => entry.kind === "file" && entry.name.endsWith(".md"))
+    .sort(compareEntryName)
+    .map((entry) => {
+      const id = entry.name.slice(0, -".md".length);
+      const path = joinPath(rolesPath, entry.name);
+      return {
+        kind: "role",
+        id,
+        path,
+        content: fs.readText(path),
+      };
+    });
 }
 
 function loadSkillSources(

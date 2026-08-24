@@ -457,6 +457,7 @@ Quality checks:
 Follow-up additions:
 
 - Built-in skills now have Markdown source files under `/ai/skills`.
+- Built-in role definitions now have provider-neutral Markdown source files under `/ai/roles`.
 - Built-in concern packs now have Markdown source files under `/ai/concerns`.
 - Engine tests verify the `/ai` source files normalize through the shared AI asset catalog parser.
 - Infrastructure now has a filesystem-port loader for built-in AI assets.

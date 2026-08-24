@@ -14,6 +14,13 @@ describe("loadBuiltInAiAssets", () => {
   it("loads built-in skills and concerns from a filesystem port", () => {
     const assets = loadBuiltInAiAssets(
       new MemoryAiAssetFilesystem({
+        "ai/roles/worker.md": `---
+role: worker
+title: Worker
+---
+
+# Worker
+`,
         "ai/skills/code-review/SKILL.md": `---
 name: Code Review
 description: Inspect diffs.
@@ -48,17 +55,23 @@ description: Engineering quality.
     );
 
     expect(assets.map((asset) => `${asset.kind}:${asset.id}`)).toEqual([
+      "role:worker",
       "skill:code-review",
       "skill:refactor",
       "concern:well-engineered",
     ]);
     expect(assets[0]).toMatchObject({
+      kind: "role",
+      id: "worker",
+      role: "worker",
+    });
+    expect(assets[1]).toMatchObject({
       kind: "skill",
       id: "code-review",
       name: "Code Review",
       tags: ["reviewer"],
     });
-    expect(assets[2]).toMatchObject({
+    expect(assets[3]).toMatchObject({
       kind: "concern",
       id: "well-engineered",
       phases: {
@@ -79,7 +92,7 @@ description: Engineering quality.
       loadBuiltInAiAssets(
         {
           list(path) {
-            if (path === "ai/skills") return [];
+            if (path === "ai/roles" || path === "ai/skills") return [];
             return [
               { name: "a.md", kind: "file" },
               { name: "a.md", kind: "file" },
@@ -103,6 +116,9 @@ description: Engineering quality.
     );
 
     expect(assets.map((asset) => `${asset.kind}:${asset.id}`)).toEqual([
+      "role:pm",
+      "role:reviewer",
+      "role:worker",
       "skill:api-client",
       "skill:code-review",
       "skill:refactor",

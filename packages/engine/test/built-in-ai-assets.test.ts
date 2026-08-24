@@ -10,6 +10,24 @@ const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const aiRoot = join(repoRoot, "ai");
 
 describe("built-in AI asset sources", () => {
+  it("normalizes every built-in role Markdown file", () => {
+    const roles = readRoleSources();
+
+    expect(roles.map((role) => role.id).sort()).toEqual([
+      "pm",
+      "reviewer",
+      "worker",
+    ]);
+
+    for (const source of roles) {
+      const asset = normalizeAiAsset(source);
+      expect(asset.kind).toBe("role");
+      expect(asset.id).toBe(source.id);
+      expect(asset.path).toBe(source.path);
+      expect(asset.body.trim().length).toBeGreaterThan(0);
+    }
+  });
+
   it("normalizes every built-in skill Markdown file", () => {
     const skills = readSkillSources();
 
@@ -48,6 +66,22 @@ describe("built-in AI asset sources", () => {
     }
   });
 });
+
+function readRoleSources(): AiAssetSource[] {
+  const rolesDir = join(aiRoot, "roles");
+  return readdirSync(rolesDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => {
+      const id = basename(entry.name, ".md");
+      const path = `ai/roles/${entry.name}`;
+      return {
+        kind: "role",
+        id,
+        path,
+        content: readFileSync(join(repoRoot, path), "utf8"),
+      };
+    });
+}
 
 function readSkillSources(): AiAssetSource[] {
   const skillsDir = join(aiRoot, "skills");

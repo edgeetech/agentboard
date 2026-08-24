@@ -11,7 +11,8 @@ Rules:
 
 Current asset groups:
 
+- `roles/` contains provider-neutral role responsibilities and workflow expectations.
 - `skills/` contains built-in reusable skills.
 - `concerns/` contains phase-scoped quality concern packs.
 
-Role prompts and provider-specific runtime prompt fragments remain in the legacy runtime until the prompt loader migration is complete.
+Provider-specific runtime prompt fragments remain in the legacy runtime until the prompt loader migration is complete.
