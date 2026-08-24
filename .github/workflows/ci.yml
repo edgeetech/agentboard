@@ -51,6 +51,9 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+      - name: Database migration verification
+        run: npm run verify:db-migrations
+
       - name: Architecture boundaries
         run: npm run test:architecture
 

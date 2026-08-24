@@ -16,6 +16,7 @@ Run the standard validation set:
 ```bash
 npm run typecheck
 npm run test
+npm run verify:db-migrations
 npm run test:architecture
 npm run build
 ```

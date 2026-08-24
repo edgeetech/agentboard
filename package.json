@@ -32,7 +32,9 @@
     "test:integration": "npm --prefix plugins/claude-code/agent-board-core run test",
     "test:e2e": "echo \"Playwright suite not introduced yet\"",
     "test:contracts": "npm --prefix packages/contracts run test",
-    "test:architecture": "node scripts/check-architecture.mjs"
+    "test:architecture": "node scripts/check-architecture.mjs",
+    "test:migrations": "npm --prefix plugins/claude-code/agent-board-core run test:migrations",
+    "verify:db-migrations": "npm run test:migrations"
   },
   "devDependencies": {
     "typescript": "^5.7.2"
