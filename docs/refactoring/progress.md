@@ -383,6 +383,7 @@ Follow-up fixes:
 
 - Recorded terminal run outcomes when a provider returns after MCP `finish_run` already changed the DB row out of `running`.
 - Added terminal DB status to observability outcome mapping coverage.
+- Added shared observability snapshot and initial SLO target contracts with evaluator tests in `packages/contracts`.
 
 ## API Versioning
 
