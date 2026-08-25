@@ -9,7 +9,11 @@ import { emitActivity } from './api-activity.ts';
 import { executeCouncilRun } from './council-runner.ts';
 import type { DbHandle } from './db.ts';
 import { agentboardBus } from './event-bus.ts';
-import { drainQueuedRunsOnce, reapProjectRunsOnce } from './generated/server-bootstrap.mjs';
+import {
+  drainQueuedRunsOnce,
+  reapProjectRunsOnce,
+  startRunWorker,
+} from './generated/server-bootstrap.mjs';
 import {
   recordRunFinished,
   recordRunRetry,
@@ -113,16 +117,19 @@ export function startExecutor({ port, serverToken }: ExecutorParams): void {
       console.error(`[executor] drain loop crashed (restart #${n}):`, (e as Error | null)?.message);
     },
   });
-  drainSupervisor.start(async () => {
-    for (;;) {
-      await drain({ port, serverToken }).catch(logErr);
-      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
-    }
-  });
-
-  setInterval(() => {
-    void reap().catch(logErr);
-  }, REAPER_SWEEP_MS).unref();
+  startRunWorker(
+    { drainIntervalMs: 1_000, reaperIntervalMs: REAPER_SWEEP_MS },
+    {
+      startSupervised: (work) => {
+        drainSupervisor.start(work);
+      },
+      drain: () => drain({ port, serverToken }),
+      reap,
+      delay: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+      scheduleInterval: (work, intervalMs) => setInterval(work, intervalMs),
+      reportError: logErr,
+    },
+  );
 }
 
 async function reap(): Promise<void> {

@@ -540,6 +540,7 @@ Status: Initial production server lifecycle extraction complete.
 - The shipped legacy server now consumes the extracted lifecycle through a generated local bundle.
 - Added server-package tests for executor startup, skill-worker startup failure isolation and idempotent shutdown.
 - Moved queue budgeting and orphan-reap iteration into an injected server-package scheduler with per-project failure isolation tests.
+- Moved supervised drain-loop and reaper-timer lifecycle into the server package while retaining the legacy executor as the composition adapter.
 - HTTP routing and queued-run orchestration remain in the legacy runtime for later Phase 9 slices.
 
 ## PR Feedback

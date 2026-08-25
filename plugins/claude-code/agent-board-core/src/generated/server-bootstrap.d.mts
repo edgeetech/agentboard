@@ -40,3 +40,19 @@ export function reapProjectRunsOnce<TDatabase, TProject, TQueuedRun>(
   timeoutMs: number,
   ports: BundledRunSchedulerPorts<TDatabase, TProject, TQueuedRun>,
 ): Promise<void>;
+
+export interface BundledRunWorkerConfig {
+  readonly drainIntervalMs: number;
+  readonly reaperIntervalMs: number;
+}
+
+export interface BundledRunWorkerPorts {
+  startSupervised(work: () => Promise<void>): void;
+  drain(): Promise<void>;
+  reap(): Promise<void>;
+  delay(ms: number): Promise<void>;
+  scheduleInterval(work: () => void, intervalMs: number): { unref?(): void };
+  reportError(error: unknown): void;
+}
+
+export function startRunWorker(config: BundledRunWorkerConfig, ports: BundledRunWorkerPorts): void;

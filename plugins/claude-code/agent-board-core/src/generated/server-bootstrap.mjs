@@ -43,4 +43,18 @@ async function reapProjectRunsOnce(timeoutMs, ports) {
     }
   }
 }
-export { drainQueuedRunsOnce, reapProjectRunsOnce, startBackgroundWorkers };
+
+// server/src/workers/start-run-worker.ts
+function startRunWorker(config, ports) {
+  ports.startSupervised(async () => {
+    for (;;) {
+      await ports.drain().catch(ports.reportError);
+      await ports.delay(config.drainIntervalMs);
+    }
+  });
+  const reaperTimer = ports.scheduleInterval(() => {
+    void ports.reap().catch(ports.reportError);
+  }, config.reaperIntervalMs);
+  reaperTimer.unref?.();
+}
+export { drainQueuedRunsOnce, reapProjectRunsOnce, startBackgroundWorkers, startRunWorker };
