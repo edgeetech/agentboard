@@ -543,6 +543,17 @@ Status: Initial production server lifecycle extraction complete.
 - Moved supervised drain-loop and reaper-timer lifecycle into the server package while retaining the legacy executor as the composition adapter.
 - HTTP routing and queued-run orchestration remain in the legacy runtime for later Phase 9 slices.
 
+## Engine Run Coordination
+
+Status: Provider-neutral execution coordinator contract complete.
+
+- Added injected Engine ports for run claiming, prompts, workspaces, provider invocation, heartbeat, postflight, retry, pricing, events and conditional finalization.
+- Added orchestration for success, cancellation, timeout, retryable failure, postflight failure and superseded claims.
+- Final writes require the active run token so late provider results cannot overwrite cancellation or reaper outcomes.
+- Session and cost persistence plus heartbeat/workspace cleanup are best-effort and cannot change the provider outcome.
+- The legacy executor remains the production orchestration path until its SQLite, provider and postflight adapters are migrated in a later Phase 9 slice.
+- Engine typechecking passes and focused coordinator coverage brings the Engine suite to 68 tests.
+
 ## PR Feedback
 
 Status: Initial review feedback resolved.
