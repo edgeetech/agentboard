@@ -539,6 +539,7 @@ Status: Initial production server lifecycle extraction complete.
 - Added injected background-worker startup and shutdown composition in the `server` package.
 - The shipped legacy server now consumes the extracted lifecycle through a generated local bundle.
 - Added server-package tests for executor startup, skill-worker startup failure isolation and idempotent shutdown.
+- Moved queue budgeting and orphan-reap iteration into an injected server-package scheduler with per-project failure isolation tests.
 - HTTP routing and queued-run orchestration remain in the legacy runtime for later Phase 9 slices.
 
 ## PR Feedback

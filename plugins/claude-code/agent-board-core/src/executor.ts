@@ -9,6 +9,7 @@ import { emitActivity } from './api-activity.ts';
 import { executeCouncilRun } from './council-runner.ts';
 import type { DbHandle } from './db.ts';
 import { agentboardBus } from './event-bus.ts';
+import { drainQueuedRunsOnce, reapProjectRunsOnce } from './generated/server-bootstrap.mjs';
 import {
   recordRunFinished,
   recordRunRetry,
@@ -125,42 +126,34 @@ export function startExecutor({ port, serverToken }: ExecutorParams): void {
 }
 
 async function reap(): Promise<void> {
-  for (const code of listProjectDbs()) {
-    try {
-      const db = await getDb(code);
-      const orphaned = reapOrphans(db, REAPER_TIMEOUT_MS);
-      if (orphaned.length > 0) {
-        console.error(`[reaper] ${code} marked ${orphaned.length} runs as failed (timeout)`);
-      }
-    } catch (e) {
-      console.error(`[reaper] error for project ${code}: ${String((e as Error | null)?.message)}`);
-      logErr(e);
-    }
-  }
+  await reapProjectRunsOnce(REAPER_TIMEOUT_MS, schedulerPorts({ port: 0, serverToken: '' }));
 }
 
 async function drain({ port, serverToken }: ExecutorParams): Promise<void> {
-  const projects = listProjectDbs();
-  for (const code of projects) {
-    try {
-      const db = await getDb(code);
-      const project = getProject(db);
-      if (!project) continue;
-      const running = runningCount(db);
-      const budget = project.max_parallel - running;
-      if (budget <= 0) continue;
-      const queued = listQueuedRunsForProject(db).slice(0, budget);
-      for (const q of queued) {
-        // Fire-and-forget: each run is an independent async task so the drain loop
-        // is never blocked waiting for an agent (which can take minutes).
-        void tryClaimAndRun(db, project, q, { port, serverToken }).catch((e: unknown) => {
-          logErr(e);
-        });
-      }
-    } catch (e) {
-      logErr(e);
-    }
-  }
+  await drainQueuedRunsOnce(schedulerPorts({ port, serverToken }));
+}
+
+function schedulerPorts(params: ExecutorParams) {
+  return {
+    listProjectCodes: listProjectDbs,
+    openProject: getDb,
+    getProject,
+    maxParallel: (project: ProjectRow) => project.max_parallel,
+    runningCount,
+    listQueuedRuns: listQueuedRunsForProject,
+    dispatchRun: (db: DbHandle, project: ProjectRow, run: AgentRunRow) =>
+      tryClaimAndRun(db, project, run, params),
+    reapOrphans,
+    reportError: (error: unknown, code: string) => {
+      console.error(
+        `[executor] scheduler error for project ${code}: ${String((error as Error | null)?.message)}`,
+      );
+      logErr(error);
+    },
+    reportReaped: (code: string, count: number) => {
+      console.error(`[reaper] ${code} marked ${count} runs as failed (timeout)`);
+    },
+  };
 }
 
 async function tryClaimAndRun(
