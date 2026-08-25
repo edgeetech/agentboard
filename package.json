@@ -36,13 +36,14 @@
     "test:hosts": "node plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run plugins/hosts/test",
     "test:host-startup": "npm run check:provider-bundles && node scripts/check-host-startup.mjs",
     "test:integration": "npm --prefix plugins/claude-code/agent-board-core run test",
-    "test:e2e": "echo \"Playwright suite not introduced yet\"",
+    "test:e2e": "playwright test",
     "test:contracts": "npm --prefix packages/contracts run test",
     "test:architecture": "node scripts/check-architecture.mjs",
     "test:migrations": "npm --prefix plugins/claude-code/agent-board-core run test:migrations",
     "verify:db-migrations": "npm run test:migrations"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "typescript": "^5.7.2"
   }
 }
