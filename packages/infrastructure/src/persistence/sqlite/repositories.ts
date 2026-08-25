@@ -22,6 +22,16 @@ export interface SqlitePersistenceOptions {
   readonly id?: (prefix: string) => string;
 }
 
+export interface SqliteProjectRepository {
+  getCurrent(): ProjectRecord | undefined;
+  updateCurrent(
+    expectedVersion: number,
+    patch: Parameters<PersistencePorts["projects"]["updateCurrent"]>[1],
+  ):
+    | { readonly ok: true; readonly project: ProjectRecord }
+    | { readonly ok: false; readonly reason: string };
+}
+
 type Row = Record<string, unknown>;
 
 interface RandomSource {
@@ -283,6 +293,14 @@ export function createSqlitePersistence(
       },
     },
   };
+}
+
+export function createSqliteProjectRepository(
+  db: SqliteConnectionPort,
+  options: SqlitePersistenceOptions = {},
+): SqliteProjectRepository {
+  return createSqlitePersistence(db, options)
+    .projects as SqliteProjectRepository;
 }
 
 function toProject(value: unknown): ProjectRecord {

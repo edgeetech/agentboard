@@ -177,6 +177,8 @@ Quality checks:
 
 Status: Initial persistence port seam complete.
 
+Production integration update: legacy project reads and optimistic project updates now route through the extracted SQLite project repository via a packaged compatibility facade. Task and run mutations remain on the legacy repository until their richer workflow semantics exist in the port contract.
+
 Moved / Added:
 
 - Added Engine persistence record and repository port types in `packages/engine/src/ports/persistence.ts`.

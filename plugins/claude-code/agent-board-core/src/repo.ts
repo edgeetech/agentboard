@@ -3,6 +3,7 @@
 
 import type { DbHandle } from './db.ts';
 import { resolveAutoDispatch } from './dispatch-map.ts';
+import { getProjectViaPersistence, updateProjectViaPersistence } from './persistence.ts';
 import { PRICING_VERSION } from './pricing.ts';
 import { canTransition, allowedPrevStatuses } from './state-machine.ts';
 import { isoNow } from './time.ts';
@@ -158,10 +159,6 @@ export interface RunSessionRefInput {
 
 /* ─── HELPERS ───────────────────────────────────────────────────────────── */
 
-function asProject(row: unknown): ProjectRow {
-  return row as ProjectRow;
-}
-
 function asTask(row: unknown): TaskRow {
   return row as TaskRow;
 }
@@ -205,17 +202,17 @@ export function createProject(
 ): ProjectRow {
   const id = ulid();
   const now = isoNow();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO project(id, code, name, description, workflow_type, repo_path, agent_provider, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, code, name, description ?? '', workflow_type, repo_path, agent_provider, now, now);
+  `,
+  ).run(id, code, name, description ?? '', workflow_type, repo_path, agent_provider, now, now);
   return requireRow(getProject(db), 'project');
 }
 
 export function getProject(db: DbHandle): ProjectRow | undefined {
-  const row = db.prepare(`SELECT * FROM project WHERE deleted_at IS NULL LIMIT 1`).get();
-  if (row === undefined || row === null) return undefined;
-  return asProject(row);
+  return getProjectViaPersistence(db);
 }
 
 export function updateProject(
@@ -223,28 +220,7 @@ export function updateProject(
   patch: ProjectPatch,
   expectedVersion: number,
 ): { ok: boolean; project?: ProjectRow; reason?: string } {
-  const allowed: (keyof Omit<ProjectRow, 'scan_ignore_json'>)[] = ['name', 'description', 'repo_path', 'max_parallel', 'agent_provider', 'agent_config_json', 'deleted_at'];
-  const sets: string[] = [];
-  const args: unknown[] = [];
-  for (const k of allowed) {
-    if (k in patch) { sets.push(`${k}=?`); args.push(patch[k]); }
-  }
-  if ('scan_ignore_json' in patch) {
-    const v = patch.scan_ignore_json;
-    const serialized = typeof v === 'string' ? v : JSON.stringify(v);
-    sets.push(`scan_ignore_json=?`);
-    args.push(serialized);
-  }
-  if (sets.length === 0) return { ok: false, reason: 'no fields' };
-  sets.push('version=version+1', 'updated_at=?');
-  args.push(isoNow(), expectedVersion);
-  const info = db.prepare(
-    `UPDATE project SET ${sets.join(', ')} WHERE version=?`,
-  ).run(...args) as { changes: number };
-  if (info.changes === 0) return { ok: false, reason: 'version mismatch' };
-  const project = getProject(db);
-  if (!project) return { ok: true };
-  return { ok: true, project };
+  return updateProjectViaPersistence(db, patch, expectedVersion);
 }
 
 /* ─── TASKS ────────────────────────────────────────────────────────────── */
@@ -267,13 +243,17 @@ export function listTasks(
     params.push(like, like, like);
   }
   const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT t.*, EXISTS(
       SELECT 1 FROM agent_run r
       WHERE r.task_id = t.id AND r.status IN ('queued','running')
     ) AS has_active_run
     FROM task t ${where} ORDER BY t.seq DESC
-  `).all(...params) as TaskRow[];
+  `,
+    )
+    .all(...params) as TaskRow[];
 }
 
 export function getTask(db: DbHandle, id: string): TaskRow | undefined {
@@ -290,14 +270,18 @@ export function getTaskByCode(db: DbHandle, code: string): TaskRow | undefined {
 
 export function createTask(
   db: DbHandle,
-  { title, description = '', assignee_role = null }: { title: string; description?: string; assignee_role?: AssigneeRole | null },
+  {
+    title,
+    description = '',
+    assignee_role = null,
+  }: { title: string; description?: string; assignee_role?: AssigneeRole | null },
 ): { task: TaskRow | undefined; runId: string | null } {
   const project = getProject(db);
   if (!project) throw new Error('no active project');
   const tx = db.transaction((): { task: TaskRow | undefined; runId: string | null } => {
-    const seqRow = db.prepare(
-      `SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM task WHERE project_id=?`,
-    ).get(project.id) as { next: number };
+    const seqRow = db
+      .prepare(`SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM task WHERE project_id=?`)
+      .get(project.id) as { next: number };
     const seq = seqRow.next;
     const code = `${project.code}-${seq}`;
     const id = ulid();
@@ -311,12 +295,14 @@ export function createTask(
     if (assignee_role === 'pm' || assignee_role === 'worker') initialStatus = 'agent_working';
     else if (assignee_role === 'reviewer') initialStatus = 'agent_review';
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO task(id, project_id, seq, code, title, description,
                        acceptance_criteria_json, status, assignee_role,
                        created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?)
-    `).run(id, project.id, seq, code, title, description, initialStatus, assignee_role, now, now);
+    `,
+    ).run(id, project.id, seq, code, title, description, initialStatus, assignee_role, now, now);
 
     // Spawn agent if assignee_role is an agent-runnable role (pm/worker/reviewer)
     let runId: string | null = null;
@@ -349,13 +335,15 @@ export function enqueueRun(
 ): string {
   const id = ulid();
   const now = isoNow();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO agent_run(
       id, task_id, role, status, queued_at,
       session_provider_override, parent_run_id, member_index, council_size
     )
     VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?)
-  `).run(
+  `,
+  ).run(
     id,
     task_id,
     role,
@@ -375,17 +363,20 @@ export function getAgentRun(db: DbHandle, run_id: string): AgentRunRow | undefin
 }
 
 export function listCouncilMembers(db: DbHandle, parent_run_id: string): AgentRunRow[] {
-  const rows = db.prepare(`SELECT * FROM agent_run WHERE parent_run_id=? ORDER BY member_index ASC`).all(parent_run_id);
-  return (rows).map(asRun);
+  const rows = db
+    .prepare(`SELECT * FROM agent_run WHERE parent_run_id=? ORDER BY member_index ASC`)
+    .all(parent_run_id);
+  return rows.map(asRun);
 }
 
 /**
  * State-machine CAS transition. Writes task_history in same TX.
  * Evaluates auto-dispatch map and enqueues next run atomically.
  */
-export function transitionTask(db: DbHandle, {
-  task_id, to_status, to_assignee, by_role, expected_version, workflow_type,
-}: TransitionInput): TransitionResult {
+export function transitionTask(
+  db: DbHandle,
+  { task_id, to_status, to_assignee, by_role, expected_version, workflow_type }: TransitionInput,
+): TransitionResult {
   const tx = db.transaction((): TransitionResult => {
     const cur = getTask(db, task_id);
     if (!cur) return { ok: false, status: 404, reason: 'not found' };
@@ -413,41 +404,58 @@ export function transitionTask(db: DbHandle, {
     // rework counter: incremented when assignee transitions to 'worker'
     // via reject (reviewer-reject or human-reject)
     let reworkBump = '';
-    if (to_assignee === 'worker' &&
-        ((by_role === 'reviewer' && cur.status === 'agent_review') ||
-         (by_role === 'human' && cur.status === 'human_approval'))) {
+    if (
+      to_assignee === 'worker' &&
+      ((by_role === 'reviewer' && cur.status === 'agent_review') ||
+        (by_role === 'human' && cur.status === 'human_approval'))
+    ) {
       reworkBump = ', rework_count = rework_count + 1';
     }
 
-    const info = db.prepare(`
+    const info = db
+      .prepare(
+        `
       UPDATE task SET status=?, assignee_role=?, version=version+1, updated_at=?${reworkBump}
       WHERE id=? AND version=? AND status IN (${placeholders})
-    `).run(to_status, to_assignee, isoNow(), task_id, expected_version, ...prevs) as { changes: number };
+    `,
+      )
+      .run(to_status, to_assignee, isoNow(), task_id, expected_version, ...prevs) as {
+      changes: number;
+    };
 
     if (info.changes === 0) {
       return { ok: false, status: 409, reason: 'version or status CAS failed' };
     }
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO task_history(id, task_id, from_status, to_status, by_role, at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(ulid(), task_id, cur.status, to_status, by_role, isoNow());
+    `,
+    ).run(ulid(), task_id, cur.status, to_status, by_role, isoNow());
 
     // Stall check
     const post = requireRow(getTask(db, task_id), 'task post-transition');
     let stalled = false;
     if (post.rework_count > 3 && to_assignee === 'worker') {
       // Cap: skip worker dispatch, escalate to human
-      db.prepare(`
+      db.prepare(
+        `
         UPDATE task SET assignee_role='human', version=version+1, updated_at=?
         WHERE id=?
-      `).run(isoNow(), task_id);
-      db.prepare(`
+      `,
+      ).run(isoNow(), task_id);
+      db.prepare(
+        `
         INSERT INTO comment(id, task_id, author_role, body, created_at)
         VALUES (?, ?, 'system', ?, ?)
-      `).run(ulid(), task_id,
+      `,
+      ).run(
+        ulid(),
+        task_id,
         `STALLED: rework_count exceeded (N=3), manual intervention required`,
-        isoNow());
+        isoNow(),
+      );
       stalled = true;
     }
 
@@ -471,17 +479,23 @@ export function addFilePath(
   label?: string | null,
 ): FilePathRow {
   const id = ulid();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO task_attachment(id, task_id, file_path, label, created_at)
     VALUES (?, ?, ?, ?, ?)
-  `).run(id, task_id, file_path, label ?? null, isoNow());
+  `,
+  ).run(id, task_id, file_path, label ?? null, isoNow());
   return asFilePath(db.prepare(`SELECT * FROM task_attachment WHERE id=?`).get(id));
 }
 
 export function listFilePaths(db: DbHandle, task_id: string): FilePathRow[] {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT * FROM task_attachment WHERE task_id=? ORDER BY created_at ASC
-  `).all(task_id) as FilePathRow[];
+  `,
+    )
+    .all(task_id) as FilePathRow[];
 }
 
 export function deleteFilePath(db: DbHandle, id: string): boolean {
@@ -496,10 +510,12 @@ export function addComment(
   body: string,
 ): CommentRow {
   const id = ulid();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO comment(id, task_id, author_role, body, created_at)
     VALUES (?, ?, ?, ?, ?)
-  `).run(id, task_id, author_role, body, isoNow());
+  `,
+  ).run(id, task_id, author_role, body, isoNow());
   return requireRow(getComment(db, id), 'comment');
 }
 
@@ -510,7 +526,9 @@ export function getComment(db: DbHandle, id: string): CommentRow | undefined {
 }
 
 export function listComments(db: DbHandle, task_id: string): CommentRow[] {
-  return db.prepare(`SELECT * FROM comment WHERE task_id=? ORDER BY created_at ASC`).all(task_id) as CommentRow[];
+  return db
+    .prepare(`SELECT * FROM comment WHERE task_id=? ORDER BY created_at ASC`)
+    .all(task_id) as CommentRow[];
 }
 
 /* ─── AGENT RUNS ────────────────────────────────────────────────── */
@@ -522,32 +540,48 @@ export function getRun(db: DbHandle, id: string): AgentRunRow | undefined {
 }
 
 export function listRunsForTask(db: DbHandle, task_id: string): AgentRunRow[] {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT * FROM agent_run WHERE task_id=? ORDER BY queued_at DESC
-  `).all(task_id) as AgentRunRow[];
+  `,
+    )
+    .all(task_id) as AgentRunRow[];
 }
 
 export function listRuns(db: DbHandle, task_id: string, limit = 5): AgentRunRow[] {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT * FROM agent_run WHERE task_id=? ORDER BY queued_at DESC LIMIT ?
-  `).all(task_id, limit) as AgentRunRow[];
+  `,
+    )
+    .all(task_id, limit) as AgentRunRow[];
 }
 
 export function listQueuedRunsForProject(db: DbHandle): AgentRunRow[] {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT r.* FROM agent_run r
     INNER JOIN task t ON r.task_id = t.id
     WHERE r.status = 'queued'
     ORDER BY r.queued_at ASC
-  `).all() as AgentRunRow[];
+  `,
+    )
+    .all() as AgentRunRow[];
 }
 
 export function runningCount(db: DbHandle): number {
   // Council members spawned by a parent count as part of the parent — only
   // top-level (parent_run_id IS NULL) running rows hit max_parallel.
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT COUNT(*) as cnt FROM agent_run WHERE status='running' AND parent_run_id IS NULL
-  `).get() as { cnt: number } | undefined;
+  `,
+    )
+    .get() as { cnt: number } | undefined;
   return row?.cnt ?? 0;
 }
 
@@ -559,16 +593,22 @@ export function claimRun(
   stdout_path: string | null,
 ): boolean {
   const now = isoNow();
-  const info = db.prepare(`
+  const info = db
+    .prepare(
+      `
     UPDATE agent_run
     SET status='running', token=?, pid=?, logs_path=?, started_at=?, last_heartbeat_at=?
     WHERE id=? AND status='queued'
-  `).run(run_token, pid, stdout_path, now, now, run_id) as { changes: number };
+  `,
+    )
+    .run(run_token, pid, stdout_path, now, now, run_id) as { changes: number };
   return info.changes > 0;
 }
 
 export function getRunByToken(db: DbHandle, run_token: string): AgentRunRow | undefined {
-  const row = db.prepare(`SELECT * FROM agent_run WHERE token=? AND status='running'`).get(run_token);
+  const row = db
+    .prepare(`SELECT * FROM agent_run WHERE token=? AND status='running'`)
+    .get(run_token);
   if (row === undefined || row === null) return undefined;
   return asRun(row);
 }
@@ -579,11 +619,13 @@ export function bumpHeartbeat(db: DbHandle, run_id: string): void {
 
 export function setRunCost(db: DbHandle, run_id: string, costData: CostData): void {
   const { model, usage, cost_usd, cost_version } = costData;
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE agent_run
     SET model = ?, input_tokens = ?, output_tokens = ?, cache_creation_tokens = ?, cache_read_tokens = ?, cost_usd = ?, cost_version = ?
     WHERE id = ?
-  `).run(
+  `,
+  ).run(
     model ?? null,
     usage?.input_tokens ?? 0,
     usage?.output_tokens ?? 0,
@@ -596,11 +638,13 @@ export function setRunCost(db: DbHandle, run_id: string, costData: CostData): vo
 }
 
 export function setRunSessionRef(db: DbHandle, run_id: string, session: RunSessionRefInput): void {
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE agent_run
     SET session_provider=?, session_id=?, claude_session_id=?
     WHERE id=?
-  `).run(session.provider, session.sessionId, session.sessionId, run_id);
+  `,
+  ).run(session.provider, session.sessionId, session.sessionId, run_id);
 }
 
 export function finishRun(
@@ -611,19 +655,25 @@ export function finishRun(
   error?: string | null,
 ): void {
   const now = isoNow();
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE agent_run
     SET status=?, summary=?, error=?, ended_at=?
     WHERE id=?
-  `).run(status, summary ?? null, error ?? null, now, run_id);
+  `,
+  ).run(status, summary ?? null, error ?? null, now, run_id);
 }
 
 export function reapOrphans(db: DbHandle, timeoutMs: number): AgentRunRow[] {
   const cutoffTime = new Date(Date.now() - timeoutMs).toISOString();
-  const orphans = db.prepare(`
+  const orphans = db
+    .prepare(
+      `
     SELECT id FROM agent_run
     WHERE status = 'running' AND last_heartbeat_at < ?
-  `).all(cutoffTime) as { id: string }[];
+  `,
+    )
+    .all(cutoffTime) as { id: string }[];
 
   for (const run of orphans) {
     finishRun(db, run.id, 'failed', null, `orphaned: no heartbeat for ${timeoutMs}ms`);

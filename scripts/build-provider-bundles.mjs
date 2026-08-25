@@ -15,6 +15,27 @@ const prettierConfig = JSON.parse(
 );
 const bundles = [
   {
+    entryPoint: join(
+      root,
+      "packages",
+      "infrastructure",
+      "src",
+      "persistence",
+      "sqlite",
+      "repositories.ts",
+    ),
+    outfile: join(
+      root,
+      "plugins",
+      "claude-code",
+      "agent-board-core",
+      "src",
+      "generated",
+      "sqlite-persistence.mjs",
+    ),
+    external: [],
+  },
+  {
     entryPoint: join(root, "packages", "plugin-sdk", "src", "registry.ts"),
     outfile: join(
       root,

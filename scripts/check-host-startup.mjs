@@ -60,6 +60,10 @@ for (const [path, reason] of [
   [join(coreRoot, "server.ts"), "shared server entry"],
   [join(coreRoot, "package.json"), "first-run dependency install target"],
   [
+    join(coreRoot, "src", "generated", "sqlite-persistence.mjs"),
+    "packaged SQLite persistence adapter",
+  ],
+  [
     join(coreRoot, "src", "generated", "plugin-sdk-registry.mjs"),
     "packaged provider runtime registry",
   ],
