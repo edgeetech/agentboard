@@ -354,6 +354,7 @@ Follow-up fixes:
 - Moved the Copilot runner implementation into the Copilot provider package; the legacy core path now re-exports the provider-owned runner for compatibility.
 - Added a generated Copilot runtime bundle inside the Claude plugin artifact so the extracted provider remains loadable when the marketplace installs only `plugins/claude-code`.
 - Moved Claude SDK execution into its provider package and added a generated marketplace-safe runtime bundle for the legacy host shim.
+- Moved Codex execution, configuration and environment policy into its provider package and added a generated marketplace-safe runtime bundle for legacy host shims.
 
 ## CI Enforcement
 

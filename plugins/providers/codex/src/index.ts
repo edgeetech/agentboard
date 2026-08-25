@@ -1,6 +1,24 @@
 import type { ProviderManifest } from "../../../../packages/plugin-sdk/src/provider.ts";
 import type { ProviderRunResult } from "../../../../packages/plugin-sdk/src/runtime.ts";
 
+export { CodexRunner, buildCodexExecArgs } from "./runner.ts";
+export type { CodexRunnerOptions } from "./runner.ts";
+export {
+  codexBridgedClaudeMcps,
+  codexReferencedEnvKeys,
+  inheritedUserMcpKeys,
+  inheritedUserMcpServers,
+  quoteTomlPathKey,
+  quoteTomlString,
+  readClaudeUserMcpServers,
+  readCodexConfig,
+} from "./config.ts";
+export type { CodexConfig, CodexMcpServerEntry } from "./config.ts";
+export {
+  buildCodexChildEnv,
+  codexChildProcessEnvironmentPolicy,
+} from "./environment.ts";
+
 export const codexProviderManifest = {
   id: "codex",
   displayName: "Codex",

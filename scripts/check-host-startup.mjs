@@ -60,6 +60,10 @@ for (const [path, reason] of [
   [join(coreRoot, "server.ts"), "shared server entry"],
   [join(coreRoot, "package.json"), "first-run dependency install target"],
   [
+    join(coreRoot, "src", "generated", "codex-provider.mjs"),
+    "packaged Codex provider runtime",
+  ],
+  [
     join(coreRoot, "src", "generated", "claude-runner.mjs"),
     "packaged Claude provider runtime",
   ],
@@ -96,6 +100,16 @@ mustContain(
   "launcher can start the shared server",
 );
 mustContain(claudeEnsure, "/alive", "launcher checks runtime identity");
+mustContain(
+  join(coreRoot, "src", "codex-runner.ts"),
+  "./generated/codex-provider.mjs",
+  "legacy Codex runner shim resolves inside the shipped plugin",
+);
+mustContain(
+  join(coreRoot, "src", "codex-config.ts"),
+  "./generated/codex-provider.mjs",
+  "legacy Codex config shim resolves inside the shipped plugin",
+);
 mustContain(
   join(coreRoot, "src", "agent-runner.ts"),
   "./generated/claude-runner.mjs",

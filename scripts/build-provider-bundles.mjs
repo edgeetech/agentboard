@@ -8,6 +8,19 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const check = process.argv.includes("--check");
 const bundles = [
   {
+    entryPoint: join(root, "plugins", "providers", "codex", "src", "index.ts"),
+    outfile: join(
+      root,
+      "plugins",
+      "claude-code",
+      "agent-board-core",
+      "src",
+      "generated",
+      "codex-provider.mjs",
+    ),
+    external: [],
+  },
+  {
     entryPoint: join(
       root,
       "plugins",
