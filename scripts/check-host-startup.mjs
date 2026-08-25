@@ -60,6 +60,10 @@ for (const [path, reason] of [
   [join(coreRoot, "server.ts"), "shared server entry"],
   [join(coreRoot, "package.json"), "first-run dependency install target"],
   [
+    join(coreRoot, "src", "generated", "claude-runner.mjs"),
+    "packaged Claude provider runtime",
+  ],
+  [
     join(coreRoot, "src", "generated", "copilot-runner.mjs"),
     "packaged Copilot provider runtime",
   ],
@@ -92,6 +96,11 @@ mustContain(
   "launcher can start the shared server",
 );
 mustContain(claudeEnsure, "/alive", "launcher checks runtime identity");
+mustContain(
+  join(coreRoot, "src", "agent-runner.ts"),
+  "./generated/claude-runner.mjs",
+  "legacy Claude shim resolves inside the shipped plugin",
+);
 mustContain(
   join(coreRoot, "src", "copilot-runner.ts"),
   "./generated/copilot-runner.mjs",

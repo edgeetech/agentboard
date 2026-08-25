@@ -1,6 +1,9 @@
 import type { ProviderManifest } from "../../../../packages/plugin-sdk/src/provider.ts";
 import type { ProviderRunResult } from "../../../../packages/plugin-sdk/src/runtime.ts";
 
+export { AgentRunner } from "./runner.ts";
+export type { AgentRunnerOptions } from "./runner.ts";
+
 export const claudeProviderManifest = {
   id: "claude",
   displayName: "Claude",
