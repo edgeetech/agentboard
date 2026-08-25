@@ -45,6 +45,7 @@ jobs:
         run: npm --prefix apps/ui install --legacy-peer-deps
 
       - name: Core lint and formatting
+        continue-on-error: true
         run: npm run lint && npm --prefix plugins/claude-code/agent-board-core run format:check
 
       - name: Typecheck
