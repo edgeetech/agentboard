@@ -5,6 +5,7 @@ import {
 import { computeTokenCost } from "../../costs/compute-cost.ts";
 import type { TokenUsage } from "../../costs/types.ts";
 import type { RetryDecision } from "../../runs/retry-policy.ts";
+import { isTimeoutError as isTimeoutErrorFromMessage } from "@agentboard/plugin-sdk";
 import type {
   RunExecutionContext,
   RunExecutionEvent,
@@ -297,7 +298,8 @@ function isTimeoutError(error: unknown): boolean {
 }
 
 function isTimeoutMessage(message: string): boolean {
-  return /Turn timed out after \d+ms/.test(message);
+  return isTimeoutErrorFromMessage(message);
+}
 }
 
 function isCancellationError(

@@ -60,6 +60,10 @@ jobs:
       - name: Architecture boundaries
         run: npm run test:architecture
 
+      - name: Verify SDK bundle freshness
+        run: npm run build:provider-bundles && git diff --exit-code plugins/providers/*/dist/
+        if: always()
+
       - name: UI package freshness
         run: npm run build:ui && npm run check:ui-dist
 

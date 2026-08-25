@@ -53,7 +53,7 @@ export class RateLimitPolicy {
       retryAfterMs: null,
       lastLimitedAt: existing.lastLimitedAt,
       limitCount: existing.limitCount,
-      limitedUntilEpochMs: 0,
+      limitedUntilEpochMs: null, // Rate limit cleared, no longer limited
     });
   }
 

@@ -13,6 +13,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: "line",
+  globalTeardown: require.resolve("./e2e/global-teardown.ts"),
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     trace: "retain-on-failure",
