@@ -15,10 +15,19 @@ async function makeDb(): Promise<DbHandle> {
       id TEXT PRIMARY KEY,
       code TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
+      description TEXT,
+      workflow_type TEXT NOT NULL,
       repo_path TEXT NOT NULL,
+      max_parallel INTEGER NOT NULL DEFAULT 1,
+      agent_provider TEXT NOT NULL DEFAULT 'claude',
+      agent_config_json TEXT,
+      scan_ignore_json TEXT NOT NULL DEFAULT '[]',
       allow_git INTEGER NOT NULL DEFAULT 0,
       concerns_json TEXT NOT NULL DEFAULT '[]',
-      deleted_at TEXT
+      version INTEGER NOT NULL DEFAULT 0,
+      deleted_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
     CREATE TABLE task (
       id TEXT PRIMARY KEY,
@@ -56,8 +65,13 @@ async function makeDb(): Promise<DbHandle> {
     );
   `);
   d.prepare(
-    `INSERT INTO project (id, code, name, repo_path, allow_git, concerns_json, deleted_at)
-     VALUES ('P1', 'TST', 'Test Project', '/', 0, '[]', NULL)`,
+    `INSERT INTO project (
+       id, code, name, workflow_type, repo_path, allow_git, concerns_json,
+       deleted_at, created_at, updated_at
+     ) VALUES (
+       'P1', 'TST', 'Test Project', 'WF1', '/', 0, '[]', NULL,
+       '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+     )`,
   ).run();
   return {
     exec: (s: string) => {
