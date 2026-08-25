@@ -2,7 +2,7 @@
 
 AgentBoard provider plugins execute AI work behind the shared plugin SDK contract.
 
-This document describes the current contract seam. Provider runtime code still lives in the legacy core package during the refactor, so new provider packages should treat this as the author-facing target rather than a fully wired runtime loader.
+This document describes the current contract seam and the target SDK direction. Provider packages currently own provider manifests and provider-specific adapter factories, but they are not yet standalone runtime loaders. Claude and Codex execution still remains in the legacy core; the Copilot runner has moved into its provider package, while the legacy core keeps a compatibility re-export.
 
 ## Package Location
 
@@ -16,12 +16,37 @@ Use stable, lowercase provider IDs such as `claude`, `codex`, `github_copilot` o
 
 ## SDK Contract
 
-Provider packages should export an adapter compatible with `@agentboard/plugin-sdk`.
+Provider packages should export a validated manifest and a provider-specific adapter factory. The current packages expose factories named for the provider, such as `createClaudeProviderAdapter`, `createCodexProviderAdapter` and `createCopilotProviderAdapter`.
 
-The adapter has two parts:
+The factory wraps an injected runner and returns an adapter with provider-specific runtime methods. For example:
 
-- `manifest`: provider metadata, capabilities, runtime command and control enforcement declarations.
-- `run(request)`: provider execution function that returns a normalized runtime response.
+```ts
+import {
+  createCopilotProviderAdapter,
+  type CopilotRuntimeResult,
+} from "../src/index.ts";
+
+class TestRunner {
+  constructor(readonly context: unknown) {}
+
+  run(): Promise<CopilotRuntimeResult> {
+    return Promise.resolve({ status: "completed" });
+  }
+}
+
+const adapter = createCopilotProviderAdapter({
+  Runner: TestRunner,
+  buildResumeCommand: (_provider, sessionId, repoPath) =>
+    `${repoPath ?? "<none>"}:${sessionId}`,
+});
+```
+
+The provider package exports a manifest value, such as `copilotProviderManifest`. The manifest contains:
+
+- provider metadata, capabilities and runtime command information;
+- `enforcement`: the runtime controls that the current adapter enforces or intentionally ignores.
+
+The long-term SDK contract is `ProviderAdapter` from `@agentboard/plugin-sdk`, which combines a manifest with `run(request)` and can be registered in the SDK provider registry. Current provider-specific factories do not export a top-level `provider` value with that generic shape. Keep the factory and manifest exports aligned with the package's existing pattern until the runtime composition migration is complete.
 
 The manifest must account for every runtime control as either enforced or intentionally ignored:
 
@@ -52,18 +77,9 @@ If a runtime cannot satisfy required sandbox controls, the host composition laye
 
 ## Contract Tests
 
-Use the SDK helpers to validate new providers:
+For the current provider-specific factories, test the manifest and factory behavior with an injected fake runner. The existing provider tests under `plugins/providers/test` and `plugins/providers/copilot/test` demonstrate this pattern.
 
-```ts
-import { assertProviderContract } from "@agentboard/plugin-sdk";
-import { provider } from "../src/index.ts";
-
-await assertProviderContract(provider);
-```
-
-Contract tests should run with a fake or dry-run provider implementation. Normal CI must not call real AI providers.
-
-For deterministic plugin development tests, use the SDK fixture:
+For a provider that implements the target generic SDK contract, use the SDK helpers and fixture:
 
 ```ts
 import {
@@ -77,6 +93,8 @@ const provider = createDeterministicProviderAdapter({
 await assertProviderContract(provider);
 ```
 
+The local `provider` variable above is a test adapter; it does not imply that provider packages export a `provider` value. Contract tests should run with a fake or dry-run provider implementation. Normal CI must not call real AI providers.
+
 The fixture records received requests and returns stable session, event, model and usage data so provider registration can be tested without editing Engine code or calling an external AI service.
 
 ## Current Refactor Status
@@ -88,4 +106,4 @@ The SDK currently provides:
 - an in-memory provider registry;
 - fake request, deterministic provider and contract assertion test helpers.
 
-The next provider phases will move Claude, Codex and Copilot runtime code out of the legacy core package into provider packages.
+The next provider phases will complete runtime ownership moves for Claude and Codex, finish host/runtime composition around the package-owned Copilot runner, and adapt provider packages to the generic `ProviderAdapter` registry contract. Until then, preserve the legacy core compatibility paths and do not assume that installing a provider package alone makes its runtime executable.
