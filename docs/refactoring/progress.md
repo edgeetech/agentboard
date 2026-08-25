@@ -352,6 +352,7 @@ Follow-up fixes:
 - Added plugin SDK runtime support primitives for provider run results, token usage, session logging, rate-limit ports, turn timeouts and legacy-runner-to-SDK response mapping.
 - Updated provider package adapter shells to consume the plugin SDK provider run-result type instead of duplicating local runtime result shapes.
 - Moved the Copilot runner implementation into the Copilot provider package; the legacy core path now re-exports the provider-owned runner for compatibility.
+- Added a generated Copilot runtime bundle inside the Claude plugin artifact so the extracted provider remains loadable when the marketplace installs only `plugins/claude-code`.
 
 ## CI Enforcement
 

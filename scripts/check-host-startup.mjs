@@ -59,6 +59,10 @@ for (const [path, reason] of [
   [codexEnsure, "Codex host launcher"],
   [join(coreRoot, "server.ts"), "shared server entry"],
   [join(coreRoot, "package.json"), "first-run dependency install target"],
+  [
+    join(coreRoot, "src", "generated", "copilot-runner.mjs"),
+    "packaged Copilot provider runtime",
+  ],
   [join(coreRoot, "ui", "dist", "index.html"), "served UI artifact"],
   [claudeMcp, "shared MCP entry"],
   [codexMcp, "Codex MCP shim"],
@@ -88,6 +92,11 @@ mustContain(
   "launcher can start the shared server",
 );
 mustContain(claudeEnsure, "/alive", "launcher checks runtime identity");
+mustContain(
+  join(coreRoot, "src", "copilot-runner.ts"),
+  "./generated/copilot-runner.mjs",
+  "legacy Copilot shim resolves inside the shipped plugin",
+);
 
 mustContain(
   codexEnsure,
