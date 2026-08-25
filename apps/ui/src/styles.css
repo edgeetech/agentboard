@@ -1105,6 +1105,47 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
   grid-column: 1 / -1;
 }
 
+.project-danger-zone {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.project-danger-zone h2 {
+  margin: 0 0 0.35rem;
+  color: var(--danger);
+  font-size: 1rem;
+}
+
+.project-danger-zone p {
+  margin: 0;
+  max-width: 65ch;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.project-delete-confirm {
+  width: min(100%, 28rem);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.project-delete-confirm label {
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.project-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 /* Fixed save bar — always visible at the bottom of the viewport.
    left: var(--side-w) keeps it right of the sidebar; the CSS variable
    updates automatically when the sidebar collapses. */
@@ -1157,6 +1198,15 @@ button.icon-btn.danger-hover:hover { color: var(--danger); border-color: var(--d
   .project-form-actions .err {
     margin-left: 0;
     flex-basis: 100%;
+  }
+
+  .project-danger-zone {
+    flex-direction: column;
+  }
+
+  .project-danger-zone > button,
+  .project-delete-confirm {
+    width: 100%;
   }
 }
 

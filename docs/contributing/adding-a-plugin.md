@@ -107,3 +107,239 @@ The SDK currently provides:
 - fake request, deterministic provider and contract assertion test helpers.
 
 The next provider phases will complete runtime ownership moves for Claude and Codex, finish host/runtime composition around the package-owned Copilot runner, and adapt provider packages to the generic `ProviderAdapter` registry contract. Until then, preserve the legacy core compatibility paths and do not assume that installing a provider package alone makes its runtime executable.
+
+## Example: Implementing a New Provider (Gemini)
+
+This example shows how to add a new provider without modifying Engine business logic.
+
+### Step 1: Create Provider Package
+
+```bash
+mkdir -p plugins/providers/gemini/src
+mkdir -p plugins/providers/gemini/test
+```
+
+Create `plugins/providers/gemini/package.json`:
+
+```json
+{
+  "name": "@agentboard/provider-gemini",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "dependencies": {
+    "@agentboard/plugin-sdk": "workspace:*",
+    "@google/generative-ai": "^0.3.0"
+  }
+}
+```
+
+### Step 2: Implement Provider Adapter
+
+Create `plugins/providers/gemini/src/index.ts`:
+
+```ts
+import {
+  type ProviderManifest,
+  type AgentExecutionRequest,
+  type AgentExecutionResult,
+  isTimeoutError,
+} from "@agentboard/plugin-sdk";
+
+export const geminiProviderManifest: ProviderManifest = {
+  id: "gemini",
+  name: "Google Gemini",
+  description: "Google's Gemini AI model",
+  capabilities: ["code_generation", "analysis", "review"],
+  environment: {
+    required: ["GEMINI_API_KEY"],
+    optional: ["GEMINI_MODEL", "GEMINI_LOG_LEVEL"],
+    denied: ["AWS_*", "AZURE_*", "ANTHROPIC_*"], // No cross-cloud creds
+  },
+  enforcement: {
+    enforced: ["cwd", "maxTurns", "filesystemSandbox"],
+    intentionallyIgnored: ["hooksEnabled"],
+    notes: "Gemini does not support hooks in v0.3; upgrade to v0.4 for hook support",
+  },
+};
+
+export async function createGeminiRuntime(config: {
+  apiKey: string;
+  model?: string;
+}) {
+  const { GoogleGenerativeAI } = await import("@google/generative-ai");
+  const client = new GoogleGenerativeAI(config.apiKey);
+  const model = config.model ?? "gemini-2.0-pro";
+
+  return {
+    async execute(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
+      try {
+        const generationConfig = {
+          temperature: 0.7,
+          maxOutputTokens: request.maxTokens ?? 4096,
+        };
+
+        const result = await client
+          .getGenerativeModel({ model })
+          .generateContent({
+            contents: [{ role: "user", parts: [{ text: request.prompt }] }],
+            generationConfig,
+          });
+
+        const text = result.response.text();
+        return {
+          status: "completed",
+          output: text,
+          usage: {
+            inputTokens: result.response.usageMetadata?.promptTokens ?? 0,
+            outputTokens: result.response.usageMetadata?.candidatesTokens ?? 0,
+          },
+          session: { modelUsed: model, providerId: "gemini" },
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        
+        // Detect timeout and use shared pattern from plugin-sdk
+        if (isTimeoutError(message)) {
+          return {
+            status: "failed",
+            error: `Gemini execution timed out: ${message}`,
+            errorKind: "timeout",
+          };
+        }
+
+        // Detect rate limit
+        if (message.includes("429") || message.includes("quota")) {
+          return {
+            status: "failed",
+            error: `Gemini rate limited: ${message}`,
+            errorKind: "rate_limit",
+            retryAfterMs: 60000, // Retry after 60s
+          };
+        }
+
+        return {
+          status: "failed",
+          error: message,
+          errorKind: "provider",
+        };
+      }
+    },
+  };
+}
+```
+
+### Step 3: Add Contract Tests
+
+Create `plugins/providers/gemini/test/gemini.test.ts`:
+
+```ts
+import { describe, it, expect } from "vitest";
+import {
+  assertProviderContract,
+  createDeterministicProviderAdapter,
+} from "@agentboard/plugin-sdk";
+
+describe("Gemini Provider", () => {
+  it("implements provider contract", async () => {
+    const provider = createDeterministicProviderAdapter({
+      manifest: { id: "gemini" },
+    });
+    await assertProviderContract(provider);
+  });
+
+  it("declares required environment", () => {
+    const required = geminiProviderManifest.environment.required;
+    expect(required).toContain("GEMINI_API_KEY");
+  });
+
+  it("declares denied environment variables", () => {
+    const denied = geminiProviderManifest.environment.denied;
+    expect(denied).toContain("AWS_*");
+    expect(denied).toContain("ANTHROPIC_*");
+  });
+});
+```
+
+### Step 4: Register Provider
+
+In the host/composition layer (automatically discovered via provider registry):
+
+```ts
+import { registerProvider } from "@agentboard/plugin-sdk";
+import { geminiProviderManifest, createGeminiRuntime } from "@agentboard/provider-gemini";
+
+await registerProvider({
+  manifest: geminiProviderManifest,
+  createRuntime: (config) => createGeminiRuntime(config),
+});
+```
+
+**That's it!** The Engine automatically handles:
+- Provider selection per role/task
+- Configuration precedence
+- Provider switching
+- Error normalization
+- Token tracking
+
+**No Engine changes required.**
+
+## Environment Variable Policy
+
+Provider plugins must strictly control environment access.
+
+### Declaration
+
+Each provider must declare in its manifest:
+
+```ts
+environment: {
+  required: ["API_KEY"],           // Must exist, error if missing
+  optional: ["LOG_LEVEL"],         // Used if present
+  denied: ["AWS_*", "AZURE_*"],    // Explicitly blocked
+}
+```
+
+### Enforcement
+
+Host composition must:
+
+1. Reject providers that cannot meet `denied` rules
+2. Validate `required` vars exist before launching
+3. Pass only declared env to provider process
+4. Log env access violations
+
+```ts
+// Example host enforcement
+function validatePluginEnvironment(plugin: Plugin, env: Record<string, string>) {
+  const { required = [], denied = [] } = plugin.manifest.environment;
+
+  for (const pattern of denied) {
+    for (const [key] of Object.entries(env)) {
+      if (minimatch(key, pattern)) {
+        throw new Error(`Denied env var for plugin: ${key}`);
+      }
+    }
+  }
+
+  for (const key of required) {
+    if (!(key in env)) {
+      throw new Error(`Required env var not set: ${key}`);
+    }
+  }
+}
+```
+
+### Testing
+
+Add regression tests for env isolation:
+
+```ts
+it("provider does not receive unrelated env vars", async () => {
+  process.env.UNRELATED_SECRET = "should-not-leak";
+  const runtime = await createRuntime({
+    environment: { GEMINI_API_KEY: "test-key" },
+  });
+  // Verify UNRELATED_SECRET was not passed to runtime
+});
+```

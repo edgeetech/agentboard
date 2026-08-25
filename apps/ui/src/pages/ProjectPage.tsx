@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
-import { api } from '../api';
+import { api, setProjectCode } from '../api';
 import type { AgentConfig, AgentProvider } from '../api';
 import { AgentConfigEditor } from '../components/AgentConfigEditor';
+import { rememberLastProject } from '../hooks/useCurrentProjectCode';
 
 function parseProjectAgentConfig(raw: unknown): AgentConfig {
   if (raw == null) return {};
@@ -25,6 +26,7 @@ function parseProjectAgentConfig(raw: unknown): AgentConfig {
 export function ProjectPage() {
   const { t } = useTranslation();
   const { projectCode } = useParams<{ projectCode: string }>();
+  const navigate = useNavigate();
   const projUpper = projectCode ? projectCode.toUpperCase() : null;
   const qc = useQueryClient();
   const list = useQuery({ queryKey: ['projects-list'], queryFn: api.listProjects });
@@ -46,6 +48,8 @@ export function ProjectPage() {
   const [scanIgnore, setScanIgnore] = useState<string[]>([]);
   const [scanIgnoreText, setScanIgnoreText] = useState('');
   const [saved, setSaved] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   useEffect(() => {
     if (!project) return;
@@ -79,6 +83,24 @@ export function ProjectPage() {
       qc.invalidateQueries({ queryKey: ['projects-list'] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
       setTimeout(() => { setSaved(null); }, 2500);
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: () => project
+      ? api.deleteProject(project.code)
+      : Promise.reject(new Error('no project')),
+    onSuccess: async () => {
+      rememberLastProject(null);
+      setProjectCode(null);
+      qc.removeQueries({ queryKey: ['tasks'] });
+      qc.removeQueries({ queryKey: ['task'] });
+      qc.removeQueries({ queryKey: ['board'] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['active-project'] }),
+        qc.invalidateQueries({ queryKey: ['projects-list'] }),
+      ]);
+      navigate('/', { replace: true });
     },
   });
 
@@ -182,6 +204,72 @@ export function ProjectPage() {
               <small className="muted">{t('settings.scan_ignore_hint')}</small>
             </label>
           </div>
+          <section className="project-danger-zone" aria-labelledby="delete-project-title">
+            <div>
+              <h2 id="delete-project-title">
+                {t('project.delete_title', 'Delete Project')}
+              </h2>
+              <p>
+                {t(
+                  'project.delete_warning',
+                  'Remove this project and its AgentBoard tasks and sessions. The repository directory and its contents will not be changed.',
+                )}
+              </p>
+            </div>
+            {!deleteConfirmOpen ? (
+              <button
+                type="button"
+                className="danger"
+                onClick={() => {
+                  deleteMut.reset();
+                  setDeleteConfirmOpen(true);
+                }}
+              >
+                {t('project.delete_action', 'Delete Project')}
+              </button>
+            ) : (
+              <div className="project-delete-confirm" role="dialog" aria-modal="false">
+                <label htmlFor="project-delete-confirmation">
+                  {t('project.delete_confirm', 'Type “{{name}}” to confirm deletion.', {
+                    name: project.name,
+                  })}
+                </label>
+                <input
+                  id="project-delete-confirmation"
+                  value={deleteConfirmation}
+                  onChange={(event) => { setDeleteConfirmation(event.target.value); }}
+                  autoComplete="off"
+                  autoFocus
+                />
+                <div className="project-delete-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteConfirmOpen(false);
+                      setDeleteConfirmation('');
+                      deleteMut.reset();
+                    }}
+                    disabled={deleteMut.isPending}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={deleteConfirmation !== project.name || deleteMut.isPending}
+                    onClick={() => { deleteMut.mutate(); }}
+                  >
+                    {deleteMut.isPending
+                      ? t('project.deleting', 'Deleting…')
+                      : t('project.delete_confirm_action', 'Permanently delete project')}
+                  </button>
+                </div>
+                {deleteMut.isError && (
+                  <div className="err" role="alert">{deleteMut.error.message}</div>
+                )}
+              </div>
+            )}
+          </section>
         </div>
         <div className="form-actions project-form-actions">
           <button
