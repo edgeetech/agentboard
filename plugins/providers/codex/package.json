@@ -9,5 +9,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "echo \"codex provider tests not migrated yet\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
   }
 }

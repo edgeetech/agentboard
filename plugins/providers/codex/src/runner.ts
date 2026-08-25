@@ -257,12 +257,16 @@ export class CodexRunner {
     });
     child.stdin.write(fullPrompt);
     child.stdin.end();
-    const exitCode = await new Promise<number | null>((resolve, reject) => {
-      child.on("error", reject);
-      child.on("close", resolve);
-    });
-    abortController.signal.removeEventListener("abort", killChild);
-    turnSignal.removeEventListener("abort", killChild);
+    let exitCode: number | null;
+    try {
+      exitCode = await new Promise<number | null>((resolve, reject) => {
+        child.on("error", reject);
+        child.on("close", resolve);
+      });
+    } finally {
+      abortController.signal.removeEventListener("abort", killChild);
+      turnSignal.removeEventListener("abort", killChild);
+    }
     if (stdoutBuf.trim())
       this.handleJsonLine(
         stdoutBuf.trim(),

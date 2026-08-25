@@ -488,12 +488,16 @@ ${prompt}`
     });
     child.stdin.write(fullPrompt);
     child.stdin.end();
-    const exitCode = await new Promise((resolve, reject) => {
-      child.on('error', reject);
-      child.on('close', resolve);
-    });
-    abortController.signal.removeEventListener('abort', killChild);
-    turnSignal.removeEventListener('abort', killChild);
+    let exitCode;
+    try {
+      exitCode = await new Promise((resolve, reject) => {
+        child.on('error', reject);
+        child.on('close', resolve);
+      });
+    } finally {
+      abortController.signal.removeEventListener('abort', killChild);
+      turnSignal.removeEventListener('abort', killChild);
+    }
     if (stdoutBuf.trim())
       this.handleJsonLine(stdoutBuf.trim(), result, usage, onEvent, sessionLog, runId);
     if (exitCode === 0) result.status = 'completed';

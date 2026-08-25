@@ -217,6 +217,7 @@ export class AgentRunner {
     try {
       q = query({ prompt, options: queryOptions });
     } catch (err) {
+      turnSignal.removeEventListener("abort", abortQuery);
       const error = err instanceof Error ? err : new Error(String(err));
       throw new Error(`Failed to start Claude agent query: ${error.message}`);
     }
@@ -350,12 +351,14 @@ export class AgentRunner {
         }
       }
     } catch (streamErr) {
+      turnSignal.removeEventListener("abort", abortQuery);
       const err =
         streamErr instanceof Error ? streamErr : new Error(String(streamErr));
       console.error("[agent-runner] stream error caught:", err.message);
       throw new Error(`Agent stream error: ${err.message}`);
     }
 
+    turnSignal.removeEventListener("abort", abortQuery);
     result.usage = usage;
     return result;
   }
