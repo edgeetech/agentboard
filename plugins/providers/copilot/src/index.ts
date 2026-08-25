@@ -1,6 +1,13 @@
 import type { ProviderManifest } from "../../../../packages/plugin-sdk/src/provider.ts";
 import type { ProviderRunResult } from "../../../../packages/plugin-sdk/src/runtime.ts";
 
+export { CopilotRunner } from "./runner.ts";
+export type {
+  CopilotRunnerOptions,
+  CopilotSdkModule,
+  CopilotSessionConfig,
+} from "./runner.ts";
+
 export const copilotProviderManifest = {
   id: "github_copilot",
   displayName: "GitHub Copilot",

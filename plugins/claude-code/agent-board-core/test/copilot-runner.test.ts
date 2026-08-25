@@ -1,29 +1,27 @@
-import type { SessionConfig } from '@github/copilot-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CopilotRunner } from '../src/copilot-runner.ts';
+import { CopilotRunner, type CopilotSessionConfig } from '../src/copilot-runner.ts';
 import type { ProviderSessionLog } from '../src/provider-types.ts';
 import { RateLimitTracker } from '../src/rate-limit-tracker.ts';
 
-const copilotSdkMock = vi.hoisted(() => {
+function createCopilotSdkMock() {
   const createSession = vi.fn();
   const stop = vi.fn();
   const CopilotClient = vi.fn(function CopilotClient() {
     return { createSession, stop };
   });
   return {
-    approveAll: vi.fn(),
+    approveAll: {},
     CopilotClient,
     createSession,
     stop,
   };
-});
-
-vi.mock('@github/copilot-sdk', () => copilotSdkMock);
+}
 
 describe('CopilotRunner', () => {
   let rateLimiter: RateLimitTracker;
   let mockSessionLog: ProviderSessionLog;
+  let copilotSdkMock: ReturnType<typeof createCopilotSdkMock>;
 
   beforeEach(() => {
     rateLimiter = new RateLimitTracker();
@@ -31,10 +29,7 @@ describe('CopilotRunner', () => {
     const noop = (_obj: Record<string, unknown>, _msg: string): void => {};
     /* eslint-enable @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars */
     mockSessionLog = { info: noop, error: noop, warn: noop };
-    copilotSdkMock.createSession.mockReset();
-    copilotSdkMock.stop.mockReset();
-    copilotSdkMock.CopilotClient.mockClear();
-    copilotSdkMock.approveAll.mockClear();
+    copilotSdkMock = createCopilotSdkMock();
   });
 
   afterEach(() => {
@@ -129,7 +124,7 @@ describe('CopilotRunner', () => {
 
   describe('SDK execution', () => {
     it('creates a Copilot session with normalized MCP servers and maps usage events', async () => {
-      let capturedConfig: SessionConfig | null = null;
+      let capturedConfig: CopilotSessionConfig | null = null;
       const session = {
         sessionId: 'copilot-session-1',
         sendAndWait: vi.fn(() => {
@@ -153,7 +148,7 @@ describe('CopilotRunner', () => {
         disconnect: vi.fn(() => Promise.resolve()),
       };
 
-      copilotSdkMock.createSession.mockImplementation((config: SessionConfig) => {
+      copilotSdkMock.createSession.mockImplementation((config: CopilotSessionConfig) => {
         capturedConfig = config;
         return Promise.resolve(session);
       });
@@ -185,10 +180,11 @@ describe('CopilotRunner', () => {
         rateLimiter,
         sessionLog: mockSessionLog,
         turnTimeoutMs: 5_000,
+        loadCopilotSdk: () => Promise.resolve(copilotSdkMock),
       });
 
       const result = await runner.run();
-      const config = capturedConfig as SessionConfig | null;
+      const config = capturedConfig as CopilotSessionConfig | null;
 
       expect(copilotSdkMock.CopilotClient).toHaveBeenCalledTimes(1);
       expect(config).toMatchObject({
@@ -260,6 +256,7 @@ describe('CopilotRunner', () => {
         rateLimiter,
         sessionLog: mockSessionLog,
         turnTimeoutMs: 1,
+        loadCopilotSdk: () => Promise.resolve(copilotSdkMock),
       });
 
       const result = await runner.run();
