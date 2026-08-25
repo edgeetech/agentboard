@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node --experimental-sqlite server.ts",
     "build": "npm run typecheck && npm run build:ui",
-    "build:ui": "cd ui && vite build",
+    "build:ui": "npm --prefix ../../../apps/ui run build && npm --prefix ../../../apps/ui run package",
     "typecheck": "tsc --noEmit -p src/tsconfig.json",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",

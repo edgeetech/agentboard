@@ -100,7 +100,10 @@ scanImports("packages/contracts", [
     test: (s) => s.includes("plugins/"),
     reason: "contracts must not import plugins",
   },
-  { test: (s) => s.includes("server/"), reason: "contracts must not import server" },
+  {
+    test: (s) => s.includes("server/"),
+    reason: "contracts must not import server",
+  },
   { test: (s) => s.includes("apps/"), reason: "contracts must not import UI" },
 ]);
 
@@ -109,8 +112,14 @@ scanImports("packages/infrastructure", [
     test: (s) => s.includes("plugins/"),
     reason: "infrastructure must not import plugins",
   },
-  { test: (s) => s.includes("server/"), reason: "infrastructure must not import server" },
-  { test: (s) => s.includes("apps/"), reason: "infrastructure must not import UI" },
+  {
+    test: (s) => s.includes("server/"),
+    reason: "infrastructure must not import server",
+  },
+  {
+    test: (s) => s.includes("apps/"),
+    reason: "infrastructure must not import UI",
+  },
 ]);
 
 scanImports("packages/plugin-sdk", [
@@ -122,7 +131,10 @@ scanImports("packages/plugin-sdk", [
     test: (s) => s.includes("packages/infrastructure"),
     reason: "plugin SDK must not import infrastructure",
   },
-  { test: (s) => s.includes("server/"), reason: "plugin SDK must not import server" },
+  {
+    test: (s) => s.includes("server/"),
+    reason: "plugin SDK must not import server",
+  },
   { test: (s) => s.includes("apps/"), reason: "plugin SDK must not import UI" },
 ]);
 
@@ -133,14 +145,21 @@ scanImports("plugins/providers", [
   },
   {
     test: (s) => s.includes("packages/engine"),
-    reason: "provider packages should implement plugin SDK contracts, not engine internals",
+    reason:
+      "provider packages should implement plugin SDK contracts, not engine internals",
   },
   {
     test: (s) => s.includes("packages/infrastructure"),
     reason: "provider packages must not import infrastructure",
   },
-  { test: (s) => s.includes("server/"), reason: "provider packages must not import server" },
-  { test: (s) => s.includes("apps/"), reason: "provider packages must not import UI" },
+  {
+    test: (s) => s.includes("server/"),
+    reason: "provider packages must not import server",
+  },
+  {
+    test: (s) => s.includes("apps/"),
+    reason: "provider packages must not import UI",
+  },
 ]);
 
 scanImports("server", [
@@ -158,6 +177,43 @@ scanImports("plugins/claude-code/agent-board-core/src", [
       "legacy runtime must not import repo-root packages until plugin packaging guarantees them",
   },
 ]);
+
+const appUiRoot = join(root, "apps", "ui");
+const legacyUiRoot = join(
+  root,
+  "plugins",
+  "claude-code",
+  "agent-board-core",
+  "ui",
+);
+for (const path of [
+  join(appUiRoot, "index.html"),
+  join(appUiRoot, "vite.config.ts"),
+  join(appUiRoot, "src", "main.tsx"),
+  join(appUiRoot, "package.json"),
+]) {
+  if (!existsSync(path))
+    failures.push(
+      `${posix(relative(root, path))}: UI source/build owner missing`,
+    );
+}
+for (const path of [
+  join(legacyUiRoot, "index.html"),
+  join(legacyUiRoot, "vite.config.ts"),
+  join(legacyUiRoot, "src"),
+  join(legacyUiRoot, "public"),
+  join(legacyUiRoot, "package.json"),
+]) {
+  if (existsSync(path))
+    failures.push(
+      `${posix(relative(root, path))}: legacy UI source/config must not remain`,
+    );
+}
+if (!existsSync(join(legacyUiRoot, "dist", "index.html"))) {
+  failures.push(
+    "plugins/claude-code/agent-board-core/ui/dist/index.html: shipped UI artifact missing",
+  );
+}
 
 const aiDir = join(root, "ai");
 for (const file of walk(aiDir)) {

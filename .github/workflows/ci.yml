@@ -31,6 +31,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package.json
+            apps/ui/package.json
             plugins/claude-code/agent-board-core/package.json
             plugins/providers/copilot/package.json
 
@@ -40,8 +41,8 @@ jobs:
       - name: Install core dependencies
         run: npm --prefix plugins/claude-code/agent-board-core install --legacy-peer-deps
 
-      - name: Install core UI dependencies
-        run: npm --prefix plugins/claude-code/agent-board-core/ui install --legacy-peer-deps
+      - name: Install UI dependencies
+        run: npm --prefix apps/ui install --legacy-peer-deps
 
       - name: Core lint and formatting
         run: npm run lint && npm --prefix plugins/claude-code/agent-board-core run format:check
@@ -57,6 +58,9 @@ jobs:
 
       - name: Architecture boundaries
         run: npm run test:architecture
+
+      - name: UI package freshness
+        run: npm run build:ui && npm run check:ui-dist
 
       - name: Build
         run: npm run build

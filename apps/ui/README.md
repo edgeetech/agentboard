@@ -1,5 +1,5 @@
 # AgentBoard UI
 
-Target package for the board UI.
+Source and build owner for the AgentBoard board UI.
 
-The current UI remains under `plugins/claude-code/agent-board-core/ui` until typed API contracts and packaging are ready. Move it here during the UI separation phase.
+`npm run build` typechecks and bundles the UI. `npm run package` copies the generated files into `plugins/claude-code/agent-board-core/ui/dist`, the artifact shipped with the plugin; `npm run package:check` verifies that handoff without modifying files.
