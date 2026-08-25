@@ -532,6 +532,15 @@ Follow-up additions:
 - Provider package targets now export validated SDK manifests for Claude, Codex and GitHub Copilot without moving legacy runtime execution.
 - Root `npm run typecheck` and `npm run test` now include provider package manifest seams.
 
+## Server Bootstrap
+
+Status: Initial production server lifecycle extraction complete.
+
+- Added injected background-worker startup and shutdown composition in the `server` package.
+- The shipped legacy server now consumes the extracted lifecycle through a generated local bundle.
+- Added server-package tests for executor startup, skill-worker startup failure isolation and idempotent shutdown.
+- HTTP routing and queued-run orchestration remain in the legacy runtime for later Phase 9 slices.
+
 ## PR Feedback
 
 Status: Initial review feedback resolved.

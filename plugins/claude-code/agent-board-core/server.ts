@@ -63,6 +63,7 @@ import { handleTasks } from './src/api-tasks.ts';
 import { generateServerToken } from './src/auth.ts';
 import { readConfig, writeConfig } from './src/config.ts';
 import { startExecutor } from './src/executor.ts';
+import { startBackgroundWorkers } from './src/generated/server-bootstrap.mjs';
 import { json } from './src/http-util.ts';
 import { getObservabilitySnapshot } from './src/observability.ts';
 import { ensureDirs } from './src/paths.ts';
@@ -222,23 +223,27 @@ const server = createServer(requestHandler);
 // Override via --port <n> (0 = always random).
 const PREFERRED_PORT = 5501;
 const requestedPort = args.port === 0 ? PREFERRED_PORT : args.port;
+let backgroundWorkers: ReturnType<typeof startBackgroundWorkers> | null = null;
 
 const onReady = (): void => {
   const addr = server.address();
   const port = addr !== null && typeof addr === 'object' ? addr.port : 0;
   writeConfig({ port, pid: process.pid });
   console.warn(`READY http://127.0.0.1:${port}`);
-  startExecutor({ port, serverToken: token });
-  // Skill-scan workers: one per project DB. Mirrors executor's per-project
-  // iteration but spun up as long-lived per-DB polling loops (see
-  // src/skill-scan-runtime.ts). New projects created via POST /api/projects
-  // call ensureSkillScanWorker themselves, so we only need a one-shot here.
-  void startAllSkillScanWorkers().catch((e: unknown) => {
-    console.error(
-      '[server] startAllSkillScanWorkers failed:',
-      (e as Error | null)?.message ?? String(e),
-    );
-  });
+  backgroundWorkers = startBackgroundWorkers(
+    { port, serverToken: token },
+    {
+      startExecutor,
+      startSkillScanWorkers: startAllSkillScanWorkers,
+      stopSkillScanWorkers: stopAllSkillScanWorkers,
+      reportError: (e: unknown) => {
+        console.error(
+          '[server] background worker failed:',
+          (e as Error | null)?.message ?? String(e),
+        );
+      },
+    },
+  );
 };
 
 // Best-effort drain of skill-scan workers on graceful shutdown. The idle
@@ -246,7 +251,7 @@ const onReady = (): void => {
 // cleanup, but registering this gives a chance to finish in-flight scans
 // when the process is asked nicely (SIGTERM via kill, supervisor restart).
 const shutdownScanWorkers = (): void => {
-  void stopAllSkillScanWorkers();
+  void backgroundWorkers?.shutdown();
 };
 process.once('SIGINT', shutdownScanWorkers);
 process.once('SIGTERM', shutdownScanWorkers);
