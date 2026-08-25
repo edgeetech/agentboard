@@ -532,6 +532,16 @@ Follow-up additions:
 - Provider package targets now export validated SDK manifests for Claude, Codex and GitHub Copilot without moving legacy runtime execution.
 - Root `npm run typecheck` and `npm run test` now include provider package manifest seams.
 
+## UI Source Ownership
+
+Status: UI source and build ownership migration complete.
+
+- Moved the React source, assets and Vite configuration from the vendored Claude plugin core to `apps/ui`.
+- Kept the generated `ui/dist` inside the plugin artifact for zero-install marketplace distribution.
+- Added an explicit build/package bridge and byte-for-byte freshness verification.
+- Updated CI dependency installation, TypeScript coverage, architecture checks and source-level tests for the new owner.
+- UI and core typechecks, focused UI tests, architecture checks, host startup and packaged artifact verification pass.
+
 ## Server Bootstrap
 
 Status: Initial production server lifecycle extraction complete.
@@ -553,6 +563,16 @@ Status: Provider-neutral execution coordinator contract complete.
 - Session and cost persistence plus heartbeat/workspace cleanup are best-effort and cannot change the provider outcome.
 - The legacy executor remains the production orchestration path until its SQLite, provider and postflight adapters are migrated in a later Phase 9 slice.
 - Engine typechecking passes and focused coordinator coverage brings the Engine suite to 68 tests.
+
+## Deferred Legacy Migration
+
+The following work is intentionally deferred beyond this implementation cycle:
+
+- Moving task, run, phase and skill persistence mutations out of the legacy repositories.
+- Replacing legacy HTTP/MCP route handlers and wiring the Engine coordinator into the production executor.
+- Removing generated marketplace bundles and compatibility shims before distribution can guarantee workspace packages.
+- Removing static and JSON AI asset fallbacks before packaged Markdown assets have equivalent runtime guarantees.
+- Expanding Playwright beyond the current project/task smoke journey into provider, retry and recovery scenarios.
 
 ## PR Feedback
 
