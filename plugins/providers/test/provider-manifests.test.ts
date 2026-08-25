@@ -60,6 +60,7 @@ describe("provider package manifests", () => {
     });
 
     expect(adapter.provider).toBe("codex");
+    expect(adapter.manifest).toBe(codexProviderManifest);
     expect(adapter.enforcement).toEqual(codexProviderManifest.enforcement);
     expect(adapter.resume.command("s1", "/repo")).toBe("/repo:s1");
 
@@ -94,6 +95,7 @@ describe("provider package manifests", () => {
     });
 
     expect(adapter.provider).toBe("claude");
+    expect(adapter.manifest).toBe(claudeProviderManifest);
     expect(adapter.enforcement).toEqual(claudeProviderManifest.enforcement);
     expect(adapter.resume.command("s1", "/repo")).toBe("/repo:s1");
 

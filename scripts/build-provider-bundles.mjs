@@ -8,6 +8,19 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const check = process.argv.includes("--check");
 const bundles = [
   {
+    entryPoint: join(root, "packages", "plugin-sdk", "src", "registry.ts"),
+    outfile: join(
+      root,
+      "plugins",
+      "claude-code",
+      "agent-board-core",
+      "src",
+      "generated",
+      "plugin-sdk-registry.mjs",
+    ),
+    external: [],
+  },
+  {
     entryPoint: join(root, "plugins", "providers", "codex", "src", "index.ts"),
     outfile: join(
       root,
@@ -21,14 +34,7 @@ const bundles = [
     external: [],
   },
   {
-    entryPoint: join(
-      root,
-      "plugins",
-      "providers",
-      "claude",
-      "src",
-      "runner.ts",
-    ),
+    entryPoint: join(root, "plugins", "providers", "claude", "src", "index.ts"),
     outfile: join(
       root,
       "plugins",
@@ -47,7 +53,7 @@ const bundles = [
       "providers",
       "copilot",
       "src",
-      "runner.ts",
+      "index.ts",
     ),
     outfile: join(
       root,

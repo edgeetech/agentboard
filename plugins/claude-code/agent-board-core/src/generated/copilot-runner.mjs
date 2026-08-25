@@ -283,6 +283,62 @@ function delay(ms, signal) {
     }
   });
 }
+
+// plugins/providers/copilot/src/index.ts
+var copilotProviderManifest = {
+  id: "github_copilot",
+  displayName: "GitHub Copilot",
+  version: "0.1.0",
+  runtime: { command: "gh", args: ["copilot"] },
+  capabilities: {
+    streamingEvents: true,
+    resume: "interactive",
+    usage: "tokens",
+    tools: []
+  },
+  enforcement: {
+    enforced: ["cwd", "mcpServerNames", "abortSignal", "rateLimitBackoff"],
+    intentionallyIgnored: [
+      "maxTurns",
+      "allowedTools",
+      "hooksEnabled",
+      "approvalMode",
+      "filesystemSandbox"
+    ],
+    notes: [
+      "Legacy Copilot runner uses approveAll and does not enforce maxTurns or allowedTools.",
+      "Approval mode is intentionally ignored until Copilot-specific approval mapping is implemented."
+    ]
+  }
+};
+function createCopilotProviderAdapter(args) {
+  return {
+    manifest: copilotProviderManifest,
+    provider: copilotProviderManifest.id,
+    enforcement: copilotProviderManifest.enforcement,
+    resume: {
+      interactive: true,
+      command: (sessionId, repoPath) => args.buildResumeCommand(
+        copilotProviderManifest.id,
+        sessionId,
+        repoPath
+      )
+    },
+    async run(ctx) {
+      const runner = new args.Runner(ctx);
+      const result = await runner.run();
+      return {
+        ...result,
+        sessionRef: typeof result.sessionId === "string" && result.sessionId.length > 0 ? {
+          provider: copilotProviderManifest.id,
+          sessionId: result.sessionId
+        } : null
+      };
+    }
+  };
+}
 export {
-  CopilotRunner
+  CopilotRunner,
+  copilotProviderManifest,
+  createCopilotProviderAdapter
 };

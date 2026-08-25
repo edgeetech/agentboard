@@ -716,6 +716,7 @@ var codexProviderManifest = {
 };
 function createCodexProviderAdapter(args) {
   return {
+    manifest: codexProviderManifest,
     provider: codexProviderManifest.id,
     enforcement: codexProviderManifest.enforcement,
     resume: {

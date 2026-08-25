@@ -2,13 +2,13 @@ import { appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { createClaudeProviderAdapter } from '../../../providers/claude/src/index.ts';
-import { createCodexProviderAdapter } from '../../../providers/codex/src/index.ts';
-import { createCopilotProviderAdapter } from '../../../providers/copilot/src/index.ts';
-
 import { AgentRunner } from './agent-runner.ts';
 import { CodexRunner } from './codex-runner.ts';
 import { CopilotRunner } from './copilot-runner.ts';
+import { createClaudeProviderAdapter } from './generated/claude-runner.mjs';
+import { createCodexProviderAdapter } from './generated/codex-provider.mjs';
+import { createCopilotProviderAdapter } from './generated/copilot-runner.mjs';
+import { createProviderRuntimeRegistry } from './generated/plugin-sdk-registry.mjs';
 import { buildResumeCommand } from './provider-runtime.ts';
 import type { ProviderRuntimeAdapter, ProviderRuntimeContext } from './provider-runtime.ts';
 import type { AgentProvider } from './types.ts';
@@ -26,14 +26,14 @@ const codexProvider = createCodexProviderAdapter<ProviderRuntimeContext>({
   buildResumeCommand,
 }) satisfies ProviderRuntimeAdapter;
 
-const PROVIDERS: Record<AgentProvider, ProviderRuntimeAdapter> = {
-  claude: claudeProvider,
-  github_copilot: copilotProvider,
-  codex: codexProvider,
-};
+const providerRegistry = createProviderRuntimeRegistry([
+  claudeProvider,
+  copilotProvider,
+  codexProvider,
+]);
 
 export function providerFor(provider: AgentProvider): ProviderRuntimeAdapter {
-  return PROVIDERS[provider];
+  return providerRegistry.require(provider);
 }
 
 export function maybeRegisterInteractiveHistory(

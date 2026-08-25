@@ -55,6 +55,7 @@ export interface CopilotRunnerConstructor<TContext> {
 }
 
 export interface CopilotProviderAdapter<TContext> {
+  readonly manifest: typeof copilotProviderManifest;
   readonly provider: typeof copilotProviderManifest.id;
   readonly enforcement: typeof copilotProviderManifest.enforcement;
   readonly resume: {
@@ -73,6 +74,7 @@ export function createCopilotProviderAdapter<TContext>(args: {
   ) => string | null;
 }): CopilotProviderAdapter<TContext> {
   return {
+    manifest: copilotProviderManifest,
     provider: copilotProviderManifest.id,
     enforcement: copilotProviderManifest.enforcement,
     resume: {

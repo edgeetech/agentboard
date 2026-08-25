@@ -30,6 +30,7 @@ describe("Copilot provider adapter shell", () => {
     });
 
     expect(adapter.provider).toBe("github_copilot");
+    expect(adapter.manifest).toBe(copilotProviderManifest);
     expect(adapter.enforcement).toEqual(copilotProviderManifest.enforcement);
     expect(adapter.resume.command("s1", "/repo")).toBe("/repo:s1");
 

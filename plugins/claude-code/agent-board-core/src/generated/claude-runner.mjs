@@ -308,6 +308,61 @@ function delay(ms, signal) {
     );
   });
 }
+
+// plugins/providers/claude/src/index.ts
+var claudeProviderManifest = {
+  id: "claude",
+  displayName: "Claude",
+  version: "0.1.0",
+  runtime: { command: "claude" },
+  capabilities: {
+    streamingEvents: true,
+    resume: "interactive",
+    usage: "cost",
+    tools: ["Read", "Edit", "Bash", "Grep", "Glob"]
+  },
+  enforcement: {
+    enforced: [
+      "cwd",
+      "maxTurns",
+      "allowedTools",
+      "mcpServerNames",
+      "hooksEnabled",
+      "abortSignal",
+      "rateLimitBackoff",
+      "approvalMode"
+    ],
+    intentionallyIgnored: ["filesystemSandbox"],
+    notes: [
+      "Legacy Claude runner receives cwd, maxTurns, allowedTools, hooks and abort signal.",
+      "Filesystem sandboxing is not enforced until provider execution moves out of the legacy core."
+    ]
+  }
+};
+function createClaudeProviderAdapter(args) {
+  return {
+    manifest: claudeProviderManifest,
+    provider: claudeProviderManifest.id,
+    enforcement: claudeProviderManifest.enforcement,
+    resume: {
+      interactive: true,
+      command: (sessionId, repoPath) => args.buildResumeCommand(claudeProviderManifest.id, sessionId, repoPath)
+    },
+    async run(ctx) {
+      const runner = new args.Runner(ctx);
+      const result = await runner.run();
+      return {
+        ...result,
+        sessionRef: typeof result.sessionId === "string" && result.sessionId.length > 0 ? {
+          provider: claudeProviderManifest.id,
+          sessionId: result.sessionId
+        } : null
+      };
+    }
+  };
+}
 export {
-  AgentRunner
+  AgentRunner,
+  claudeProviderManifest,
+  createClaudeProviderAdapter
 };

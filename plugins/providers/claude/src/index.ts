@@ -54,6 +54,7 @@ export interface ClaudeRunnerConstructor<TContext> {
 }
 
 export interface ClaudeProviderAdapter<TContext> {
+  readonly manifest: typeof claudeProviderManifest;
   readonly provider: typeof claudeProviderManifest.id;
   readonly enforcement: typeof claudeProviderManifest.enforcement;
   readonly resume: {
@@ -72,6 +73,7 @@ export function createClaudeProviderAdapter<TContext>(args: {
   ) => string | null;
 }): ClaudeProviderAdapter<TContext> {
   return {
+    manifest: claudeProviderManifest,
     provider: claudeProviderManifest.id,
     enforcement: claudeProviderManifest.enforcement,
     resume: {

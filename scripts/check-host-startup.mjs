@@ -60,6 +60,10 @@ for (const [path, reason] of [
   [join(coreRoot, "server.ts"), "shared server entry"],
   [join(coreRoot, "package.json"), "first-run dependency install target"],
   [
+    join(coreRoot, "src", "generated", "plugin-sdk-registry.mjs"),
+    "packaged provider runtime registry",
+  ],
+  [
     join(coreRoot, "src", "generated", "codex-provider.mjs"),
     "packaged Codex provider runtime",
   ],
@@ -110,6 +114,17 @@ mustContain(
   "./generated/codex-provider.mjs",
   "legacy Codex config shim resolves inside the shipped plugin",
 );
+for (const bundle of [
+  "./generated/claude-runner.mjs",
+  "./generated/codex-provider.mjs",
+  "./generated/copilot-runner.mjs",
+]) {
+  mustContain(
+    join(coreRoot, "src", "provider-registry.ts"),
+    bundle,
+    "provider composition resolves inside the shipped plugin",
+  );
+}
 mustContain(
   join(coreRoot, "src", "agent-runner.ts"),
   "./generated/claude-runner.mjs",

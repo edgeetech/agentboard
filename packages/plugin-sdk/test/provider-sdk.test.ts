@@ -5,6 +5,7 @@ import {
   createDeterministicProviderAdapter,
   createFakeProviderRequest,
   createProviderRegistry,
+  createProviderRuntimeRegistry,
   ProviderTimeoutError,
   validateProviderManifest,
   toProviderRuntimeResponse,
@@ -113,6 +114,19 @@ describe("provider registry", () => {
 
     expect(() => registry.register(fakeAdapter())).toThrow(
       "Provider already registered: fake",
+    );
+  });
+});
+
+describe("provider runtime registry", () => {
+  it("registers host-specific runtime adapters by validated manifest id", () => {
+    const runtime = { manifest: validManifest, hostShape: "legacy" } as const;
+    const registry = createProviderRuntimeRegistry([runtime]);
+
+    expect(registry.require("fake")).toBe(runtime);
+    expect(registry.list()).toEqual([runtime]);
+    expect(() => registry.register(runtime)).toThrow(
+      "Provider runtime already registered: fake",
     );
   });
 });

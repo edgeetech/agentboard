@@ -71,6 +71,7 @@ export interface CodexRunnerConstructor<TContext> {
 }
 
 export interface CodexProviderAdapter<TContext> {
+  readonly manifest: typeof codexProviderManifest;
   readonly provider: typeof codexProviderManifest.id;
   readonly enforcement: typeof codexProviderManifest.enforcement;
   readonly resume: {
@@ -89,6 +90,7 @@ export function createCodexProviderAdapter<TContext>(args: {
   ) => string | null;
 }): CodexProviderAdapter<TContext> {
   return {
+    manifest: codexProviderManifest,
     provider: codexProviderManifest.id,
     enforcement: codexProviderManifest.enforcement,
     resume: {
