@@ -89,7 +89,10 @@ function rootAsPosix(rootDir: string): string {
   return posixed;
 }
 
-export function parseUserIgnore(rules: readonly string[] | undefined, rootDir: string): ParsedIgnore {
+export function parseUserIgnore(
+  rules: readonly string[] | undefined,
+  rootDir: string,
+): ParsedIgnore {
   const basenames = new Set<string>();
   const subtreePosixPaths: string[] = [];
   const rootPosix = rootAsPosix(rootDir);
@@ -106,7 +109,8 @@ export function parseUserIgnore(rules: readonly string[] | undefined, rootDir: s
       continue;
     }
     // Path form
-    const isAbs = isAbsolute(trimmed) || /^[A-Za-z]:\//.test(normalized) || normalized.startsWith('/');
+    const isAbs =
+      isAbsolute(trimmed) || /^[A-Za-z]:\//.test(normalized) || normalized.startsWith('/');
     if (isAbs) {
       // Must be under rootPosix
       const lc = normalized.toLowerCase();
@@ -172,7 +176,10 @@ export function parseFrontmatter(raw: string): {
     return { body: text };
   }
   const fmLines = lines.slice(1, endIdx);
-  const body = lines.slice(endIdx + 1).join('\n').replace(/^\n+/, '');
+  const body = lines
+    .slice(endIdx + 1)
+    .join('\n')
+    .replace(/^\n+/, '');
 
   const out: {
     name?: string;
@@ -213,7 +220,9 @@ export function parseFrontmatter(raw: string): {
     }
     if (rawVal.startsWith('[') && rawVal.endsWith(']')) {
       const inner = rawVal.slice(1, -1);
-      const parts = splitInlineArray(inner).map((s) => unquote(s.trim())).filter((s) => s !== '');
+      const parts = splitInlineArray(inner)
+        .map((s) => unquote(s.trim()))
+        .filter((s) => s !== '');
       assignKey(out, key, parts);
       i++;
       continue;
@@ -350,7 +359,12 @@ async function walk(
     for (const e of entries) {
       if (!e.isDirectory()) continue;
       const childAbs = absDir + sep + e.name;
-      if (shouldIgnore(childAbs, e.name, rootDir, { basenames: rules.basenames, subtreePosixPaths: rules.subtreePosixPaths })) {
+      if (
+        shouldIgnore(childAbs, e.name, rootDir, {
+          basenames: rules.basenames,
+          subtreePosixPaths: rules.subtreePosixPaths,
+        })
+      ) {
         continue;
       }
       await recurse(childAbs, depth + 1);
@@ -368,10 +382,7 @@ async function readSkillFile(absPath: string): Promise<string | null> {
   }
 }
 
-async function collectSkillsInDir(
-  rootDir: string,
-  hit: SkillsDirHit,
-): Promise<ScannedSkill[]> {
+async function collectSkillsInDir(rootDir: string, hit: SkillsDirHit): Promise<ScannedSkill[]> {
   let entries;
   try {
     entries = await readdir(hit.abs, { withFileTypes: true });
@@ -387,11 +398,11 @@ async function collectSkillsInDir(
       const raw = await readSkillFile(skillMd);
       if (raw === null) continue;
       const parsed = parseFrontmatter(raw);
-      const name = (parsed.name?.trim()) ?? skillName;
+      const name = parsed.name?.trim() ?? skillName;
       out.push({
         name,
         description: parsed.description ?? '',
-        emblem: (parsed.emblem?.trim()) ?? deriveEmblem(name),
+        emblem: parsed.emblem?.trim() ?? deriveEmblem(name),
         tags: parsed.tags ?? [],
         allowedTools: parsed.allowedTools ?? [],
         layout: 'folder',
@@ -408,11 +419,11 @@ async function collectSkillsInDir(
       const raw = await readSkillFile(abs);
       if (raw === null) continue;
       const parsed = parseFrontmatter(raw);
-      const name = (parsed.name?.trim()) ?? skillName;
+      const name = parsed.name?.trim() ?? skillName;
       out.push({
         name,
         description: parsed.description ?? '',
-        emblem: (parsed.emblem?.trim()) ?? deriveEmblem(name),
+        emblem: parsed.emblem?.trim() ?? deriveEmblem(name),
         tags: parsed.tags ?? [],
         allowedTools: parsed.allowedTools ?? [],
         layout: 'file',
@@ -444,7 +455,9 @@ export async function scanSkills(opts: ScanOptions): Promise<ScannedSkill[]> {
 
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => { reject(new Error(`skill-scanner: timeout after ${timeoutMs}ms`)); }, timeoutMs);
+    timer = setTimeout(() => {
+      reject(new Error(`skill-scanner: timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
   });
   try {
     return await Promise.race([work, timeout]);

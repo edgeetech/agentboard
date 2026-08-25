@@ -34,7 +34,7 @@
     "VERIFICATION": {
       "reminders": [
         "Run the full suite, not just the new tests.",
-        "If a flake appears, do not retry — investigate."
+        "If a flake appears, do not retry: investigate."
       ],
       "reviewDimensions": ["test pass evidence", "no skipped/flaky"]
     }

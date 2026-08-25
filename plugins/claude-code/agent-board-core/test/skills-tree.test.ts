@@ -4,9 +4,12 @@ import {
   buildSkillsTree,
   collectExpandedBranchIds,
   type SkillTreeSkill,
-} from '../ui/src/pages/skillsTree.ts';
+} from '../../../../apps/ui/src/pages/skillsTree.ts';
 
-function mkSkill(overrides: Partial<SkillTreeSkill> & Pick<SkillTreeSkill, 'id' | 'name' | 'relDir' | 'relPath' | 'layout'>): SkillTreeSkill {
+function mkSkill(
+  overrides: Partial<SkillTreeSkill> &
+    Pick<SkillTreeSkill, 'id' | 'name' | 'relDir' | 'relPath' | 'layout'>,
+): SkillTreeSkill {
   return {
     id: overrides.id,
     name: overrides.name,
@@ -47,7 +50,11 @@ describe('buildSkillsTree', () => {
       }),
     ]);
 
-    expect(tree.map((node) => node.label)).toEqual(['.claude/skills', 'builtin', 'pkg/.claude/skills']);
+    expect(tree.map((node) => node.label)).toEqual([
+      '.claude/skills',
+      'builtin',
+      'pkg/.claude/skills',
+    ]);
     expect(tree[0]?.children[0]).toMatchObject({
       kind: 'leaf',
       label: 'Alpha',

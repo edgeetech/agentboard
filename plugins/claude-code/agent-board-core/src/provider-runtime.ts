@@ -1,6 +1,4 @@
-import type { TokenUsage } from './agent-runner.ts';
-import type { RateLimitTracker } from './rate-limit-tracker.ts';
-import { sessionLogger } from './session-logger.ts';
+import type { ProviderRateLimiter, ProviderSessionLog, TokenUsage } from './provider-types.ts';
 import type { AgentProvider, RunRole } from './types.ts';
 
 export interface SdkMcpServer {
@@ -30,6 +28,44 @@ export interface ProviderRuntimeResult {
   errorKind?: 'timeout' | 'error';
 }
 
+export interface ProviderRuntimeLimits {
+  cwd: string;
+  maxTurns: number;
+  allowedTools: readonly string[];
+  mcpServerNames: readonly string[];
+  hooksEnabled: boolean;
+  abortSignal: boolean;
+  rateLimitBackoff: boolean;
+}
+
+export interface ProviderSandboxPolicy {
+  workspaceCwd: string;
+  restrictToWorkspace: boolean;
+  allowUserMcpServers: boolean;
+  approvalMode: 'provider-default' | 'accept-edits' | 'approve-all' | 'disabled';
+  notes: readonly string[];
+}
+
+export const PROVIDER_RUNTIME_CONTROLS = [
+  'cwd',
+  'maxTurns',
+  'allowedTools',
+  'mcpServerNames',
+  'hooksEnabled',
+  'abortSignal',
+  'rateLimitBackoff',
+  'approvalMode',
+  'filesystemSandbox',
+] as const;
+
+export type ProviderRuntimeControl = (typeof PROVIDER_RUNTIME_CONTROLS)[number];
+
+export interface ProviderRuntimeEnforcement {
+  enforced: readonly ProviderRuntimeControl[];
+  intentionallyIgnored: readonly ProviderRuntimeControl[];
+  notes: readonly string[];
+}
+
 export interface ProviderRuntimeContext {
   runId: string;
   role: RunRole;
@@ -39,10 +75,12 @@ export interface ProviderRuntimeContext {
   maxTurns: number;
   allowedTools: string;
   mcpServers: Record<string, SdkMcpServer>;
+  limits: ProviderRuntimeLimits;
+  sandbox: ProviderSandboxPolicy;
   hooks?: Record<string, unknown>;
   abortController: AbortController;
-  rateLimiter: RateLimitTracker;
-  sessionLog: ReturnType<typeof sessionLogger.createSessionLog>;
+  rateLimiter: ProviderRateLimiter;
+  sessionLog: ProviderSessionLog;
   serverToken: string;
   serverPort: number;
   onEvent: (eventName: string, detail: Record<string, unknown>) => void;
@@ -56,7 +94,43 @@ export interface ProviderResumeCapability {
 export interface ProviderRuntimeAdapter {
   readonly provider: AgentProvider;
   readonly resume: ProviderResumeCapability;
+  readonly enforcement: ProviderRuntimeEnforcement;
   run(ctx: ProviderRuntimeContext): Promise<ProviderRuntimeResult>;
+}
+
+export function buildProviderRuntimePolicy(args: {
+  cwd: string;
+  maxTurns: number;
+  allowedTools: string;
+  mcpServers: Record<string, SdkMcpServer>;
+  hooks?: Record<string, unknown>;
+}): { limits: ProviderRuntimeLimits; sandbox: ProviderSandboxPolicy } {
+  const allowedTools = args.allowedTools
+    .split(',')
+    .map((tool) => tool.trim())
+    .filter((tool) => tool.length > 0);
+
+  return {
+    limits: {
+      cwd: args.cwd,
+      maxTurns: args.maxTurns,
+      allowedTools,
+      mcpServerNames: Object.keys(args.mcpServers).sort(),
+      hooksEnabled: args.hooks !== undefined,
+      abortSignal: true,
+      rateLimitBackoff: true,
+    },
+    sandbox: {
+      workspaceCwd: args.cwd,
+      restrictToWorkspace: true,
+      allowUserMcpServers: true,
+      approvalMode: 'provider-default',
+      notes: [
+        'Provider adapters must declare which requested limits they enforce.',
+        'Current providers may intentionally ignore unsupported controls until sandbox support is migrated.',
+      ],
+    },
+  };
 }
 
 export function buildResumeCommand(

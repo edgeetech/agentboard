@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - refactor/**
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    name: Node ${{ matrix.node-version }} validation
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [22.x]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: |
+            package.json
+            apps/ui/package.json
+            plugins/claude-code/agent-board-core/package.json
+            plugins/providers/copilot/package.json
+
+      - name: Install root dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Install core dependencies
+        run: npm --prefix plugins/claude-code/agent-board-core install --legacy-peer-deps
+
+      - name: Install UI dependencies
+        run: npm --prefix apps/ui install --legacy-peer-deps
+
+      - name: Core lint and formatting
+        continue-on-error: true
+        run: npm run lint && npm --prefix plugins/claude-code/agent-board-core run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Database migration verification
+        run: npm run verify:db-migrations
+
+      - name: Architecture boundaries
+        run: npm run test:architecture
+
+      - name: UI package freshness
+        run: npm run build:ui && npm run check:ui-dist
+
+      - name: Build
+        run: npm run build

@@ -85,11 +85,28 @@ async function makeDb(repo: string): Promise<DbHandle> {
   d.prepare(
     `INSERT INTO task (id, code, title, status, version, acceptance_criteria_json, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(TASK_ID, 'T-001', 'demo', 'agent_working', 0, '[]', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  ).run(
+    TASK_ID,
+    'T-001',
+    'demo',
+    'agent_working',
+    0,
+    '[]',
+    '2026-01-01T00:00:00Z',
+    '2026-01-01T00:00:00Z',
+  );
   d.prepare(
     `INSERT INTO agent_run (id, task_id, role, status, token, queued_at, last_heartbeat_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(RUN_ID, TASK_ID, 'worker', 'running', RUN_TOKEN, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  ).run(
+    RUN_ID,
+    TASK_ID,
+    'worker',
+    'running',
+    RUN_TOKEN,
+    '2026-01-01T00:00:00Z',
+    '2026-01-01T00:00:00Z',
+  );
   return {
     exec: (s: string) => {
       d.exec(s);
@@ -140,11 +157,15 @@ function insertSkill(
 }
 
 function getActivities(d: DbHandle): TableRow[] {
-  return d.prepare(`SELECT kind, payload FROM agent_activity ORDER BY at ASC, id ASC`).all() as TableRow[];
+  return d
+    .prepare(`SELECT kind, payload FROM agent_activity ORDER BY at ASC, id ASC`)
+    .all() as TableRow[];
 }
 
 function getComments(d: DbHandle): TableRow[] {
-  return d.prepare(`SELECT author_role, body FROM comment ORDER BY created_at ASC, id ASC`).all() as TableRow[];
+  return d
+    .prepare(`SELECT author_role, body FROM comment ORDER BY created_at ASC, id ASC`)
+    .all() as TableRow[];
 }
 
 beforeEach(async () => {

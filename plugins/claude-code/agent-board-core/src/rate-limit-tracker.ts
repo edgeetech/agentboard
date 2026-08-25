@@ -1,30 +1,25 @@
-export interface RateLimitInfo {
-  isLimited: boolean;
-  retryAfterMs: number | null;
-  lastLimitedAt: Date | null;
-  limitCount: number;
-  source: string;
-}
+import type { ProviderRateLimitInfo, ProviderRateLimiter } from './provider-types.ts';
+
+export type RateLimitInfo = ProviderRateLimitInfo;
 
 interface RateLimitEntry {
   retryAfterMs: number | null;
   lastLimitedAt: Date | null;
   limitCount: number;
-  limitedUntil: number | null;
+  limitedUntilEpochMs: number | null;
 }
 
-export class RateLimitTracker {
+export class RateLimitTracker implements ProviderRateLimiter {
   readonly #entries = new Map<string, RateLimitEntry>();
 
   recordLimit(source: string, retryAfterMs?: number): void {
     const existing = this.#entries.get(source);
     const now = Date.now();
-    const limitedUntil = retryAfterMs !== undefined ? now + retryAfterMs : null;
     this.#entries.set(source, {
       retryAfterMs: retryAfterMs ?? null,
-      lastLimitedAt: new Date(),
+      lastLimitedAt: new Date(now),
       limitCount: (existing?.limitCount ?? 0) + 1,
-      limitedUntil,
+      limitedUntilEpochMs: retryAfterMs === undefined ? null : now + retryAfterMs,
     });
   }
 
@@ -35,33 +30,39 @@ export class RateLimitTracker {
       retryAfterMs: null,
       lastLimitedAt: existing.lastLimitedAt,
       limitCount: existing.limitCount,
-      limitedUntil: 0,
+      limitedUntilEpochMs: 0,
     });
   }
 
   isLimited(source: string): boolean {
     const entry = this.#entries.get(source);
     if (!entry) return false;
-    if (entry.limitedUntil === null) return true;
-    if (entry.limitedUntil <= Date.now()) return false;
-    return true;
+    if (entry.limitedUntilEpochMs === null) return true;
+    return entry.limitedUntilEpochMs > Date.now();
   }
 
   getInfo(source: string): RateLimitInfo {
-    const entry = this.#entries.get(source);
-    if (!entry)
-      return { isLimited: false, retryAfterMs: null, lastLimitedAt: null, limitCount: 0, source };
+    const info = this.#entries.get(source);
+    if (!info) {
+      return {
+        isLimited: false,
+        retryAfterMs: null,
+        lastLimitedAt: null,
+        limitCount: 0,
+        source,
+      };
+    }
     return {
       isLimited: this.isLimited(source),
-      retryAfterMs: entry.retryAfterMs,
-      lastLimitedAt: entry.lastLimitedAt,
-      limitCount: entry.limitCount,
+      retryAfterMs: info.retryAfterMs,
+      lastLimitedAt: info.lastLimitedAt,
+      limitCount: info.limitCount,
       source,
     };
   }
 
   getAllLimits(): RateLimitInfo[] {
-    return [...this.#entries.keys()].map((s) => this.getInfo(s));
+    return [...this.#entries.keys()].map((source) => this.getInfo(source));
   }
 
   reset(source: string): void {

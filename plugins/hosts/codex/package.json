@@ -1,0 +1,12 @@
+{
+  "name": "@agentboard/host-codex",
+  "private": true,
+  "type": "module",
+  "description": "Target Codex host integration package scaffold.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

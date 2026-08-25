@@ -1,0 +1,15 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "composite": true,
+    "lib": ["ES2022", "DOM"],
+    "rootDir": "../../../",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/**/*.ts",
+    "../../../packages/plugin-sdk/src/provider.ts",
+    "../../../packages/plugin-sdk/src/runtime.ts"
+  ]
+}

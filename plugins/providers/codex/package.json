@@ -1,0 +1,17 @@
+{
+  "name": "@agentboard/provider-codex",
+  "private": true,
+  "type": "module",
+  "description": "Codex provider runtime package scaffold.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "echo \"codex provider tests not migrated yet\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

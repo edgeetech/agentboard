@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./apps/ui" },
+    { "path": "./packages/contracts" },
+    { "path": "./packages/engine" },
+    { "path": "./packages/infrastructure" },
+    { "path": "./packages/plugin-sdk" },
+    { "path": "./server" },
+    { "path": "./plugins/providers/claude" },
+    { "path": "./plugins/providers/codex" },
+    { "path": "./plugins/providers/copilot" }
+  ]
+}

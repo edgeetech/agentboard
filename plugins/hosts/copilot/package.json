@@ -1,0 +1,12 @@
+{
+  "name": "@agentboard/host-copilot",
+  "private": true,
+  "type": "module",
+  "description": "Target Copilot host integration package scaffold.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

@@ -1,6 +1,10 @@
 // Built-in skills always available to every project, regardless of disk scan.
 // Read-only — edits via PUT are rejected by the HTTP handler.
 
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import type { SkillResponse } from './api-skills.ts';
 
 export interface BuiltinSkill extends SkillResponse {
@@ -8,13 +12,14 @@ export interface BuiltinSkill extends SkillResponse {
 }
 
 const SCANNED_AT = '1970-01-01T00:00:00Z';
+const HERE = dirname(fileURLToPath(import.meta.url));
+const AI_SKILLS_DIR = join(HERE, '..', '..', '..', '..', 'ai', 'skills');
 
-export const BUILTIN_SKILLS: BuiltinSkill[] = [
+const STATIC_BUILTIN_SKILLS: BuiltinSkill[] = [
   {
     id: 'builtin:code-review',
     name: 'Code Review',
-    description:
-      'Inspect a diff against coding standards, flag bugs, suggest fixes inline.',
+    description: 'Inspect a diff against coding standards, flag bugs, suggest fixes inline.',
     emblem: 'CR',
     tags: ['reviewer', 'default'],
     allowedTools: [],
@@ -53,7 +58,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
       '',
       'Add or extend unit tests so every new branch of behaviour is covered.',
       '',
-      '- Match the existing test style (Jest, Vitest, pytest, …).',
+      '- Match the existing test style (Jest, Vitest, pytest, ...).',
       '- Cover the happy path, the error path, and at least one edge case.',
       '- Prefer fast, deterministic tests over integration heuristics.',
       '- Use existing fixtures and helpers; do not introduce parallel infrastructure.',
@@ -65,8 +70,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   {
     id: 'builtin:tech-spec',
     name: 'Tech Spec Drafting',
-    description:
-      'Turn a loose description into acceptance criteria, risks, and a work breakdown.',
+    description: 'Turn a loose description into acceptance criteria, risks, and a work breakdown.',
     emblem: 'TS',
     tags: ['pm', 'default'],
     allowedTools: [],
@@ -84,7 +88,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
       '- Call out risks, unknowns, and assumptions explicitly.',
       '- Break the work into small, sequenced steps.',
       '',
-      'Keep it short — a spec nobody reads is worse than no spec.',
+      'Keep it short: a spec nobody reads is worse than no spec.',
       '',
     ].join('\n'),
   },
@@ -115,8 +119,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   {
     id: 'builtin:api-client',
     name: 'API Client',
-    description:
-      'Wire a typed API client to a remote service, including retry and error handling.',
+    description: 'Wire a typed API client to a remote service, including retry and error handling.',
     emblem: 'AC',
     tags: ['worker', 'typescript'],
     allowedTools: [],
@@ -139,8 +142,7 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   {
     id: 'builtin:release-notes',
     name: 'Release Notes',
-    description:
-      'Summarise merged PRs into concise release notes grouped by scope and impact.',
+    description: 'Summarise merged PRs into concise release notes grouped by scope and impact.',
     emblem: 'RN',
     tags: ['reviewer'],
     allowedTools: [],
@@ -162,10 +164,106 @@ export const BUILTIN_SKILLS: BuiltinSkill[] = [
   },
 ];
 
+export const BUILTIN_SKILLS: BuiltinSkill[] =
+  loadBuiltinSkillsFromAiAssets() ?? STATIC_BUILTIN_SKILLS;
+
 export function isBuiltinSkillId(id: string): boolean {
   return id.startsWith('builtin:');
 }
 
 export function findBuiltinSkill(id: string): BuiltinSkill | undefined {
   return BUILTIN_SKILLS.find((s) => s.id === id);
+}
+
+function loadBuiltinSkillsFromAiAssets(): BuiltinSkill[] | null {
+  if (!existsSync(AI_SKILLS_DIR)) return null;
+  try {
+    const skills = readdirSync(AI_SKILLS_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => readBuiltinSkillFromAiAsset(entry.name))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return skills.length > 0 ? skills : null;
+  } catch {
+    return null;
+  }
+}
+
+function readBuiltinSkillFromAiAsset(id: string): BuiltinSkill {
+  const path = join(AI_SKILLS_DIR, id, 'SKILL.md');
+  const parsed = parseMarkdownSkill(readFileSync(path, 'utf8'));
+  const name = stringField(parsed.frontmatter, 'name', id);
+  return {
+    id: `builtin:${id}`,
+    name,
+    description: stringField(parsed.frontmatter, 'description', ''),
+    emblem: stringField(parsed.frontmatter, 'emblem', deriveEmblem(name)),
+    tags: arrayField(parsed.frontmatter, 'tags'),
+    allowedTools: arrayField(parsed.frontmatter, 'allowed-tools'),
+    relDir: 'builtin',
+    relPath: `builtin/${id}.md`,
+    layout: 'file',
+    scannedAt: SCANNED_AT,
+    body: parsed.body.trimEnd() + '\n',
+  };
+}
+
+interface ParsedMarkdownSkill {
+  frontmatter: Record<string, string | string[]>;
+  body: string;
+}
+
+function parseMarkdownSkill(content: string): ParsedMarkdownSkill {
+  const normalized = content.replace(/\r\n?/g, '\n');
+  if (!normalized.startsWith('---\n')) return { frontmatter: {}, body: normalized };
+  const end = normalized.indexOf('\n---\n', 4);
+  if (end === -1) return { frontmatter: {}, body: normalized };
+  return {
+    frontmatter: parseFrontmatter(normalized.slice(4, end)),
+    body: normalized.slice(end + 5).replace(/^\n+/, ''),
+  };
+}
+
+function parseFrontmatter(frontmatter: string): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {};
+  for (const line of frontmatter.split('\n')) {
+    const match = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
+    if (!match) continue;
+    const key = match[1] ?? '';
+    const raw = (match[2] ?? '').trim();
+    out[key] = parseFrontmatterValue(raw);
+  }
+  return out;
+}
+
+function parseFrontmatterValue(raw: string): string | string[] {
+  if (raw.startsWith('[') && raw.endsWith(']')) {
+    const body = raw.slice(1, -1).trim();
+    if (body.length === 0) return [];
+    return body.split(',').map((item) => item.trim().replace(/^["']|["']$/g, ''));
+  }
+  return raw.replace(/^["']|["']$/g, '');
+}
+
+function stringField(
+  frontmatter: Readonly<Record<string, string | string[]>>,
+  key: string,
+  fallback: string,
+): string {
+  const value = frontmatter[key];
+  return typeof value === 'string' && value.length > 0 ? value : fallback;
+}
+
+function arrayField(
+  frontmatter: Readonly<Record<string, string | string[]>>,
+  key: string,
+): string[] {
+  const value = frontmatter[key];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.length > 0) return [value];
+  return [];
+}
+
+function deriveEmblem(name: string): string {
+  const cleaned = name.replaceAll(/[^A-Za-z0-9]/g, '');
+  return (cleaned.length > 0 ? cleaned : name).slice(0, 3).toUpperCase();
 }

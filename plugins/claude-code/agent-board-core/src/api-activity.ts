@@ -6,6 +6,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { EventBus } from './event-bus.ts';
 import { agentboardBus } from './event-bus.ts';
+import {
+  recordSseConnected,
+  recordSseDeliveryFailure,
+  recordSseDisconnected,
+  recordSseHeartbeat,
+  recordSseReplay,
+  recordSseReplayFailure,
+} from './observability.ts';
 import { listActivity, listActivityForTask } from './phase-repo.ts';
 import { getActiveDb } from './project-registry.ts';
 
@@ -179,6 +187,7 @@ function serveSse(
     'X-Accel-Buffering': 'no',
   });
   res.write(`: agentboard SSE ready (run=${run_id})\n\n`);
+  recordSseConnected();
 
   // Replay history so reconnects don't lose state.
   void (async (): Promise<void> => {
@@ -187,7 +196,9 @@ function serveSse(
       if (!active) return;
       const rows = listActivity(active.db, run_id, since) as AgentActivityEvent[];
       for (const r of rows) sendSse(res, 'activity', r);
+      recordSseReplay(rows.length);
     } catch (e) {
+      recordSseReplayFailure();
       console.error('[sse] replay failed', (e as Error).message);
     }
   })();
@@ -197,6 +208,7 @@ function serveSse(
     try {
       sendSse(res, 'activity', evt);
     } catch {
+      recordSseDeliveryFailure();
       /* client gone */
     }
   };
@@ -205,14 +217,20 @@ function serveSse(
   const hb = setInterval(() => {
     try {
       res.write(': heartbeat\n\n');
+      recordSseHeartbeat();
     } catch {
+      recordSseDeliveryFailure();
       clearInterval(hb);
     }
   }, 25_000);
 
+  let cleaned = false;
   const cleanup = (): void => {
+    if (cleaned) return;
+    cleaned = true;
     clearInterval(hb);
     bus.off(ACTIVITY_EVENT, onActivity);
+    recordSseDisconnected();
   };
 
   req.on('close', cleanup);
