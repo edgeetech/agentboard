@@ -1,21 +1,22 @@
 // packages/plugin-sdk/src/provider.ts
 var PROVIDER_RUNTIME_CONTROLS = [
-  "cwd",
-  "maxTurns",
-  "allowedTools",
-  "mcpServerNames",
-  "hooksEnabled",
-  "abortSignal",
-  "rateLimitBackoff",
-  "approvalMode",
-  "filesystemSandbox"
+  'cwd',
+  'maxTurns',
+  'allowedTools',
+  'mcpServerNames',
+  'hooksEnabled',
+  'abortSignal',
+  'rateLimitBackoff',
+  'approvalMode',
+  'filesystemSandbox',
 ];
 function validateProviderManifest(manifest) {
   const errors = [];
-  if (manifest.id.trim().length === 0) errors.push("manifest.id is required");
-  if (manifest.displayName.trim().length === 0) errors.push("manifest.displayName is required");
-  if (manifest.version.trim().length === 0) errors.push("manifest.version is required");
-  if (manifest.runtime.command.trim().length === 0) errors.push("manifest.runtime.command is required");
+  if (manifest.id.trim().length === 0) errors.push('manifest.id is required');
+  if (manifest.displayName.trim().length === 0) errors.push('manifest.displayName is required');
+  if (manifest.version.trim().length === 0) errors.push('manifest.version is required');
+  if (manifest.runtime.command.trim().length === 0)
+    errors.push('manifest.runtime.command is required');
   const knownControls = new Set(PROVIDER_RUNTIME_CONTROLS);
   const enforced = /* @__PURE__ */ new Set();
   const ignored = /* @__PURE__ */ new Set();
@@ -28,7 +29,8 @@ function validateProviderManifest(manifest) {
     ignored.add(control);
   }
   for (const control of enforced) {
-    if (ignored.has(control)) errors.push(`control cannot be both enforced and ignored: ${control}`);
+    if (ignored.has(control))
+      errors.push(`control cannot be both enforced and ignored: ${control}`);
   }
   for (const control of PROVIDER_RUNTIME_CONTROLS) {
     if (!enforced.has(control) && !ignored.has(control)) {
@@ -46,7 +48,7 @@ function createProviderRegistry(initialAdapters = []) {
       const validation = validateProviderManifest(adapter.manifest);
       if (!validation.ok) {
         throw new Error(
-          `Invalid provider manifest '${adapter.manifest.id}': ${validation.errors.join("; ")}`
+          `Invalid provider manifest '${adapter.manifest.id}': ${validation.errors.join('; ')}`,
         );
       }
       if (providers.has(adapter.manifest.id)) {
@@ -63,10 +65,8 @@ function createProviderRegistry(initialAdapters = []) {
       return provider;
     },
     list() {
-      return [...providers.values()].sort(
-        (a, b) => a.manifest.id.localeCompare(b.manifest.id)
-      );
-    }
+      return [...providers.values()].sort((a, b) => a.manifest.id.localeCompare(b.manifest.id));
+    },
   };
   for (const adapter of initialAdapters) registry.register(adapter);
   return registry;
@@ -79,7 +79,7 @@ function createProviderRuntimeRegistry(initialRegistrations = []) {
       const validation = validateProviderManifest(manifest);
       if (!validation.ok) {
         throw new Error(
-          `Invalid provider manifest '${manifest.id}': ${validation.errors.join("; ")}`
+          `Invalid provider manifest '${manifest.id}': ${validation.errors.join('; ')}`,
         );
       }
       if (providers.has(manifest.id)) {
@@ -92,21 +92,14 @@ function createProviderRuntimeRegistry(initialRegistrations = []) {
     },
     require(providerId) {
       const provider = providers.get(providerId);
-      if (!provider)
-        throw new Error(`Provider runtime not registered: ${providerId}`);
+      if (!provider) throw new Error(`Provider runtime not registered: ${providerId}`);
       return provider;
     },
     list() {
-      return [...providers.values()].sort(
-        (a, b) => a.manifest.id.localeCompare(b.manifest.id)
-      );
-    }
+      return [...providers.values()].sort((a, b) => a.manifest.id.localeCompare(b.manifest.id));
+    },
   };
-  for (const registration of initialRegistrations)
-    registry.register(registration);
+  for (const registration of initialRegistrations) registry.register(registration);
   return registry;
 }
-export {
-  createProviderRegistry,
-  createProviderRuntimeRegistry
-};
+export { createProviderRegistry, createProviderRuntimeRegistry };

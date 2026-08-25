@@ -3,9 +3,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { build } from "../plugins/claude-code/agent-board-core/node_modules/esbuild/lib/main.js";
+import { format } from "../plugins/claude-code/agent-board-core/node_modules/prettier/index.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const check = process.argv.includes("--check");
+const prettierConfig = JSON.parse(
+  await readFile(
+    join(root, "plugins", "claude-code", "agent-board-core", ".prettierrc"),
+    "utf8",
+  ),
+);
 const bundles = [
   {
     entryPoint: join(root, "packages", "plugin-sdk", "src", "registry.ts"),
@@ -79,9 +86,12 @@ for (const bundle of bundles) {
     target: "node22",
     write: false,
   });
-  const output = result.outputFiles[0]?.contents;
-  if (output === undefined)
+  const rawOutput = result.outputFiles[0]?.text;
+  if (rawOutput === undefined)
     throw new Error(`No bundle output for ${bundle.entryPoint}`);
+  const output = Buffer.from(
+    await format(rawOutput, { ...prettierConfig, parser: "babel" }),
+  );
 
   if (check) {
     const current = await readFile(bundle.outfile).catch(() => null);
