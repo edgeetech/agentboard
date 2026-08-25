@@ -131,7 +131,7 @@ describe('CopilotRunner', () => {
           capturedConfig?.onEvent?.({
             type: 'session.model_change',
             data: { newModel: 'gpt-5-mini' },
-          } as never);
+          });
           capturedConfig?.onEvent?.({
             type: 'assistant.usage',
             data: {
@@ -141,7 +141,7 @@ describe('CopilotRunner', () => {
               cacheWriteTokens: 3,
               cacheReadTokens: 5,
             },
-          } as never);
+          });
           return Promise.resolve();
         }),
         abort: vi.fn(() => Promise.resolve()),
