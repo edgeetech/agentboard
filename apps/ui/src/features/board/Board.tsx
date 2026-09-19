@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { api } from "../../api";
+import { HealthStrip } from "../../components/HealthStrip";
 import { SearchIcon } from "../../components/SearchIcon";
 import { useTaskActiveState } from "../../hooks/useActiveStates";
 import { useDetailView } from "../../hooks/useDetailView";
@@ -353,6 +354,8 @@ export function Board({ project }: { project: Project }) {
           </div>
         </div>
       </div>
+
+      <HealthStrip projectCode={project.code} />
 
       {viewMode === "list" ? (
         <TaskListView

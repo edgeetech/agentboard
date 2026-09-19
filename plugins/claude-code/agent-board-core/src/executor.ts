@@ -199,13 +199,7 @@ async function tryClaimAndRun(
     ? { type: 'single' as const, provider: run.session_provider_override }
     : roleCfgResolved;
   const effectiveProvider: 'claude' | 'github_copilot' | 'codex' =
-    roleCfg.type === 'single'
-      ? roleCfg.provider
-      : (() => {
-          const provider = roleCfg.members.at(-1);
-          if (provider === undefined) throw new Error('council role config has no members');
-          return provider;
-        })();
+    roleCfg.type === 'single' ? roleCfg.provider : lastCouncilProvider(roleCfg.members);
   const isCouncil = roleCfg.type === 'council';
 
   const run_token = randomBytes(24).toString('hex');
@@ -637,6 +631,14 @@ function buildSdkMcpServers(userMcps: Record<string, unknown>): Record<string, S
 function loadRolePromptBody(role: string): string {
   const url = new URL(`../prompts/${role}.md`, import.meta.url);
   return readFileSync(url, 'utf8');
+}
+
+function lastCouncilProvider(
+  members: ('claude' | 'github_copilot' | 'codex')[],
+): 'claude' | 'github_copilot' | 'codex' {
+  const provider = members[members.length - 1];
+  if (provider === undefined) throw new Error('council config has no synthesizer');
+  return provider;
 }
 
 function logErr(e: unknown): void {

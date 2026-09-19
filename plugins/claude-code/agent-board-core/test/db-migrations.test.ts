@@ -127,7 +127,7 @@ describe('project database migrations', () => {
     let db = await openProjectDb(path);
     try {
       expect(db.prepare("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
-        value: '6',
+        value: '7',
       } satisfies MetaRow);
 
       expect(columns(db, 'project')).toEqual(
@@ -192,7 +192,7 @@ describe('project database migrations', () => {
     db = await openProjectDb(path);
     try {
       expect(db.prepare("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
-        value: '6',
+        value: '7',
       } satisfies MetaRow);
       expect(columns(db, 'project')).toContain('agent_config_json');
       expect(columns(db, 'task')).toContain('discovery_mode');

@@ -122,6 +122,40 @@ function str(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
+async function selectActiveProject(req: IncomingMessage, res: ServerResponse): Promise<true> {
+  const body = await readJson(req);
+  if (!isRecord(body)) {
+    json(res, 400, { error: 'invalid body' });
+    return true;
+  }
+  const { code: rawCode } = body;
+  if (typeof rawCode !== 'string' || !rawCode.trim()) {
+    json(res, 400, { error: 'code required' });
+    return true;
+  }
+  const code = rawCode.trim().toUpperCase();
+  const codeErr = validateCode(code);
+  if (codeErr) {
+    json(res, 400, { error: codeErr });
+    return true;
+  }
+  const db = await getDb(code).catch(() => null);
+  if (!db) {
+    json(res, 404, { error: 'no such project' });
+    return true;
+  }
+  const prevActive = readConfig().active_project_code;
+  writeConfig({ active_project_code: code });
+  // Re-scan on switch unless we already have a fresh successful scan.
+  if (typeof prevActive !== 'string' || prevActive !== code) {
+    if (!shouldSkipSwitchScan(db, code)) {
+      enqueueScan(db, code, 'project_switched');
+    }
+  }
+  json(res, 200, { ok: true });
+  return true;
+}
+
 export interface DeleteProjectResult {
   trashedPath: string;
   deletedSessions: number;
@@ -296,32 +330,11 @@ export async function handleProjects(
     return true;
   }
 
-  if (p === '/api/projects/active' && m === 'PATCH') {
-    const body = await readJson(req);
-    if (!isRecord(body)) {
-      json(res, 400, { error: 'invalid body' });
-      return;
-    }
-    const { code } = body;
-    if (typeof code !== 'string' || !code) {
-      json(res, 400, { error: 'code required' });
-      return;
-    }
-    const db = await getDb(code).catch(() => null);
-    if (!db) {
-      json(res, 404, { error: 'no such project' });
-      return;
-    }
-    const prevActive = readConfig().active_project_code;
-    writeConfig({ active_project_code: code });
-    // Re-scan on switch unless we already have a fresh successful scan.
-    if (typeof prevActive !== 'string' || prevActive !== code) {
-      if (!shouldSkipSwitchScan(db, code)) {
-        enqueueScan(db, code, 'project_switched');
-      }
-    }
-    json(res, 200, { ok: true });
-    return true;
+  if (
+    (p === '/api/projects/active' && m === 'PATCH') ||
+    (p === '/api/projects/active/select' && m === 'POST')
+  ) {
+    return selectActiveProject(req, res);
   }
 
   const codeMatch = /^\/api\/projects\/([A-Z0-9]{2,7})$/.exec(p);
@@ -379,9 +392,7 @@ export async function handleProjects(
     }
     if ('agent_config_json' in patch) {
       const rawCfg = patch.agent_config_json;
-      const v = validateAgentConfigInput(
-        typeof rawCfg === 'object' && rawCfg !== null ? rawCfg : rawCfg,
-      );
+      const v = validateAgentConfigInput(rawCfg);
       if (!v.ok) {
         json(res, 400, { error: `agent_config_json invalid: ${v.error}` });
         return;
@@ -417,8 +428,8 @@ export async function handleProjects(
       needScan = true;
     }
     if ('scan_ignore_json' in patch && Array.isArray(patch.scan_ignore_json)) {
-      const ignoreArr = (patch.scan_ignore_json as unknown[]).filter(
-        (v): v is string => typeof v === 'string',
+      const ignoreArr = patch.scan_ignore_json.filter(
+        (v: unknown): v is string => typeof v === 'string',
       );
       if (!arrEq(ignoreArr, beforeIgnore)) needScan = true;
     }

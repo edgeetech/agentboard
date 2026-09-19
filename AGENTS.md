@@ -651,6 +651,7 @@ Same routes as above, prefixed with `/api/projects/:code` (e.g. `GET /api/projec
 |--------|------|---------|
 | GET    | `/api/projects/active` | Currently active project |
 | PATCH  | `/api/projects/active` | Switch active project. Body: `{ code }` |
+| POST   | `/api/projects/active/select` | Compatibility shim for switching active project. Body: `{ code }` |
 | GET    | `/api/projects/list` | All projects |
 | GET    | `/api/projects/suggest-code?name=` | Suggest a free 2–7 char code |
 | POST   | `/api/projects` | Create project. Body: `{ code, name, workflow_type: "WF1"\|"WF2", repo_path, description?, agent_provider? }` |
@@ -663,6 +664,15 @@ Same routes as above, prefixed with `/api/projects/:code` (e.g. `GET /api/projec
 | GET    | `/api/projects/:code/costs` | Last 100 runs with model + cost |
 | GET    | `/api/projects/:code/costs/total` | `{ all_time, last_7d, last_30d, uncosted_runs }` |
 
+#### Audit, doctor, and health
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET    | `/api/projects/:code/tasks/:taskCode/audit?format=json\|md` | Redacted task audit export as JSON or Markdown |
+| GET    | `/api/doctor` | Setup/runtime checks for the active project if one is selected |
+| GET    | `/api/projects/:code/doctor` | Setup/runtime checks for one project |
+| GET    | `/api/projects/:code/health-summary` | Lightweight board health aggregation; does not run CLI probes |
+
 #### Skills
 
 | Method | Path | Purpose |
@@ -673,16 +683,16 @@ Same routes as above, prefixed with `/api/projects/:code` (e.g. `GET /api/projec
 | GET    | `/api/skills/scan/events` | Live scan SSE stream |
 | POST   | `/api/skills/scan` | Trigger rescan. Body: `{ trigger }` |
 
-#### External issue tracker (Jira etc.)
+#### External issue tracker
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET    | `/api/projects/:code/tracker` | Tracker config |
-| POST   | `/api/projects/:code/tracker` | Create/update config. Body: `{ provider, base_url?, project_key?, api_token? }` |
+| GET    | `/api/projects/:code/tracker` | `{ tracker, status }`, where state lists are arrays and `enabled` is boolean |
+| POST   | `/api/projects/:code/tracker` | Create/update config. Body: `{ kind, endpoint?, api_key_env_var, project_slug, active_states?, terminal_states?, assignee?, poll_interval_ms?, enabled? }` |
 | POST   | `/api/projects/:code/tracker/enable` | Enable polling |
 | POST   | `/api/projects/:code/tracker/disable` | Disable polling |
-| POST   | `/api/projects/:code/tracker/sync` | Force one-shot poll, returns `{ issues_fetched }` |
-| GET    | `/api/projects/:code/tracker/issues` | Cached candidate issues |
+| POST   | `/api/projects/:code/tracker/sync` | Force one-shot sync and return sync stats plus status |
+| GET    | `/api/projects/:code/tracker/issues` | Synced issue links joined to task code/status |
 
 #### Runs, logs, sessions, prompts
 

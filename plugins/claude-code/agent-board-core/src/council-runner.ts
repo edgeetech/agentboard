@@ -76,7 +76,7 @@ export async function executeCouncilRun(
 
   for (let i = 0; i < N; i++) {
     const memberProvider = config.members[i];
-    if (memberProvider === undefined) throw new Error(`council member ${i} missing`);
+    if (memberProvider === undefined) throw new Error(`missing council member at index ${i}`);
     const isSynthesizer = i === N - 1;
 
     // Insert child row directly. We won't go through enqueue/drain — council
@@ -284,7 +284,7 @@ export async function executeCouncilRun(
   };
   try {
     const synthesizer = config.members[N - 1];
-    if (synthesizer === undefined) throw new Error('council synthesizer missing');
+    if (synthesizer === undefined) throw new Error('missing council synthesizer');
     addComment(
       db,
       taskId,
