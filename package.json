@@ -1,0 +1,54 @@
+{
+  "name": "agentboard-workspace",
+  "private": true,
+  "type": "module",
+  "description": "AgentBoard monorepo workspace during architecture refactor.",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "server",
+    "plugins/providers/*",
+    "plugins/hosts/*"
+  ],
+  "scripts": {
+    "check": "npm --prefix plugins/claude-code/agent-board-core run check",
+    "build": "npm run build:provider-bundles && npm --prefix plugins/claude-code/agent-board-core run build",
+    "build:ui": "npm --prefix apps/ui run build",
+    "package:ui": "npm --prefix apps/ui run package",
+    "build:provider-bundles": "node scripts/build-provider-bundles.mjs",
+    "check:provider-bundles": "node scripts/build-provider-bundles.mjs --check",
+    "lint": "npm --prefix plugins/claude-code/agent-board-core run lint",
+    "typecheck": "npm run typecheck:ui && npm --prefix plugins/claude-code/agent-board-core run typecheck && npm run typecheck:engine && npm run typecheck:contracts && npm run typecheck:plugin-sdk && npm run typecheck:infrastructure && npm run typecheck:providers && npm run typecheck:hosts && npm run typecheck:server",
+    "typecheck:ui": "node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p apps/ui/tsconfig.json --pretty false",
+    "check:ui-dist": "npm --prefix apps/ui run package:check",
+    "typecheck:engine": "node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p packages/engine/tsconfig.json --pretty false",
+    "typecheck:contracts": "node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p packages/contracts/tsconfig.json --pretty false",
+    "typecheck:plugin-sdk": "node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p packages/plugin-sdk/tsconfig.json --pretty false",
+    "typecheck:infrastructure": "node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p packages/infrastructure/tsconfig.json --pretty false",
+    "typecheck:providers": "node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p plugins/providers/claude/tsconfig.json --pretty false && node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p plugins/providers/codex/tsconfig.json --pretty false && node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p plugins/providers/copilot/tsconfig.json --pretty false",
+    "typecheck:hosts": "node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p plugins/hosts/claude-code/tsconfig.json --pretty false && node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p plugins/hosts/codex/tsconfig.json --pretty false && node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p plugins/hosts/copilot/tsconfig.json --pretty false",
+    "typecheck:server": "node plugins/claude-code/agent-board-core/node_modules/typescript/bin/tsc --noEmit -p server/tsconfig.json --pretty false",
+    "test": "npm --prefix plugins/claude-code/agent-board-core run test && npm run test:engine && npm run test:contracts && npm run test:plugin-sdk && npm run test:infrastructure && npm run test:providers && npm run test:hosts && npm run test:server && npm run test:host-startup",
+    "test:unit": "npm run test",
+    "test:engine": "node plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run packages/engine/test",
+    "test:plugin-sdk": "node plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run packages/plugin-sdk/test",
+    "test:infrastructure": "npm --prefix packages/infrastructure run test",
+    "test:providers": "node plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run plugins/providers/test plugins/providers/copilot/test",
+    "test:hosts": "node plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run plugins/hosts/test",
+    "test:server": "npm --prefix server run test",
+    "test:host-startup": "npm run check:provider-bundles && node scripts/check-host-startup.mjs",
+    "test:integration": "npm --prefix plugins/claude-code/agent-board-core run test",
+    "test:e2e": "playwright test",
+    "test:contracts": "npm --prefix packages/contracts run test",
+    "test:architecture": "node scripts/check-architecture.mjs",
+    "test:migrations": "npm --prefix plugins/claude-code/agent-board-core run test:migrations",
+    "verify:db-migrations": "npm run test:migrations"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "typescript": "^5.7.2"
+  }
+}

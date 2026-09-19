@@ -5,10 +5,7 @@
 // without restarting the server.
 
 import { getDb, listProjectDbs } from './project-registry.ts';
-import {
-  startSkillScanWorker,
-  type SkillScanWorkerHandle,
-} from './skill-scan-worker.ts';
+import { startSkillScanWorker, type SkillScanWorkerHandle } from './skill-scan-worker.ts';
 
 const handles = new Map<string, SkillScanWorkerHandle>();
 

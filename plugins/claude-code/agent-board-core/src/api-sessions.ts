@@ -20,10 +20,15 @@ import { listProjectDbs, getDb } from './project-registry.ts';
 
 interface SessionDbHandle {
   prepare(sql: string): {
+    run: (...args: unknown[]) => unknown;
     get: (...args: unknown[]) => unknown;
     all: (...args: unknown[]) => unknown[];
   };
   close(): void;
+}
+
+interface WritableSessionDbHandle extends SessionDbHandle {
+  exec(sql: string): void;
 }
 
 type DbOpener = (path: string) => SessionDbHandle;
@@ -101,13 +106,17 @@ interface DbFileEntry {
 // ─── directory helpers ────────────────────────────────────────────────────
 
 function sessionsDirs(): string[] {
-  const primary = process.env.AGENTBOARD_SESSION_DIR ?? join(homedir(), '.agentboard', 'sessions');
+  const primary = primarySessionsDir();
   const legacy =
     process.env.INSIGHT_SESSION_DIR ?? join(homedir(), '.claude', 'context-mode', 'sessions');
   const seen = new Set<string>();
   return [primary, legacy].filter(
     (d): d is string => Boolean(d) && !seen.has(d) && Boolean(seen.add(d)),
   );
+}
+
+function primarySessionsDir(): string {
+  return process.env.AGENTBOARD_SESSION_DIR ?? join(homedir(), '.agentboard', 'sessions');
 }
 
 // ─── lazy SQLite opener ───────────────────────────────────────────────────
@@ -137,6 +146,86 @@ async function getOpener(): Promise<DbOpener | null> {
     return null;
   })();
   return openerPromise;
+}
+
+async function getWritableOpener(): Promise<((path: string) => WritableSessionDbHandle) | null> {
+  try {
+    type BetterSqliteCtor = new (p: string) => WritableSessionDbHandle;
+    // @ts-expect-error better-sqlite3 is optional — no @types package required
+    const mod = (await import('better-sqlite3')) as { default: BetterSqliteCtor };
+    return (path: string): WritableSessionDbHandle => new mod.default(path);
+  } catch {
+    /* fall through */
+  }
+  try {
+    type NodeSqliteCtor = new (p: string) => WritableSessionDbHandle;
+    const mod = (await import('node:sqlite')) as { DatabaseSync: NodeSqliteCtor };
+    return (path: string): WritableSessionDbHandle => new mod.DatabaseSync(path);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remove session rows explicitly linked to AgentBoard runs. Only the primary
+ * AgentBoard session directory is writable; the legacy context-mode directory
+ * remains a read-only compatibility source.
+ */
+export async function deleteAgentboardSessions(sessionIds: readonly string[]): Promise<number> {
+  const ids = [...new Set(sessionIds.filter((id) => id !== ''))];
+  if (ids.length === 0) return 0;
+
+  const open = await getWritableOpener();
+  if (!open) throw new Error('sqlite adapter unavailable for session cleanup');
+
+  let deleted = 0;
+  for (const file of listDbFiles(primarySessionsDir())) {
+    let db: WritableSessionDbHandle | undefined;
+    try {
+      db = open(file.path);
+      db.prepare('PRAGMA busy_timeout = 5000').run();
+      const tables = new Set(
+        (
+          db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as {
+            name?: unknown;
+          }[]
+        )
+          .map((row) => row.name)
+          .filter((name): name is string => typeof name === 'string'),
+      );
+      if (!tables.has('session_meta')) continue;
+
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const before = db
+          .prepare(
+            `SELECT COUNT(*) AS count FROM session_meta WHERE session_id IN (${ids.map(() => '?').join(',')})`,
+          )
+          .get(...ids) as { count?: unknown } | undefined;
+        for (const table of ['session_events', 'session_resume', 'session_meta']) {
+          if (!tables.has(table)) continue;
+          const stmt = db.prepare(`DELETE FROM ${table} WHERE session_id = ?`);
+          for (const id of ids) stmt.run(id);
+        }
+        db.exec('COMMIT');
+        deleted += typeof before?.count === 'number' ? before.count : 0;
+      } catch (error) {
+        try {
+          db.exec('ROLLBACK');
+        } catch {
+          /* preserve the original cleanup error */
+        }
+        throw error;
+      }
+    } finally {
+      try {
+        db?.close();
+      } catch {
+        /* best effort */
+      }
+    }
+  }
+  return deleted;
 }
 
 // ─── utilities ────────────────────────────────────────────────────────────

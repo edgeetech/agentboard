@@ -2,8 +2,11 @@ import { readFileSync } from 'node:fs';
 
 import { describe, it, expect } from 'vitest';
 
-
-import { buildRolePrompt, renderPromptTemplate, renderSystemPrompt } from '../src/prompt-builder.ts';
+import {
+  buildRolePrompt,
+  renderPromptTemplate,
+  renderSystemPrompt,
+} from '../src/prompt-builder.ts';
 
 const baseTask = {
   id: 'task-1',

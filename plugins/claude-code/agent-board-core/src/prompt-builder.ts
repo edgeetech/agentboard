@@ -92,7 +92,9 @@ export async function buildRolePrompt(
   const acList = ac.map((a, i) => `${i + 1}. [${a.checked ? 'x' : ' '}] ${a.text}`);
   const recent = (comments ?? []).slice(-10).map((c) => `[${c.author_role}] ${c.body}`);
 
-  const allSkills = (skills ?? []).slice().sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const allSkills = (skills ?? [])
+    .slice()
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const skillsTruncated = allSkills.length > 50;
   const skillList = skillsTruncated ? allSkills.slice(0, 50) : allSkills;
 
@@ -179,9 +181,9 @@ export async function renderSystemPrompt(
   const ac = safeParseAc(task.acceptance_criteria_json);
   const acList = ac.map((a, i) => `${i + 1}. [${a.checked ? 'x' : ' '}] ${a.text}`);
   const recent = (comments ?? []).slice(-10).map((c) => `[${c.author_role}] ${c.body}`);
-  const allSkills = (skills ?? []).slice().sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-  );
+  const allSkills = (skills ?? [])
+    .slice()
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const skillsTruncated = allSkills.length > 50;
   const skillList = skillsTruncated ? allSkills.slice(0, 50) : allSkills;
 

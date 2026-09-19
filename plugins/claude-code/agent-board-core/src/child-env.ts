@@ -50,20 +50,36 @@ const CODEX: readonly string[] = [
   'CODEX_HOME',
 ];
 
+export interface ChildProcessEnvironmentPolicy {
+  readonly inherit: false;
+  readonly allowedKeys: readonly string[];
+}
+
+export function childProcessEnvironmentPolicy(
+  extraKeys: readonly string[] = [],
+): ChildProcessEnvironmentPolicy {
+  return {
+    inherit: false,
+    allowedKeys: [
+      ...new Set([
+        ...UNIVERSAL,
+        ...CLAUDE,
+        ...COPILOT,
+        ...CODEX,
+        ...extraKeys,
+        ...(platform() === 'win32' ? WINDOWS : POSIX),
+      ]),
+    ],
+  };
+}
+
 export function buildChildEnv(
   base: NodeJS.ProcessEnv = process.env,
   extraKeys: readonly string[] = [],
 ): Record<string, string> {
-  const keys = [
-    ...UNIVERSAL,
-    ...CLAUDE,
-    ...COPILOT,
-    ...CODEX,
-    ...extraKeys,
-    ...(platform() === 'win32' ? WINDOWS : POSIX),
-  ];
+  const policy = childProcessEnvironmentPolicy(extraKeys);
   const out: Record<string, string> = {};
-  for (const k of new Set(keys)) {
+  for (const k of policy.allowedKeys) {
     const v = base[k];
     if (v !== undefined) out[k] = v;
   }

@@ -30,7 +30,19 @@ export type RunRole = 'pm' | 'worker' | 'reviewer';
 export type WorkflowType = 'WF1' | 'WF2';
 export type AgentProvider = 'claude' | 'github_copilot' | 'codex';
 
-export const AGENT_PROVIDERS: readonly AgentProvider[] = ['claude', 'github_copilot', 'codex'] as const;
+export const AGENT_PROVIDERS: readonly AgentProvider[] = [
+  'claude',
+  'github_copilot',
+  'codex',
+] as const;
+
+export const AGENT_PROVIDER_LIST_TEXT = AGENT_PROVIDERS.map((provider) => `"${provider}"`).join(
+  ', ',
+);
+
+export function isAgentProvider(provider: string): provider is AgentProvider {
+  return (AGENT_PROVIDERS as readonly string[]).includes(provider);
+}
 
 export interface SingleRoleConfig {
   type: 'single';

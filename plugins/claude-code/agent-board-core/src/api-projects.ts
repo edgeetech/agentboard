@@ -4,6 +4,8 @@ import { isAbsolute, resolve as pathResolve, sep } from 'node:path';
 
 import { z } from 'zod';
 
+import { validateAgentConfigInput, stringifyAgentConfig } from './agent-config.ts';
+import { deleteAgentboardSessions } from './api-sessions.ts';
 import { readConfig, writeConfig } from './config.ts';
 import type { DbHandle } from './db.ts';
 import { json, readJson } from './http-util.ts';
@@ -11,9 +13,9 @@ import { dataDir, projectDbPath, trashDir } from './paths.ts';
 import { validateCode, suggestCode } from './project-code.ts';
 import { openOrCreate, listProjectDbs, getDb, getActiveDb, closeDb } from './project-registry.ts';
 import { createProject, getProject, updateProject } from './repo.ts';
-import { validateAgentConfigInput, stringifyAgentConfig } from './agent-config.ts';
 import { latestScan, recordScan, type ScanTrigger } from './skill-repo.ts';
 import { ensureSkillScanWorker } from './skill-scan-runtime.ts';
+import { AGENT_PROVIDER_LIST_TEXT, isAgentProvider, type AgentProvider } from './types.ts';
 
 // ── Skill-scan trigger helpers ────────────────────────────────────────────────
 
@@ -49,10 +51,7 @@ function enqueueScan(db: DbHandle, projectCode: string, trigger: ScanTrigger): v
 // String form is split on \n; lines starting with `#` (after trim) and blanks
 // are dropped. Server-side validation enforces shape only — path semantics
 // (glob syntax, accidental absolute paths) are scanner concerns.
-const ScanIgnoreInput = z.union([
-  z.array(z.string().max(500)).max(200),
-  z.string().max(50_000),
-]);
+const ScanIgnoreInput = z.union([z.array(z.string().max(500)).max(200), z.string().max(50_000)]);
 
 export function normalizeScanIgnore(raw: unknown): string[] | { error: string } {
   const parsed = ScanIgnoreInput.safeParse(raw);
@@ -121,6 +120,71 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function str(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
+}
+
+export interface DeleteProjectResult {
+  trashedPath: string;
+  deletedSessions: number;
+  activeProjectCode: string | null;
+}
+
+/** Delete AgentBoard-owned project data without touching the configured repo. */
+export async function deleteProjectData(code: string): Promise<DeleteProjectResult> {
+  const normalized = code.toUpperCase();
+  const lower = normalized.toLowerCase();
+  const db = await getDb(normalized).catch(() => null);
+  if (!db) throw new Error('no such project');
+
+  const linkedSessions = (
+    db
+      .prepare(
+        `SELECT DISTINCT COALESCE(session_id, claude_session_id) AS session_id
+         FROM agent_run
+         WHERE COALESCE(session_id, claude_session_id) IS NOT NULL
+           AND COALESCE(session_id, claude_session_id) != ''`,
+      )
+      .all() as { session_id?: unknown }[]
+  )
+    .map((row) => row.session_id)
+    .filter((id): id is string => typeof id === 'string' && id !== '');
+
+  // Session cleanup happens before the project DB is detached. A failure leaves
+  // the project visible and lets the caller report a truthful failed deletion.
+  const deletedSessions = await deleteAgentboardSessions(linkedSessions);
+
+  try {
+    db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').run();
+  } catch {
+    /* ignore */
+  }
+  closeDb(normalized);
+
+  const src = projectDbPath(lower);
+  const trash = trashDir();
+  mkdirSync(trash, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const dst = `${trash}/${lower}-${ts}.db`;
+
+  try {
+    renameSync(src, dst);
+  } catch {
+    try {
+      copyFileSync(src, dst);
+      unlinkSync(src);
+    } catch (error) {
+      throw new Error(`could not trash db: ${(error as Error).message}`);
+    }
+  }
+
+  const cfg = readConfig();
+  const current = cfg.active_project_code;
+  let activeProjectCode = typeof current === 'string' && current !== '' ? current : null;
+  if (activeProjectCode?.toUpperCase() === normalized) {
+    activeProjectCode = listProjectDbs()[0]?.toUpperCase() ?? null;
+    writeConfig({ active_project_code: activeProjectCode });
+  }
+
+  return { trashedPath: dst, deletedSessions, activeProjectCode };
 }
 
 // ── Route handler ────────────────────────────────────────────────────────────
@@ -192,11 +256,8 @@ export async function handleProjects(
       json(res, 400, { error: 'workflow_type must be WF1 or WF2' });
       return;
     }
-    if (
-      typeof agent_provider === 'string' &&
-      !['claude', 'github_copilot', 'codex'].includes(agent_provider)
-    ) {
-      json(res, 400, { error: 'agent_provider must be "claude", "github_copilot", or "codex"' });
+    if (typeof agent_provider === 'string' && !isAgentProvider(agent_provider)) {
+      json(res, 400, { error: `agent_provider must be one of ${AGENT_PROVIDER_LIST_TEXT}` });
       return;
     }
     const rp = validateRepoPath(repo_path);
@@ -217,7 +278,7 @@ export async function handleProjects(
       workflow_type: workflow_type as 'WF1' | 'WF2',
       repo_path: rp.canonical,
       ...(typeof agent_provider === 'string'
-        ? { agent_provider: agent_provider as 'claude' | 'github_copilot' | 'codex' }
+        ? { agent_provider: agent_provider as AgentProvider }
         : {}),
     });
     const cfg = readConfig();
@@ -311,15 +372,15 @@ export async function handleProjects(
     }
     if ('agent_provider' in patch) {
       const ap = str(patch.agent_provider);
-      if (ap === undefined || !['claude', 'github_copilot', 'codex'].includes(ap)) {
-        json(res, 400, { error: 'agent_provider must be "claude", "github_copilot", or "codex"' });
+      if (ap === undefined || !isAgentProvider(ap)) {
+        json(res, 400, { error: `agent_provider must be one of ${AGENT_PROVIDER_LIST_TEXT}` });
         return;
       }
     }
     if ('agent_config_json' in patch) {
       const rawCfg = patch.agent_config_json;
       const v = validateAgentConfigInput(
-        typeof rawCfg === 'object' && rawCfg !== null ? rawCfg : (rawCfg as string | null),
+        typeof rawCfg === 'object' && rawCfg !== null ? rawCfg : rawCfg,
       );
       if (!v.ok) {
         json(res, 400, { error: `agent_config_json invalid: ${v.error}` });
@@ -356,7 +417,9 @@ export async function handleProjects(
       needScan = true;
     }
     if ('scan_ignore_json' in patch && Array.isArray(patch.scan_ignore_json)) {
-      const ignoreArr = (patch.scan_ignore_json as unknown[]).filter((v): v is string => typeof v === 'string');
+      const ignoreArr = (patch.scan_ignore_json as unknown[]).filter(
+        (v): v is string => typeof v === 'string',
+      );
       if (!arrEq(ignoreArr, beforeIgnore)) needScan = true;
     }
     if (needScan) enqueueScan(db, code, 'repo_path_changed');
@@ -367,52 +430,18 @@ export async function handleProjects(
 
   if (codeMatch && m === 'DELETE') {
     const code = String(codeMatch[1]);
-    const lower = code.toLowerCase();
-    const db = await getDb(code).catch(() => null);
-    if (!db) {
-      json(res, 404, { error: 'no such project' });
-      return;
-    }
-
     try {
-      db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').run();
-    } catch {
-      /* ignore */
+      const result = await deleteProjectData(code);
+      json(res, 200, {
+        ok: true,
+        trashed_path: result.trashedPath,
+        deleted_sessions: result.deletedSessions,
+        active_project_code: result.activeProjectCode,
+      });
+    } catch (error) {
+      const message = (error as Error).message;
+      json(res, message === 'no such project' ? 404 : 500, { error: message });
     }
-
-    closeDb(code);
-    const src = projectDbPath(lower);
-    const trash = trashDir();
-    try {
-      mkdirSync(trash, { recursive: true });
-    } catch {
-      /* ignore */
-    }
-    const ts = new Date().toISOString().replace(/[:.]/g, '-');
-    const dst = `${trash}/${lower}-${ts}.db`;
-
-    let trashed: string | null = null;
-    try {
-      renameSync(src, dst);
-      trashed = dst;
-    } catch {
-      try {
-        copyFileSync(src, dst);
-        unlinkSync(src);
-        trashed = dst;
-      } catch (e) {
-        json(res, 500, { error: `could not trash db: ${(e as Error).message}` });
-        return;
-      }
-    }
-
-    const cfg = readConfig();
-    const apc = cfg.active_project_code;
-    if (typeof apc === 'string' && apc.toUpperCase() === code) {
-      writeConfig({ active_project_code: null });
-    }
-
-    json(res, 200, { ok: true, trashed_path: trashed });
     return true;
   }
 

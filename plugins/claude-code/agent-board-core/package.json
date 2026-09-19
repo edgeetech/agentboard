@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node --experimental-sqlite server.ts",
     "build": "npm run typecheck && npm run build:ui",
-    "build:ui": "cd ui && vite build",
+    "build:ui": "npm --prefix ../../../apps/ui run build && npm --prefix ../../../apps/ui run package",
     "typecheck": "tsc --noEmit -p src/tsconfig.json",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
@@ -19,6 +19,7 @@
     "format:check": "prettier --check .",
     "check": "npm run typecheck && npm run lint && npm run format:check",
     "test": "vitest run",
+    "test:migrations": "vitest run test/db-migrations.test.ts",
     "test:watch": "vitest",
     "prepare": "simple-git-hooks || true"
   },
@@ -46,7 +47,7 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-unicorn": "^56.0.1",
     "lint-staged": "^15.2.10",
-    "prettier": "^3.4.1",
+    "prettier": "3.8.3",
     "simple-git-hooks": "^2.11.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

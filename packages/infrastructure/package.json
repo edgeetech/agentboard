@@ -1,0 +1,16 @@
+{
+  "name": "@agentboard/infrastructure",
+  "private": true,
+  "type": "module",
+  "description": "AgentBoard infrastructure adapters for persistence, filesystem, security, logging and trackers.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node ../../plugins/claude-code/agent-board-core/node_modules/vitest/vitest.mjs run test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0"
+  }
+}

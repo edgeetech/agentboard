@@ -1,0 +1,19 @@
+# Repository-wide defaults.
+* @asozyurt
+
+# Product areas introduced by the architecture refactor.
+/apps/ui/ @asozyurt
+/packages/engine/ @asozyurt
+/packages/contracts/ @asozyurt
+/packages/infrastructure/ @asozyurt
+/packages/plugin-sdk/ @asozyurt
+/server/ @asozyurt
+
+# Provider and host integrations.
+/plugins/hosts/ @asozyurt
+/plugins/providers/ @asozyurt
+/plugins/claude-code/ @asozyurt
+
+# AI definitions and refactoring documentation.
+/ai/ @asozyurt
+/docs/refactoring/ @asozyurt

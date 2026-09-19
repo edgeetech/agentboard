@@ -20,7 +20,7 @@
     "EXECUTING": {
       "reminders": [
         "Match focus order to visual order.",
-        "Don't ship a spinner when you can ship a useful skeleton."
+        "Do not ship a spinner when you can ship a useful skeleton."
       ],
       "reviewDimensions": ["focus order", "loading affordance"]
     },

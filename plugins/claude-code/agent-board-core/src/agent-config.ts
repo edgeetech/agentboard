@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import {
   AGENT_PROVIDERS,
   type AgentConfig,
@@ -32,7 +33,7 @@ export const agentConfigSchema = z
   .strict();
 
 export function parseAgentConfig(raw: unknown): AgentConfig | null {
-  if (raw == null) return null;
+  if (raw === null || raw === undefined) return null;
   if (typeof raw === 'string') {
     if (raw.trim() === '') return null;
     try {
@@ -61,13 +62,18 @@ export interface ResolveContext {
 
 export function resolveRoleConfig(role: RunRole, ctx: ResolveContext): RoleConfig {
   const fromTask = ctx.taskConfig?.[role];
-  if (fromTask) return fromTask;
+  if (fromTask !== undefined) return cloneRoleConfig(fromTask);
+
   const fromProject = ctx.projectConfig?.[role];
-  if (fromProject) return fromProject;
-  if (ctx.legacyTaskOverride) {
-    return { type: 'single', provider: ctx.legacyTaskOverride };
-  }
+  if (fromProject !== undefined) return cloneRoleConfig(fromProject);
+
+  if (ctx.legacyTaskOverride !== null) return { type: 'single', provider: ctx.legacyTaskOverride };
   return { type: 'single', provider: ctx.legacyProjectProvider };
+}
+
+function cloneRoleConfig(config: RoleConfig): RoleConfig {
+  if (config.type === 'single') return { type: 'single', provider: config.provider };
+  return { type: 'council', members: [...config.members] };
 }
 
 export function describeRoleConfig(cfg: RoleConfig): string {
@@ -86,8 +92,10 @@ export function providerLabel(p: AgentProvider): string {
   }
 }
 
-export function validateAgentConfigInput(raw: unknown): { ok: true; value: AgentConfig | null } | { ok: false; error: string } {
-  if (raw == null || raw === '') return { ok: true, value: null };
+export function validateAgentConfigInput(
+  raw: unknown,
+): { ok: true; value: AgentConfig | null } | { ok: false; error: string } {
+  if (raw === null || raw === undefined || raw === '') return { ok: true, value: null };
   let candidate: unknown = raw;
   if (typeof raw === 'string') {
     try {
@@ -98,7 +106,10 @@ export function validateAgentConfigInput(raw: unknown): { ok: true; value: Agent
   }
   const result = agentConfigSchema.safeParse(candidate);
   if (!result.success) {
-    return { ok: false, error: result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+    return {
+      ok: false,
+      error: result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+    };
   }
   return { ok: true, value: result.data };
 }

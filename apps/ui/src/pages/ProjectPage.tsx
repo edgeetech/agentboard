@@ -1,0 +1,288 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import { api, setProjectCode } from '../api';
+import type { AgentConfig, AgentProvider } from '../api';
+import { AgentConfigEditor } from '../components/AgentConfigEditor';
+import { rememberLastProject } from '../hooks/useCurrentProjectCode';
+
+function parseProjectAgentConfig(raw: unknown): AgentConfig {
+  if (raw == null) return {};
+  if (typeof raw === 'string') {
+    if (raw.trim() === '') return {};
+    try {
+      const v = JSON.parse(raw) as AgentConfig;
+      return v && typeof v === 'object' ? v : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof raw === 'object') return raw as AgentConfig;
+  return {};
+}
+
+export function ProjectPage() {
+  const { t } = useTranslation();
+  const { projectCode } = useParams<{ projectCode: string }>();
+  const navigate = useNavigate();
+  const projUpper = projectCode ? projectCode.toUpperCase() : null;
+  const qc = useQueryClient();
+  const list = useQuery({ queryKey: ['projects-list'], queryFn: api.listProjects });
+  const active = useQuery({
+    queryKey: ['active-project'],
+    queryFn: api.activeProject,
+    enabled: !projUpper,
+  });
+  const project = projUpper
+    ? (list.data?.projects.find((p: any) => p.code === projUpper) || null)
+    : active.data?.project;
+
+  const [name, setName] = useState('');
+  const [description, setDesc] = useState('');
+  const [repoPath, setRepoPath] = useState('');
+  const [maxPar, setMaxPar] = useState<number>(2);
+  const [agentProvider, setAgentProvider] = useState<AgentProvider>('claude');
+  const [agentConfig, setAgentConfig] = useState<AgentConfig>({});
+  const [scanIgnore, setScanIgnore] = useState<string[]>([]);
+  const [scanIgnoreText, setScanIgnoreText] = useState('');
+  const [saved, setSaved] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+
+  useEffect(() => {
+    if (!project) return;
+    setName(project.name);
+    setDesc(project.description || '');
+    setRepoPath(project.repo_path);
+    setMaxPar(project.max_parallel);
+    setAgentProvider(project.agent_provider || 'claude');
+    setAgentConfig(parseProjectAgentConfig(project.agent_config_json));
+    const ig: string[] = Array.isArray(project.scan_ignore_json) ? project.scan_ignore_json : [];
+    setScanIgnore(ig);
+    setScanIgnoreText(ig.join('\n'));
+  }, [project?.version]);
+
+  const mut = useMutation({
+    mutationFn: () => project
+      ? api.updateProject(project.code, {
+          version: project.version,
+          name: name.trim(),
+          description: description.trim(),
+          repo_path: repoPath.trim(),
+          max_parallel: Number(maxPar),
+          agent_provider: agentProvider,
+          agent_config_json: Object.keys(agentConfig).length > 0 ? agentConfig : null,
+          scan_ignore_json: scanIgnore,
+        })
+      : Promise.reject(new Error('no project')),
+    onSuccess: () => {
+      setSaved(t('common.saved'));
+      qc.invalidateQueries({ queryKey: ['active-project'] });
+      qc.invalidateQueries({ queryKey: ['projects-list'] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      setTimeout(() => { setSaved(null); }, 2500);
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: () => project
+      ? api.deleteProject(project.code)
+      : Promise.reject(new Error('no project')),
+    onSuccess: async () => {
+      rememberLastProject(null);
+      setProjectCode(null);
+      qc.removeQueries({ queryKey: ['tasks'] });
+      qc.removeQueries({ queryKey: ['task'] });
+      qc.removeQueries({ queryKey: ['board'] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['active-project'] }),
+        qc.invalidateQueries({ queryKey: ['projects-list'] }),
+      ]);
+      navigate('/', { replace: true });
+    },
+  });
+
+  if (list.isLoading || (!projUpper && active.isLoading)) return <div className="center"><div className="spinner" /></div>;
+  if (!project) {
+    return (
+      <div className="empty-state">
+        <h3>{t('project.none_title', 'No active project')}</h3>
+        <p>{t('project.none_body', 'Create a project from the Board page first.')}</p>
+      </div>
+    );
+  }
+
+  const projectScanIgnore: string[] = Array.isArray(project.scan_ignore_json)
+    ? project.scan_ignore_json
+    : [];
+  const projectAgentConfig = parseProjectAgentConfig(project.agent_config_json);
+  const dirty =
+    name.trim() !== project.name ||
+    description.trim() !== (project.description || '') ||
+    repoPath.trim() !== project.repo_path ||
+    Number(maxPar) !== project.max_parallel ||
+    agentProvider !== (project.agent_provider || 'claude') ||
+    JSON.stringify(agentConfig) !== JSON.stringify(projectAgentConfig) ||
+    scanIgnore.join('\n') !== projectScanIgnore.join('\n');
+
+  return (
+    <div className="project-page">
+      <div className="page-head">
+        <div className="title">
+          <h1>
+            {t('project.title', 'Project')}{' '}
+            <span className="code">{project.code}</span>
+          </h1>
+          <span className="subtitle">
+            {t('project.subtitle', 'Settings, repo path, and dispatch limits.')}
+          </span>
+        </div>
+      </div>
+
+      <form
+        className="form-card project-form"
+        onSubmit={(e) => { e.preventDefault(); if (dirty) mut.mutate(); }}
+      >
+        <div className="project-form-scroll">
+          <div className="form-grid project-form-grid">
+            <label>
+              {t('settings.code')}
+              <input value={project.code} disabled />
+              <small className="muted">{t('settings.code_locked')}</small>
+            </label>
+            <label>
+              {t('settings.workflow')}
+              <input value={project.workflow_type} disabled />
+              <small className="muted">{t('settings.workflow_locked')}</small>
+            </label>
+            <label>
+              {t('settings.name')}
+              <input value={name} onChange={e => { setName(e.target.value); }} required />
+            </label>
+            <label className="project-field-wide">
+              {t('settings.description')}
+              <textarea value={description} onChange={e => { setDesc(e.target.value); }} rows={3} />
+            </label>
+            <label className="project-field-wide">
+              {t('settings.repo_path')}
+              <input value={repoPath} onChange={e => { setRepoPath(e.target.value); }} required />
+              <small className="muted">{t('settings.repo_hint')}</small>
+            </label>
+            <label>
+              {t('settings.max_parallel')}
+              <input
+                type="number" min={1} max={3}
+                value={maxPar}
+                onChange={e => { setMaxPar(parseInt(e.target.value, 10) || 1); }}
+              />
+              <small className="muted">{t('settings.max_parallel_hint')}</small>
+            </label>
+            <fieldset className="project-field-wide">
+              <legend>{t('settings.agent_config', 'Agent configuration')}</legend>
+              <AgentConfigEditor
+                value={agentConfig}
+                onChange={setAgentConfig}
+                fallbackProvider={agentProvider}
+              />
+            </fieldset>
+            <label className="project-field-wide">
+              {t('settings.scan_ignore', 'Skip these folders')}
+              <textarea
+                value={scanIgnoreText}
+                onChange={e => {
+                  const v = e.target.value;
+                  setScanIgnoreText(v);
+                  setScanIgnore(
+                    v.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#')),
+                  );
+                }}
+                placeholder={'legacy\nTax/__archived_maintenance\n# comments are ok'}
+                rows={5}
+              />
+              <small className="muted">{t('settings.scan_ignore_hint')}</small>
+            </label>
+          </div>
+          <section className="project-danger-zone" aria-labelledby="delete-project-title">
+            <div>
+              <h2 id="delete-project-title">
+                {t('project.delete_title', 'Delete Project')}
+              </h2>
+              <p>
+                {t(
+                  'project.delete_warning',
+                  'Remove this project and its AgentBoard tasks and sessions. The repository directory and its contents will not be changed.',
+                )}
+              </p>
+            </div>
+            {!deleteConfirmOpen ? (
+              <button
+                type="button"
+                className="danger"
+                onClick={() => {
+                  deleteMut.reset();
+                  setDeleteConfirmOpen(true);
+                }}
+              >
+                {t('project.delete_action', 'Delete Project')}
+              </button>
+            ) : (
+              <div className="project-delete-confirm" role="dialog" aria-modal="false">
+                <label htmlFor="project-delete-confirmation">
+                  {t('project.delete_confirm', 'Type “{{name}}” to confirm deletion.', {
+                    name: project.name,
+                  })}
+                </label>
+                <input
+                  id="project-delete-confirmation"
+                  value={deleteConfirmation}
+                  onChange={(event) => { setDeleteConfirmation(event.target.value); }}
+                  autoComplete="off"
+                  autoFocus
+                />
+                <div className="project-delete-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteConfirmOpen(false);
+                      setDeleteConfirmation('');
+                      deleteMut.reset();
+                    }}
+                    disabled={deleteMut.isPending}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={deleteConfirmation !== project.name || deleteMut.isPending}
+                    onClick={() => { deleteMut.mutate(); }}
+                  >
+                    {deleteMut.isPending
+                      ? t('project.deleting', 'Deleting…')
+                      : t('project.delete_confirm_action', 'Permanently delete project')}
+                  </button>
+                </div>
+                {deleteMut.isError && (
+                  <div className="err" role="alert">{deleteMut.error.message}</div>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+        <div className="form-actions project-form-actions">
+          <button
+            type="submit"
+            className="primary"
+            disabled={!dirty || mut.isPending || !name.trim() || !repoPath.trim()}
+          >
+            {t('common.save')}
+          </button>
+          {saved && <span className="muted" role="status">{saved}</span>}
+          {mut.isError && <div className="err">{(mut.error).message}</div>}
+        </div>
+      </form>
+    </div>
+  );
+}

@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "composite": true,
+    "rootDir": "../../../",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts", "../../../packages/plugin-sdk/src/host.ts"]
+}

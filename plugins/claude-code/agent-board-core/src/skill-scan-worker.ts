@@ -12,12 +12,7 @@ import {
   type SkillScanStartedPayload,
 } from './event-bus.ts';
 import { getProject } from './repo.ts';
-import {
-  claimNextQueuedScan,
-  type ScanRow,
-  updateScan,
-  upsertSkillIndex,
-} from './skill-repo.ts';
+import { claimNextQueuedScan, type ScanRow, updateScan, upsertSkillIndex } from './skill-repo.ts';
 import { scanSkills } from './skill-scanner.ts';
 import { isoNow } from './time.ts';
 

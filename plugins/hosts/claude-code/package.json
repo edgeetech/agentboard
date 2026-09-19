@@ -1,0 +1,12 @@
+{
+  "name": "@agentboard/host-claude-code",
+  "private": true,
+  "type": "module",
+  "description": "Target Claude Code host integration package scaffold.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}
