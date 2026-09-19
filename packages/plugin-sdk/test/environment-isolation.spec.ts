@@ -163,15 +163,24 @@ function filterEnvironment(
   optional: string[],
   denied: string[],
 ): Record<string, string> {
-  // First check denied patterns
-  const error = validateDenied(env, denied);
-  if (error) {
-    throw new Error(error);
+  const allowed = [...required, ...optional];
+
+  // This is allowlist-based: only declared keys ever make it into the
+  // output, so anything matching a denied pattern is already excluded
+  // unless the manifest itself is misconfigured (declares a var that also
+  // matches its own denied patterns). Checking the whole ambient `env` here
+  // instead would throw on unrelated vars any real process happens to carry
+  // (e.g. GITHUB_TOKEN on every GitHub Actions runner) even though they'd
+  // never be forwarded to the plugin.
+  const misconfigured = validateDenied(
+    Object.fromEntries(allowed.map((key) => [key, env[key]])),
+    denied,
+  );
+  if (misconfigured) {
+    throw new Error(misconfigured);
   }
 
   const filtered: Record<string, string> = {};
-  const allowed = [...required, ...optional];
-
   for (const key of allowed) {
     if (env[key]) {
       filtered[key] = env[key]!;

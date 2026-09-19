@@ -91,14 +91,7 @@ export interface OrchestrationLogger {
  * No-op logger (default).
  * Used when no observability infrastructure is configured.
  */
-export const noOpLogger: OrchestrationLogger = {
-  runClaimed: undefined,
-  executionStarted: undefined,
-  executionCompleted: undefined,
-  executionFailed: undefined,
-  retryScheduled: undefined,
-  rateLimited: undefined,
-};
+export const noOpLogger: OrchestrationLogger = {};
 
 /**
  * Create a logger that delegates to multiple backends.

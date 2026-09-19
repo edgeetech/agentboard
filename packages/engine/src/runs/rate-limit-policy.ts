@@ -53,7 +53,9 @@ export class RateLimitPolicy {
       retryAfterMs: null,
       lastLimitedAt: existing.lastLimitedAt,
       limitCount: existing.limitCount,
-      limitedUntilEpochMs: null, // Rate limit cleared, no longer limited
+      // 0, not null: null means "limited indefinitely" (see recordLimit with
+      // no retryAfterMs) and isLimited() treats it as always-limited.
+      limitedUntilEpochMs: 0,
     });
   }
 

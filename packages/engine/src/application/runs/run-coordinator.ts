@@ -300,7 +300,6 @@ function isTimeoutError(error: unknown): boolean {
 function isTimeoutMessage(message: string): boolean {
   return isTimeoutErrorFromMessage(message);
 }
-}
 
 function isCancellationError(
   error: unknown,

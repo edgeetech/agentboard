@@ -117,8 +117,6 @@ export interface OrchestrationTelemetry {
  */
 export const defaultOTelTelemetry: OrchestrationTelemetry = {
   tracer: new NoOpTracer(),
-  metrics: undefined,
-  contextPropagation: undefined,
 };
 
 /**
