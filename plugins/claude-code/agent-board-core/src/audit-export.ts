@@ -176,7 +176,7 @@ function redact(value: unknown): unknown {
   }
   return value
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
-    .replace(/\b(?:gho|ghp|github_pat|sk|xox[abprs])_[A-Za-z0-9_:-]{12,}\b/g, '[REDACTED]')
+    .replace(/\b(?:gho|ghp|github_pat|sk|xox[abprs])[_-][A-Za-z0-9_:-]{12,}\b/g, '[REDACTED]')
     .replace(/\b[A-Fa-f0-9]{48,}\b/g, '[REDACTED]');
 }
 

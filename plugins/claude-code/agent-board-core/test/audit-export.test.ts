@@ -13,6 +13,10 @@ describe('task audit export', () => {
        VALUES ('C1', 'TASK1', 'human', 'Bearer abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef', '2026-01-01T00:01:00Z')`,
     ).run();
     db.prepare(
+      `INSERT INTO comment(id, task_id, author_role, body, created_at)
+       VALUES ('C2', 'TASK1', 'human', 'leaked key: sk-ant-api03-abcdefghijklmnopqrstuvwxyz', '2026-01-01T00:01:30Z')`,
+    ).run();
+    db.prepare(
       `INSERT INTO task_history(id, task_id, from_status, to_status, by_role, at)
        VALUES ('H1', 'TASK1', 'todo', 'agent_working', 'human', '2026-01-01T00:02:00Z')`,
     ).run();
@@ -46,7 +50,7 @@ describe('task audit export', () => {
     const json = JSON.stringify(audit);
     const markdown = renderTaskAuditMarkdown(audit);
 
-    expect(audit.comments).toHaveLength(1);
+    expect(audit.comments).toHaveLength(2);
     expect(audit.history).toHaveLength(1);
     expect(audit.file_paths).toHaveLength(1);
     expect(audit.agent_runs).toHaveLength(1);
@@ -56,9 +60,11 @@ describe('task audit export', () => {
     expect(audit.costs.total_usd).toBe(0.25);
     expect(json).not.toContain('abcdefabcdef');
     expect(json).not.toContain('secret-value');
+    expect(json).not.toContain('sk-ant-api03-abcdefghijklmnopqrstuvwxyz');
     expect(markdown).toContain('## Agent Runs');
     expect(markdown).toContain('## Tracker Links');
     expect(markdown).not.toContain('abcdefabcdef');
     expect(markdown).not.toContain('secret-value');
+    expect(markdown).not.toContain('sk-ant-api03-abcdefghijklmnopqrstuvwxyz');
   });
 });

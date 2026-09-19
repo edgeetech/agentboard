@@ -224,6 +224,29 @@ describe('tracker sync', () => {
     expect(comments[0]?.body).toContain('TRACKER_SYNC');
   });
 
+  it('reconciles a linked issue that dropped out of the active-state candidate list', async () => {
+    // Real adapters' fetchCandidateIssues() only queries active_states, so an
+    // issue that moved to a terminal state stops being returned there — it
+    // must be picked up via fetchIssueStatesByIds() instead.
+    const db = await makeDb();
+    const cfg = getTrackerConfig(db, 'P1');
+    if (!cfg) throw new Error('missing tracker config');
+
+    await syncTracker(db, 'TST', cfg, () => fakeTracker([issue()]));
+    const done = await syncTracker(db, 'TST', cfg, () => ({
+      fetchCandidateIssues: () => Promise.resolve([]),
+      fetchIssuesByStates: () => Promise.resolve([]),
+      fetchIssueStatesByIds: (ids: string[]) =>
+        Promise.resolve(ids.includes('EXT-1') ? [issue({ state: 'Done' })] : []),
+      createComment: () => Promise.resolve(),
+      updateIssueState: () => Promise.resolve(),
+    }));
+
+    expect(done).toMatchObject({ ok: true, tasks_completed: 1 });
+    const task = db.prepare(`SELECT status FROM task LIMIT 1`).get() as { status: string };
+    expect(task.status).toBe('done');
+  });
+
   it('records missing credential env vars in persisted tracker status', async () => {
     const db = await makeDb();
     const cfg = getTrackerConfig(db, 'P1');

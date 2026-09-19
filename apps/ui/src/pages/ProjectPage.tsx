@@ -89,7 +89,20 @@ export function ProjectPage() {
 
   useEffect(() => {
     const tracker = trackerQ.data?.tracker;
-    if (!tracker) return;
+    if (!tracker) {
+      // Switching to a project with no tracker configured — clear the form
+      // instead of leaving the previous project's values in place (which
+      // would silently create a copy of them on Save).
+      setTrackerKind('github');
+      setTrackerEndpoint('');
+      setTrackerEnv('');
+      setTrackerSlug('');
+      setTrackerActiveStates('Todo\nIn Progress');
+      setTrackerTerminalStates('Done\nCancelled\nCanceled\nDuplicate');
+      setTrackerAssignee('');
+      setTrackerInterval(30_000);
+      return;
+    }
     setTrackerKind(tracker.kind);
     setTrackerEndpoint(tracker.endpoint ?? '');
     setTrackerEnv(tracker.api_key_env_var);
@@ -98,7 +111,7 @@ export function ProjectPage() {
     setTrackerTerminalStates((tracker.terminal_states ?? []).join('\n'));
     setTrackerAssignee(tracker.assignee ?? '');
     setTrackerInterval(tracker.poll_interval_ms);
-  }, [trackerQ.data?.tracker?.updated_at]);
+  }, [project?.code, trackerQ.data?.tracker?.updated_at]);
 
   const mut = useMutation({
     mutationFn: () => project

@@ -229,6 +229,7 @@ export async function syncTracker(
     const retryAfterMs = typeof err.retryAfterMs === 'number' ? err.retryAfterMs : undefined;
     return failedSync(db, cfg, errorMessage(e), status, retryAfterMs);
   }
+  issues = issues.concat(await fetchStaleLinkedIssues(db, project, cfg, tracker, issues));
 
   const stats = syncIssues(db, project, cfg, issues);
   recordTrackerPollState(db, project.id, {
@@ -267,6 +268,43 @@ function failedSync(
     tasks_completed: 0,
     skipped_terminal: 0,
   };
+}
+
+// fetchCandidateIssues() only queries active_states, so an issue that moved
+// to a terminal state externally silently drops out of the result and its
+// AgentBoard task is left open forever. Reconcile by re-fetching the current
+// state of every still-open linked issue that the candidate fetch didn't
+// already return.
+async function fetchStaleLinkedIssues(
+  db: DbHandle,
+  project: ProjectRow,
+  cfg: TrackerConfigRow,
+  tracker: Tracker,
+  candidates: TrackerIssue[],
+): Promise<TrackerIssue[]> {
+  const candidateIds = new Set(candidates.map((issue) => issue.id));
+  const linked = db
+    .prepare(
+      `
+      SELECT ti.external_id AS external_id
+      FROM tracker_issue ti
+      JOIN task t ON t.id = ti.task_id
+      WHERE ti.project_id=? AND ti.tracker_kind=? AND t.status != 'done'
+    `,
+    )
+    .all(project.id, cfg.kind) as { external_id: string }[];
+  const staleIds = linked
+    .map((row) => row.external_id)
+    .filter((id) => !candidateIds.has(id));
+  if (staleIds.length === 0) return [];
+
+  try {
+    return await tracker.fetchIssueStatesByIds(staleIds);
+  } catch {
+    // Best-effort: a reconciliation failure shouldn't fail the whole sync —
+    // the next poll retries.
+    return [];
+  }
 }
 
 function toAdapterConfig(cfg: TrackerConfigRow): AdapterTrackerConfigRow {
