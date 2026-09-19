@@ -293,9 +293,7 @@ async function fetchStaleLinkedIssues(
     `,
     )
     .all(project.id, cfg.kind) as { external_id: string }[];
-  const staleIds = linked
-    .map((row) => row.external_id)
-    .filter((id) => !candidateIds.has(id));
+  const staleIds = linked.map((row) => row.external_id).filter((id) => !candidateIds.has(id));
   if (staleIds.length === 0) return [];
 
   try {

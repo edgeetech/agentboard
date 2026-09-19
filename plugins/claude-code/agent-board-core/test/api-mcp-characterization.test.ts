@@ -221,7 +221,7 @@ describe('MCP callTool characterization', () => {
     const result = callTool(db, 'record_tool', {
       run_token: 'run-token',
       tool: 'Bash',
-      target: 'git push origin main',
+      target: 'git commit -m wip',
     }) as { decision: string; reason: string | null };
     const activities = listActivities();
     const payload = JSON.parse(String(activities[0]?.payload)) as Row;
@@ -237,9 +237,30 @@ describe('MCP callTool characterization', () => {
     });
     expect(payload).toMatchObject({
       tool: 'Bash',
-      target: 'git push origin main',
+      target: 'git commit -m wip',
       phase: 'EXECUTING',
       reason: 'git writes blocked unless project.allow_git',
     });
+  });
+  it('blocks destructive commands unless the project opts in', () => {
+    insertTask('T2', 'TST-2', 'Destructive tool task');
+    insertRun({
+      id: 'R2',
+      taskId: 'T2',
+      role: 'worker',
+      status: 'running',
+      queuedAt: '2026-01-01T00:02:00Z',
+      token: 'run-token-2',
+      phase: 'EXECUTING',
+    });
+
+    const result = callTool(db, 'record_tool', {
+      run_token: 'run-token-2',
+      tool: 'Bash',
+      target: 'rm -rf src',
+    }) as { decision: string; reason: string | null };
+
+    expect(result.decision).toBe('block');
+    expect(result.reason).toContain('allow_destructive_tools');
   });
 });

@@ -59,6 +59,7 @@ import { listSkills } from './skill-repo.ts';
 import { Supervisor } from './supervisor.ts';
 import { isoNow } from './time.ts';
 import { allowlistFor } from './tool-allowlist.ts';
+import { destructiveToolsAllowed, projectDestructiveFlag } from './tool-policy.ts';
 import { inheritedUserMcpServers } from './user-mcps.ts';
 import { workspaceManager } from './workspace-manager.ts';
 
@@ -388,7 +389,13 @@ async function tryClaimAndRun(
     }
   };
 
-  const allowedTools = allowlistFor(run.role);
+  // Deny-first: destructive shell categories are only granted when the project
+  // opts in (agent_config_json.allow_destructive_tools, or ~/.agentboard/config.json).
+  const allowDestructive = destructiveToolsAllowed(
+    project.code,
+    projectDestructiveFlag(project.agent_config_json),
+  );
+  const allowedTools = allowlistFor(run.role, { allowDestructive });
   const runtimePolicy = buildProviderRuntimePolicy({
     cwd: workspacePath,
     maxTurns: DEFAULT_MAX_TURNS,

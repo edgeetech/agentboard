@@ -50,6 +50,11 @@ import type { AgentRunRow } from './repo.ts';
 import { getSkillByName, listSkills } from './skill-repo.ts';
 import { levenshtein } from './string-distance.ts';
 import { isoNow } from './time.ts';
+import {
+  destructiveToolsAllowed,
+  evaluateToolPolicy,
+  projectDestructiveFlag,
+} from './tool-policy.ts';
 import type { AssigneeRole, Phase, RunStatus, TaskStatus } from './types.ts';
 
 // ── JSON-RPC types ────────────────────────────────────────────────────────────
@@ -747,21 +752,19 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
         history: [],
       };
       const policy = toolPolicy(phaseRow.phase);
-      const blocked = policy.blockedTools.includes(tool);
       const project = getProject(db);
       const projRec = project as unknown as Record<string, unknown> | undefined;
-      const allow_git = projRec?.allow_git;
-      const isGitWrite =
-        tool === 'Bash' &&
-        /^\s*git\s+(commit|push|checkout|reset|rebase|merge|tag|cherry-pick)\b/.test(target ?? '');
-      const gitBlocked = isGitWrite && allow_git !== true;
-
-      const decision = blocked || gitBlocked ? 'block' : 'allow';
-      const reason: string | null = blocked
-        ? `phase ${phaseRow.phase} forbids ${tool}`
-        : gitBlocked
-          ? 'git writes blocked unless project.allow_git'
-          : null;
+      const { decision, reason } = evaluateToolPolicy({
+        tool,
+        target,
+        blockedTools: policy.blockedTools,
+        phase: phaseRow.phase,
+        allowGit: projRec?.allow_git === true || projRec?.allow_git === 1,
+        allowDestructive: destructiveToolsAllowed(
+          typeof projRec?.code === 'string' ? projRec.code : null,
+          projectDestructiveFlag(projRec?.agent_config_json),
+        ),
+      });
       const evt = recordActivity(db, {
         run_id: run.id,
         task_id: run.task_id,
