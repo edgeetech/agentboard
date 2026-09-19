@@ -1,0 +1,13 @@
+{
+  "name": "@agentboard/plugin-sdk",
+  "private": true,
+  "type": "module",
+  "description": "AgentBoard plugin author SDK, registry helpers and contract test utilities.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run test"
+  }
+}

@@ -1,24 +1,31 @@
-// Inner phase machine: governs a single agent_run from DISCOVERY → DONE.
-// Outer task FSM (state-machine.mjs) is unaffected.
-//
-// Push model (noskills-style): the agent calls `abrun.next` which reads this
-// module, then `abrun.advance(to)` which validates here. The agent never
-// decides phases silently.
-
-import type { DiscoveryMode, ExitVerb, Phase, RunRole } from './types.ts';
-import { PHASES } from './types.ts';
+import { PHASES, type DiscoveryMode, type ExitVerb, type Phase, type RunRole } from './types.ts';
 
 interface PhaseRule {
   readonly from: Phase;
   readonly to: Phase;
-  /** Roles allowed to advance into `to`. */
   readonly byRoles: readonly RunRole[];
-  /** Modes for which this transition is valid. `null` = all modes. */
   readonly modes: readonly DiscoveryMode[] | null;
 }
 
+export interface AdvanceResult {
+  ok: boolean;
+  reason?: string;
+}
+
+export interface BehavioralBlock {
+  readonly phase: Phase;
+  readonly focus: string;
+  readonly must: readonly string[];
+  readonly mustNot: readonly string[];
+}
+
+export interface PhasePolicy {
+  blockWrites: boolean;
+  blockedTools: string[];
+}
+
+// Packaging-safe compatibility mirror of the extracted Engine run phase policy.
 const RULES: readonly PhaseRule[] = [
-  // Standard forward path (full mode)
   {
     from: 'DISCOVERY',
     to: 'REFINEMENT',
@@ -29,59 +36,8 @@ const RULES: readonly PhaseRule[] = [
   { from: 'PLANNING', to: 'EXECUTING', byRoles: ['pm', 'worker'], modes: null },
   { from: 'EXECUTING', to: 'VERIFICATION', byRoles: ['worker'], modes: null },
   { from: 'VERIFICATION', to: 'DONE', byRoles: ['worker', 'reviewer'], modes: null },
-
-  // ship-fast: collapse DISCOVERY → PLANNING (skip REFINEMENT)
   { from: 'DISCOVERY', to: 'PLANNING', byRoles: ['pm', 'worker'], modes: ['ship-fast'] },
-
-  // revisit re-entry (handled by exitWith below; rules here are forward-only)
 ];
-
-export interface AdvanceResult {
-  ok: boolean;
-  reason?: string;
-}
-
-export function canAdvance(
-  from: Phase,
-  to: Phase,
-  byRole: RunRole,
-  mode: DiscoveryMode,
-): AdvanceResult {
-  if (from === to) return { ok: false, reason: 'no-op transition' };
-  if (from === 'DONE') return { ok: false, reason: 'already DONE' };
-
-  const match = RULES.find(
-    (r) =>
-      r.from === from &&
-      r.to === to &&
-      r.byRoles.includes(byRole) &&
-      (r.modes === null || r.modes.includes(mode)),
-  );
-  if (!match) return { ok: false, reason: `no rule: ${from} → ${to} by ${byRole} (mode=${mode})` };
-  return { ok: true };
-}
-
-export function nextPhase(from: Phase, mode: DiscoveryMode): Phase | null {
-  if (from === 'DONE') return null;
-  if (mode === 'ship-fast') {
-    if (from === 'DISCOVERY') return 'PLANNING';
-    if (from === 'PLANNING') return 'EXECUTING';
-    if (from === 'EXECUTING') return 'VERIFICATION';
-    if (from === 'VERIFICATION') return 'DONE';
-    return null;
-  }
-  const idx = PHASES.indexOf(from);
-  if (idx < 0 || idx >= PHASES.length - 1) return null;
-  return PHASES[idx + 1] ?? null;
-}
-
-/** Behavioral push: what the agent must / must-not do in this phase. */
-export interface BehavioralBlock {
-  readonly phase: Phase;
-  readonly focus: string;
-  readonly must: readonly string[];
-  readonly mustNot: readonly string[];
-}
 
 const BEHAVIORAL: Record<Phase, BehavioralBlock> = {
   DISCOVERY: {
@@ -124,7 +80,7 @@ const BEHAVIORAL: Record<Phase, BehavioralBlock> = {
     must: [
       'Edit only files listed in PLANNING (advance back to PLANNING if scope grows)',
       'Keep each commit focused; reference acceptance criteria',
-      'Record TODOs as debt via abrun.record_debt — never silently skip',
+      'Record TODOs as debt via abrun.record_debt - never silently skip',
     ],
     mustNot: [
       'Add unrelated refactors',
@@ -150,27 +106,55 @@ const BEHAVIORAL: Record<Phase, BehavioralBlock> = {
   },
 };
 
+const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'Bash'];
+
+export function canAdvance(
+  from: Phase,
+  to: Phase,
+  byRole: RunRole,
+  mode: DiscoveryMode,
+): AdvanceResult {
+  if (from === to) return { ok: false, reason: 'no-op transition' };
+  if (from === 'DONE') return { ok: false, reason: 'already DONE' };
+
+  const match = RULES.find(
+    (rule) =>
+      rule.from === from &&
+      rule.to === to &&
+      rule.byRoles.includes(byRole) &&
+      (rule.modes === null || rule.modes.includes(mode)),
+  );
+  if (!match) return { ok: false, reason: `no rule: ${from} -> ${to} by ${byRole} (mode=${mode})` };
+  return { ok: true };
+}
+
+export function nextPhase(from: Phase, mode: DiscoveryMode): Phase | null {
+  if (from === 'DONE') return null;
+  if (mode === 'ship-fast') {
+    if (from === 'DISCOVERY') return 'PLANNING';
+    if (from === 'PLANNING') return 'EXECUTING';
+    if (from === 'EXECUTING') return 'VERIFICATION';
+    if (from === 'VERIFICATION') return 'DONE';
+    return null;
+  }
+  const index = PHASES.indexOf(from);
+  if (index < 0 || index >= PHASES.length - 1) return null;
+  return PHASES[index + 1] ?? null;
+}
+
 export function behavioralFor(phase: Phase): BehavioralBlock {
   return BEHAVIORAL[phase];
 }
 
-/** Apply an exit verb. Returns next phase (or null = run terminates). */
 export function exitWith(_from: Phase, verb: ExitVerb): Phase | null {
   switch (verb) {
     case 'cancel':
     case 'wontfix':
-      return null; // terminate run; outer FSM handles task disposition
+      return null;
     case 'revisit':
       return 'DISCOVERY';
   }
 }
-
-export interface PhasePolicy {
-  blockWrites: boolean;
-  blockedTools: string[];
-}
-
-const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'Bash'];
 
 export function toolPolicy(phase: Phase): PhasePolicy {
   if (phase === 'DISCOVERY' || phase === 'REFINEMENT') {

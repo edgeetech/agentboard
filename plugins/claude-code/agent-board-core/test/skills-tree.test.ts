@@ -4,7 +4,7 @@ import {
   buildSkillsTree,
   collectExpandedBranchIds,
   type SkillTreeSkill,
-} from '../ui/src/pages/skillsTree.ts';
+} from '../../../../apps/ui/src/pages/skillsTree.ts';
 
 function mkSkill(
   overrides: Partial<SkillTreeSkill> &

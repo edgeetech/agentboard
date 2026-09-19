@@ -62,13 +62,18 @@ export interface ResolveContext {
 
 export function resolveRoleConfig(role: RunRole, ctx: ResolveContext): RoleConfig {
   const fromTask = ctx.taskConfig?.[role];
-  if (fromTask) return fromTask;
+  if (fromTask !== undefined) return cloneRoleConfig(fromTask);
+
   const fromProject = ctx.projectConfig?.[role];
-  if (fromProject) return fromProject;
-  if (ctx.legacyTaskOverride) {
-    return { type: 'single', provider: ctx.legacyTaskOverride };
-  }
+  if (fromProject !== undefined) return cloneRoleConfig(fromProject);
+
+  if (ctx.legacyTaskOverride !== null) return { type: 'single', provider: ctx.legacyTaskOverride };
   return { type: 'single', provider: ctx.legacyProjectProvider };
+}
+
+function cloneRoleConfig(config: RoleConfig): RoleConfig {
+  if (config.type === 'single') return { type: 'single', provider: config.provider };
+  return { type: 'council', members: [...config.members] };
 }
 
 export function describeRoleConfig(cfg: RoleConfig): string {

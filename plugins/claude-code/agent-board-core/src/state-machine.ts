@@ -12,7 +12,8 @@ export interface TransitionResult {
   reason?: string;
 }
 
-const WF1: TransitionRule[] = [
+// Packaging-safe compatibility mirror of the extracted Engine task workflow.
+const WF1: readonly TransitionRule[] = [
   { from: 'todo', to: 'agent_working', allowedAssignees: ['worker'], byRoles: ['pm', 'human'] },
   { from: 'todo', to: 'agent_review', allowedAssignees: ['reviewer'], byRoles: ['pm', 'reviewer'] },
   {
@@ -51,7 +52,7 @@ const WF1: TransitionRule[] = [
   },
 ];
 
-const WF2: TransitionRule[] = [
+const WF2: readonly TransitionRule[] = [
   { from: 'todo', to: 'agent_working', allowedAssignees: ['worker'], byRoles: ['pm', 'human'] },
   {
     from: 'agent_working',
@@ -67,7 +68,7 @@ const WF2: TransitionRule[] = [
 ];
 
 export function transitions(wf: WorkflowType): TransitionRule[] {
-  return wf === 'WF1' ? WF1 : WF2;
+  return [...(wf === 'WF1' ? WF1 : WF2)];
 }
 
 export function canTransition(
@@ -77,23 +78,21 @@ export function canTransition(
   assignee: AssigneeRole | null,
   by: ActorRole,
 ): TransitionResult {
-  const rules = transitions(wf).filter((t) => t.from === from && t.to === to);
-  const r = rules[0];
-  if (!r) return { ok: false, reason: `no rule ${wf}: ${from} → ${to}` };
-  if (
-    assignee === null ||
-    !(r.allowedAssignees as readonly (AssigneeRole | null)[]).includes(assignee)
-  ) {
+  const rule = transitions(wf).find(
+    (transition) => transition.from === from && transition.to === to,
+  );
+  if (!rule) return { ok: false, reason: `no rule ${wf}: ${from} -> ${to}` };
+  if (assignee === null || !rule.allowedAssignees.includes(assignee)) {
     return { ok: false, reason: `assignee_role '${String(assignee)}' not allowed for ${to}` };
   }
-  if (!r.byRoles.includes(by)) {
-    return { ok: false, reason: `role '${by}' cannot perform ${from} → ${to}` };
+  if (!rule.byRoles.includes(by)) {
+    return { ok: false, reason: `role '${by}' cannot perform ${from} -> ${to}` };
   }
   return { ok: true };
 }
 
 export function allowedPrevStatuses(wf: WorkflowType, to: TaskStatus): TaskStatus[] {
   return transitions(wf)
-    .filter((t) => t.to === to)
-    .map((t) => t.from);
+    .filter((transition) => transition.to === to)
+    .map((transition) => transition.from);
 }

@@ -1,20 +1,31 @@
+import type * as NodeFs from 'node:fs';
+
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+import { claudeProviderManifest } from '../../../../plugins/providers/claude/src/index.ts';
+import { codexProviderManifest } from '../../../../plugins/providers/codex/src/index.ts';
+import { copilotProviderManifest } from '../../../../plugins/providers/copilot/src/index.ts';
 import type { AgentProvider } from '../src/types.ts';
+import { AGENT_PROVIDERS } from '../src/types.ts';
 
 vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal();
-  return { ...(actual as object), appendFileSync: vi.fn() };
+  const actual = await importOriginal<typeof NodeFs>();
+  return { ...actual, appendFileSync: vi.fn() };
 });
 
 const { appendFileSync } = await import('node:fs');
 const { maybeRegisterInteractiveHistory, providerFor } =
   await import('../src/provider-registry.ts');
 
+const targetProviderManifests = [
+  claudeProviderManifest,
+  codexProviderManifest,
+  copilotProviderManifest,
+] as const;
+
 describe('providerFor', () => {
   it('returns adapter with matching provider for each known provider', () => {
-    const providers: AgentProvider[] = ['claude', 'github_copilot', 'codex'];
-    for (const p of providers) {
+    for (const p of AGENT_PROVIDERS) {
       expect(providerFor(p).provider).toBe(p);
     }
   });
@@ -24,6 +35,35 @@ describe('providerFor', () => {
       const cmd = providerFor(p).resume.command('sess-abc', '/repo');
       expect(typeof cmd).toBe('string');
       expect(cmd).toContain('sess-abc');
+    }
+  });
+
+  it('declares runtime controls each provider enforces or ignores', () => {
+    expect(providerFor('claude').enforcement.enforced).toContain('maxTurns');
+    expect(providerFor('claude').enforcement.enforced).toContain('allowedTools');
+
+    expect(providerFor('github_copilot').enforcement.intentionallyIgnored).toContain('maxTurns');
+    expect(providerFor('github_copilot').enforcement.notes.join(' ')).toMatch(/approveAll/);
+
+    expect(providerFor('codex').enforcement.enforced).toContain('filesystemSandbox');
+    expect(providerFor('codex').enforcement.intentionallyIgnored).toContain('approvalMode');
+    expect(providerFor('codex').enforcement.notes.join(' ')).toMatch(/fixed approve-for-me/);
+  });
+
+  it('keeps target provider manifests aligned with legacy runtime adapters', () => {
+    expect(targetProviderManifests.map((manifest) => manifest.id).sort()).toEqual(
+      [...AGENT_PROVIDERS].sort(),
+    );
+
+    for (const manifest of targetProviderManifests) {
+      const adapter = providerFor(manifest.id);
+      expect(adapter.enforcement.enforced).toEqual(manifest.enforcement.enforced);
+      expect(adapter.enforcement.intentionallyIgnored).toEqual(
+        manifest.enforcement.intentionallyIgnored,
+      );
+      expect(manifest.capabilities.resume).toBe(
+        adapter.resume.interactive ? 'interactive' : 'none',
+      );
     }
   });
 

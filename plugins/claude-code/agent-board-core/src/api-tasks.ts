@@ -24,7 +24,7 @@ import {
 import type { TaskRow } from './repo.ts';
 import { isoNow } from './time.ts';
 import type { AgentProvider, AssigneeRole, RunRole, TaskStatus } from './types.ts';
-import { AGENT_PROVIDERS } from './types.ts';
+import { AGENT_PROVIDERS, isAgentProvider } from './types.ts';
 
 const MIN_REJECT_COMMENT = 10;
 
@@ -145,11 +145,11 @@ async function handleRunAgent(
   // One-shot per-run provider override (forces single-provider for this run).
   let providerOverride: AgentProvider | null = null;
   if (typeof rawBody.provider === 'string' && rawBody.provider.length > 0) {
-    if (!(AGENT_PROVIDERS as readonly string[]).includes(rawBody.provider)) {
+    if (!isAgentProvider(rawBody.provider)) {
       json(res, 400, { error: `provider must be one of ${AGENT_PROVIDERS.join(', ')}` });
       return;
     }
-    providerOverride = rawBody.provider as AgentProvider;
+    providerOverride = rawBody.provider;
   }
 
   // use_council=true forces council using the resolved role config; if it

@@ -5,11 +5,22 @@ import { readFileSync, statSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { parseAgentConfig, resolveRoleConfig } from './agent-config.ts';
-import type { TokenUsage } from './agent-runner.ts';
 import { emitActivity } from './api-activity.ts';
 import { executeCouncilRun } from './council-runner.ts';
 import type { DbHandle } from './db.ts';
 import { agentboardBus } from './event-bus.ts';
+import {
+  drainQueuedRunsOnce,
+  reapProjectRunsOnce,
+  startRunWorker,
+} from './generated/server-bootstrap.mjs';
+import {
+  recordRunFinished,
+  recordRunRetry,
+  recordRunStarted,
+  runOutcomeForTerminalStatus,
+  type RunOutcome,
+} from './observability.ts';
 import { logPath } from './paths.ts';
 import { recordActivity, setRunPhase } from './phase-repo.ts';
 import { checkPostflight } from './postflight.ts';
@@ -18,7 +29,12 @@ import { getDb, listProjectDbs } from './project-registry.ts';
 import type { SkillContext } from './prompt-builder.ts';
 import { buildRolePrompt, renderSystemPrompt } from './prompt-builder.ts';
 import { maybeRegisterInteractiveHistory, providerFor } from './provider-registry.ts';
-import type { ProviderRuntimeContext, SdkMcpServer } from './provider-runtime.ts';
+import {
+  buildProviderRuntimePolicy,
+  type ProviderRuntimeContext,
+  type SdkMcpServer,
+} from './provider-runtime.ts';
+import type { TokenUsage } from './provider-types.ts';
 import { RateLimitTracker } from './rate-limit-tracker.ts';
 import type { AgentRunRow, ProjectRow, TaskRow } from './repo.ts';
 import {
@@ -101,55 +117,50 @@ export function startExecutor({ port, serverToken }: ExecutorParams): void {
       console.error(`[executor] drain loop crashed (restart #${n}):`, (e as Error | null)?.message);
     },
   });
-  drainSupervisor.start(async () => {
-    for (;;) {
-      await drain({ port, serverToken }).catch(logErr);
-      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
-    }
-  });
-
-  setInterval(() => {
-    void reap().catch(logErr);
-  }, REAPER_SWEEP_MS).unref();
+  startRunWorker(
+    { drainIntervalMs: 1_000, reaperIntervalMs: REAPER_SWEEP_MS },
+    {
+      startSupervised: (work) => {
+        drainSupervisor.start(work);
+      },
+      drain: () => drain({ port, serverToken }),
+      reap,
+      delay: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+      scheduleInterval: (work, intervalMs) => setInterval(work, intervalMs),
+      reportError: logErr,
+    },
+  );
 }
 
 async function reap(): Promise<void> {
-  for (const code of listProjectDbs()) {
-    try {
-      const db = await getDb(code);
-      const orphaned = reapOrphans(db, REAPER_TIMEOUT_MS);
-      if (orphaned.length > 0) {
-        console.error(`[reaper] ${code} marked ${orphaned.length} runs as failed (timeout)`);
-      }
-    } catch (e) {
-      console.error(`[reaper] error for project ${code}: ${String((e as Error | null)?.message)}`);
-      logErr(e);
-    }
-  }
+  await reapProjectRunsOnce(REAPER_TIMEOUT_MS, schedulerPorts({ port: 0, serverToken: '' }));
 }
 
 async function drain({ port, serverToken }: ExecutorParams): Promise<void> {
-  const projects = listProjectDbs();
-  for (const code of projects) {
-    try {
-      const db = await getDb(code);
-      const project = getProject(db);
-      if (!project) continue;
-      const running = runningCount(db);
-      const budget = project.max_parallel - running;
-      if (budget <= 0) continue;
-      const queued = listQueuedRunsForProject(db).slice(0, budget);
-      for (const q of queued) {
-        // Fire-and-forget: each run is an independent async task so the drain loop
-        // is never blocked waiting for an agent (which can take minutes).
-        void tryClaimAndRun(db, project, q, { port, serverToken }).catch((e: unknown) => {
-          logErr(e);
-        });
-      }
-    } catch (e) {
-      logErr(e);
-    }
-  }
+  await drainQueuedRunsOnce(schedulerPorts({ port, serverToken }));
+}
+
+function schedulerPorts(params: ExecutorParams) {
+  return {
+    listProjectCodes: listProjectDbs,
+    openProject: getDb,
+    getProject,
+    maxParallel: (project: ProjectRow) => project.max_parallel,
+    runningCount,
+    listQueuedRuns: listQueuedRunsForProject,
+    dispatchRun: (db: DbHandle, project: ProjectRow, run: AgentRunRow) =>
+      tryClaimAndRun(db, project, run, params),
+    reapOrphans,
+    reportError: (error: unknown, code: string) => {
+      console.error(
+        `[executor] scheduler error for project ${code}: ${String((error as Error | null)?.message)}`,
+      );
+      logErr(error);
+    },
+    reportReaped: (code: string, count: number) => {
+      console.error(`[reaper] ${code} marked ${count} runs as failed (timeout)`);
+    },
+  };
 }
 
 async function tryClaimAndRun(
@@ -302,6 +313,14 @@ async function tryClaimAndRun(
   }
 
   agentboardBus.emit('run.started', { runId: run.id, role: run.role, taskCode: task.code });
+  const runStartedAt = Date.now();
+  let runOutcomeRecorded = false;
+  const recordOutcome = (outcome: RunOutcome): void => {
+    if (runOutcomeRecorded) return;
+    runOutcomeRecorded = true;
+    recordRunFinished(outcome, Date.now() - runStartedAt);
+  };
+  recordRunStarted();
 
   // Emit a typed activity event for the live board feed.
   try {
@@ -369,6 +388,15 @@ async function tryClaimAndRun(
     }
   };
 
+  const allowedTools = allowlistFor(run.role);
+  const runtimePolicy = buildProviderRuntimePolicy({
+    cwd: workspacePath,
+    maxTurns: DEFAULT_MAX_TURNS,
+    allowedTools,
+    mcpServers,
+    ...(sdkHooks !== undefined ? { hooks: sdkHooks } : {}),
+  });
+
   const baseOpts: ProviderRuntimeContext = {
     runId: run.id,
     role: run.role,
@@ -376,8 +404,10 @@ async function tryClaimAndRun(
     systemPrompt,
     cwd: workspacePath,
     maxTurns: DEFAULT_MAX_TURNS,
-    allowedTools: allowlistFor(run.role),
+    allowedTools,
     mcpServers,
+    limits: runtimePolicy.limits,
+    sandbox: runtimePolicy.sandbox,
     ...(sdkHooks !== undefined ? { hooks: sdkHooks } : {}),
     abortController,
     rateLimiter,
@@ -447,7 +477,10 @@ async function tryClaimAndRun(
     }
 
     const live = getRun(db, run.id);
-    if (live?.status !== 'running') return; // already reaped
+    if (live?.status !== 'running') {
+      recordOutcome(runOutcomeForTerminalStatus(live?.status) ?? 'failed');
+      return; // already finished through MCP or reaped
+    }
 
     if (result.status === 'completed') {
       // Agent ended its SDK turn naturally without calling mcp__abrun__finish_run
@@ -475,6 +508,7 @@ async function tryClaimAndRun(
           logErr(e);
         }
         finishRun(db, run.id, 'failed', null, `postflight: ${pfErr} (no finish_run called)`);
+        recordOutcome('postflight_failed');
         const retry = scheduleRetry(db as unknown as DatabaseSync, {
           runId: run.id,
           taskId: task.id,
@@ -482,6 +516,7 @@ async function tryClaimAndRun(
           attempt: run.attempt,
           error: `postflight: ${pfErr}`,
         });
+        recordRunRetry(retry.scheduled);
         if (!retry.scheduled) {
           agentboardBus.emit('run.failed', {
             runId: run.id,
@@ -499,16 +534,19 @@ async function tryClaimAndRun(
         }
       } else {
         finishRun(db, run.id, 'succeeded', null, null);
+        recordOutcome('completed');
         agentboardBus.emit('run.completed', { runId: run.id, role: run.role, taskCode: task.code });
       }
     } else if (result.status === 'cancelled') {
       finishRun(db, run.id, 'failed', null, `cancelled: ${result.error ?? ''}`);
+      recordOutcome('cancelled');
       agentboardBus.emit('run.failed', { runId: run.id, error: result.error });
     } else {
       const err = result.error ?? 'unknown error';
       finishRun(db, run.id, 'failed', null, err);
       const isTimeout = result.errorKind === 'timeout' || /Turn timed out after \d+ms/.test(err);
       if (isTimeout) {
+        recordOutcome('timeout');
         agentboardBus.emit('run.failed', {
           runId: run.id,
           error: err,
@@ -523,6 +561,8 @@ async function tryClaimAndRun(
           attempt: run.attempt,
           error: err,
         });
+        recordOutcome('failed');
+        recordRunRetry(retry.scheduled);
         if (!retry.scheduled) {
           agentboardBus.emit('run.failed', { runId: run.id, error: err, permanent: true });
         } else {
@@ -539,6 +579,7 @@ async function tryClaimAndRun(
       const isTimeout =
         (e as Error | null)?.name === 'TimeoutError' || /Turn timed out after \d+ms/.test(err);
       if (isTimeout) {
+        recordOutcome('timeout');
         agentboardBus.emit('run.failed', {
           runId: run.id,
           error: err,
@@ -553,6 +594,8 @@ async function tryClaimAndRun(
           attempt: run.attempt,
           error: err,
         });
+        recordOutcome('failed');
+        recordRunRetry(retry.scheduled);
         if (!retry.scheduled) {
           agentboardBus.emit('run.failed', { runId: run.id, error: err, permanent: true });
         } else {

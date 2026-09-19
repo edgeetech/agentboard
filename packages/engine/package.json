@@ -1,0 +1,13 @@
+{
+  "name": "@agentboard/engine",
+  "private": true,
+  "type": "module",
+  "description": "Provider-agnostic AgentBoard domain and application engine.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "echo \"engine tests not migrated yet\""
+  }
+}

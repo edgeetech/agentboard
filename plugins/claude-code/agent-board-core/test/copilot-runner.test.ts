@@ -1,19 +1,39 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ExtendedSessionLog } from '../src/copilot-runner.ts';
-import { CopilotRunner } from '../src/copilot-runner.ts';
+import { CopilotRunner, type CopilotSessionConfig } from '../src/copilot-runner.ts';
+import type { ProviderSessionLog } from '../src/provider-types.ts';
 import { RateLimitTracker } from '../src/rate-limit-tracker.ts';
+
+function createCopilotSdkMock() {
+  const createSession = vi.fn();
+  const stop = vi.fn();
+  const CopilotClient = vi.fn(function CopilotClient() {
+    return { createSession, stop };
+  });
+  return {
+    approveAll: {},
+    CopilotClient,
+    createSession,
+    stop,
+  };
+}
 
 describe('CopilotRunner', () => {
   let rateLimiter: RateLimitTracker;
-  let mockSessionLog: ExtendedSessionLog;
+  let mockSessionLog: ProviderSessionLog;
+  let copilotSdkMock: ReturnType<typeof createCopilotSdkMock>;
 
   beforeEach(() => {
     rateLimiter = new RateLimitTracker();
     /* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars */
     const noop = (_obj: Record<string, unknown>, _msg: string): void => {};
     /* eslint-enable @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars */
-    mockSessionLog = { info: noop, error: noop };
+    mockSessionLog = { info: noop, error: noop, warn: noop };
+    copilotSdkMock = createCopilotSdkMock();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('constructor and initialization', () => {
@@ -99,6 +119,156 @@ describe('CopilotRunner', () => {
       // This is a documentation test confirming the contract
       expect(expectedFields.status).toContain('completed');
       expect(expectedFields.status).toContain('failed');
+    });
+  });
+
+  describe('SDK execution', () => {
+    it('creates a Copilot session with normalized MCP servers and maps usage events', async () => {
+      let capturedConfig: CopilotSessionConfig | null = null;
+      const session = {
+        sessionId: 'copilot-session-1',
+        sendAndWait: vi.fn(() => {
+          capturedConfig?.onEvent?.({
+            type: 'session.model_change',
+            data: { newModel: 'gpt-5-mini' },
+          });
+          capturedConfig?.onEvent?.({
+            type: 'assistant.usage',
+            data: {
+              model: 'gpt-5-mini',
+              inputTokens: 11,
+              outputTokens: 17,
+              cacheWriteTokens: 3,
+              cacheReadTokens: 5,
+            },
+          });
+          return Promise.resolve();
+        }),
+        abort: vi.fn(() => Promise.resolve()),
+        disconnect: vi.fn(() => Promise.resolve()),
+      };
+
+      copilotSdkMock.createSession.mockImplementation((config: CopilotSessionConfig) => {
+        capturedConfig = config;
+        return Promise.resolve(session);
+      });
+
+      const runner = new CopilotRunner({
+        runId: 'run-sdk',
+        role: 'worker',
+        prompt: 'Implement it',
+        systemPrompt: 'System text',
+        cwd: '/repo',
+        maxTurns: 60,
+        allowedTools: 'bash,read',
+        mcpServers: {
+          browser: {
+            type: 'http',
+            url: 'https://mcp.example.test',
+            headers: { Authorization: 'Bearer test' },
+            tools: ['search'],
+          },
+          files: {
+            command: 'node',
+            args: ['server.js', 42],
+            env: { FILES: '1' },
+            cwd: '/repo/tools',
+          },
+          inProcess: { tool: 'callable' },
+        },
+        abortController: new AbortController(),
+        rateLimiter,
+        sessionLog: mockSessionLog,
+        turnTimeoutMs: 5_000,
+        loadCopilotSdk: () => Promise.resolve(copilotSdkMock),
+      });
+
+      const result = await runner.run();
+      const config = capturedConfig as CopilotSessionConfig | null;
+
+      expect(copilotSdkMock.CopilotClient).toHaveBeenCalledTimes(1);
+      expect(config).toMatchObject({
+        workingDirectory: '/repo',
+        systemMessage: { mode: 'replace', content: 'System text' },
+        mcpServers: {
+          browser: {
+            type: 'http',
+            url: 'https://mcp.example.test',
+            headers: { Authorization: 'Bearer test' },
+            tools: ['search'],
+          },
+          files: {
+            type: 'stdio',
+            command: 'node',
+            args: ['server.js', '42'],
+            env: { FILES: '1' },
+            cwd: '/repo/tools',
+            tools: ['*'],
+          },
+        },
+      });
+      expect(config?.onPermissionRequest).toBe(copilotSdkMock.approveAll);
+      expect(session.sendAndWait).toHaveBeenCalledWith({ prompt: 'Implement it' }, 5_000);
+      expect(session.disconnect).toHaveBeenCalledTimes(1);
+      expect(copilotSdkMock.stop).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({
+        status: 'completed',
+        sessionId: 'copilot-session-1',
+        model: 'gpt-5-mini',
+        totalCostUsd: null,
+        usage: {
+          input_tokens: 11,
+          output_tokens: 17,
+          cache_creation_tokens: 3,
+          cache_read_tokens: 5,
+        },
+      });
+    });
+
+    it('aborts the Copilot session when the turn timeout fires', async () => {
+      let rejectSend: ((error: Error) => void) | null = null;
+      const session = {
+        sessionId: 'copilot-timeout-session',
+        sendAndWait: vi.fn(
+          () =>
+            new Promise<void>((_resolve, reject) => {
+              rejectSend = reject;
+            }),
+        ),
+        abort: vi.fn(() => {
+          rejectSend?.(new Error('aborted by timeout'));
+          return Promise.resolve();
+        }),
+        disconnect: vi.fn(() => Promise.resolve()),
+      };
+      copilotSdkMock.createSession.mockResolvedValue(session);
+
+      const runner = new CopilotRunner({
+        runId: 'run-timeout',
+        role: 'worker',
+        prompt: 'Wait forever',
+        systemPrompt: '',
+        cwd: '/repo',
+        maxTurns: 60,
+        allowedTools: '',
+        mcpServers: {},
+        abortController: new AbortController(),
+        rateLimiter,
+        sessionLog: mockSessionLog,
+        turnTimeoutMs: 1,
+        loadCopilotSdk: () => Promise.resolve(copilotSdkMock),
+      });
+
+      const result = await runner.run();
+
+      expect(result.status).toBe('failed');
+      expect(result.errorKind).toBe('timeout');
+      expect(result.sessionId).toBe('copilot-timeout-session');
+      expect(session.abort).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(session.disconnect).toHaveBeenCalledTimes(1);
+        expect(copilotSdkMock.stop).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });
