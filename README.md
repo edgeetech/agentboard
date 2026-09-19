@@ -8,8 +8,8 @@
 [![License](https://img.shields.io/badge/license-Elastic--2.0-f59e0b?style=for-the-badge)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522-22c55e?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d946ef?style=for-the-badge)](https://docs.claude.com/en/docs/claude-code)
-[![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-10a37f?style=for-the-badge)](AGENTS.md#supported-agents--status-table)
-[![Copilot CLI](https://img.shields.io/badge/Copilot%20CLI-supported-0d9488?style=for-the-badge)](AGENTS.md#copilot-cli-setup)
+[![Codex CLI](https://img.shields.io/badge/Codex%20CLI-shim-a16207?style=for-the-badge)](AGENTS.md#supported-agents--status-table)
+[![Copilot CLI](https://img.shields.io/badge/Copilot%20CLI-install--only-a16207?style=for-the-badge)](AGENTS.md#copilot-cli-setup)
 [![Local-only](https://img.shields.io/badge/cloud-zero-ef4444?style=for-the-badge)]()
 
 **🟦 PM** → **🟧 Worker** → **🟪 Reviewer** → **🟩 Human** — a real workflow, not a chat window.
@@ -17,6 +17,63 @@
 **Agents:** [Claude Code](CLAUDE.md) · [Codex CLI](AGENTS.md#supported-agents--status-table) · [Copilot CLI](AGENTS.md#copilot-cli-setup) · [More coming](AGENTS.md#supported-agents--status-table)
 
 </div>
+
+---
+
+## 📋 Project status — read this first
+
+> **Status: maintenance mode, personal-first.** AgentBoard is source-available (Elastic
+> License 2.0) with no commercial claim behind it. It is built primarily for its author's own day-to-day use, and it is
+> maintained at that level: bugs that block the author get fixed, everything else is
+> best-effort. It should install and run on your own machine with your own credentials, and
+> the sections below are an honest account of what you will actually get. There is no
+> roadmap commitment, no SLA, and no support channel beyond GitHub issues.
+
+### ✅ What works
+
+- **Claude Code plugin** — install, `/agentboard:open`, board UI, task CRUD, dispatch.
+- **PM → Worker → Reviewer → Human flow** — the four-lane workflow is implemented end to end
+  and is the path that gets daily use.
+- **Server-enforced approval gate** — a task cannot leave review without an explicit human
+  approval recorded server-side; the agent cannot self-approve.
+- **3-reject ceiling** — after three rejections a task is forced to human hands instead of
+  looping the agent forever. Also server-enforced.
+- **Per-run cost accounting** — token usage and USD cost are recorded per run and rolled up
+  per task/project from a local pricing table.
+- **Local-only data** — everything lives in `~/.agentboard` (SQLite). Nothing is uploaded.
+
+### 🚧 Experimental / incomplete
+
+- **Codex plugin** (`plugins/codex/`) is a **shim**. It reuses the Claude Code plugin's server
+  and MCP entrypoint, so the Claude Code plugin must be installed for it to work. It is not a
+  standalone Codex integration.
+- **Copilot plugin** (`plugins/copilot/`) provides **install/uninstall only** — it wires MCP
+  config, repo hooks and an `AGENTS.md` stanza. There is no Copilot-side UI or workflow
+  parity with the Claude Code plugin.
+- **Council mode** (multi-agent debate) is implemented but lightly exercised. Expect rough
+  edges and cost surprises.
+- **Tracker sync** (Jira/GitHub issue linking) is lightly used and not hardened against
+  API changes on the tracker side.
+- **Skills scanner** is lightly used; scan results are informational, not load-bearing.
+
+### ⚠️ Known risks
+
+- **The agent runs in your real repository.** There is no worktree or container isolation:
+  the worker's cwd is `project.repo_path` itself. Edits land on real files in your working
+  tree. Commit or stash before dispatching anything you care about.
+- **Bash is allowlisted, not sandboxed.** The default allowlist is deny-first — `rm`,
+  `git push`, `git reset`, `git checkout --`, `git clean` and `gh` are **not** granted. Set
+  `allow_destructive_tools: true` on a project to restore them; doing so gives the agent the
+  ability to delete files and rewrite history in that repo. See
+  [Destructive-tool opt-in](#-destructive-tool-opt-in).
+- **The pricing table is a hardcoded snapshot, last sourced `2026-04-30`.** Costs shown are
+  estimates against list prices and will drift as providers change pricing. An unknown model
+  id is reported as uncosted, not as `$0`.
+- **First run performs `npm install`.** The marketplace ships source only; the first
+  `/agentboard:open` after install or upgrade runs `npm install` (or `bun install`) inside the
+  cached `agent-board-core/` directory, which needs network access and takes ~20 s.
+- **The UI end-to-end suite is not in CI.** It is a documented manual step — see
+  [Manual checks](#-manual-checks).
 
 ---
 
@@ -332,6 +389,68 @@ claude --resume <session-id>
 ```
 
 Paste in a terminal at the project repo and you're inside the agent's session. If the run is still live, the button reads **Join in CLI** and warns you that resume may fork the session.
+
+---
+
+## 🛡️ Destructive-tool opt-in
+
+Worker and reviewer agents get a fixed `--allowedTools` list (see
+`plugins/claude-code/agent-board-core/src/tool-allowlist.ts`). The default is **deny-first**:
+the following are *not* granted, because the agent's cwd is your real repository and a bad
+call is unrecoverable.
+
+| Category | Denied by default | Why |
+|---|---|---|
+| `Bash(rm:*)` | ✅ denied | deletes real files in your working tree |
+| `Bash(git push:*)` | ✅ denied | publishes to a remote you may not want touched |
+| `Bash(git reset:*)` | ✅ denied | destroys uncommitted work / rewrites history |
+| `Bash(git checkout:*)`, `Bash(git clean:*)` | ✅ denied | `git checkout --` and `git clean -fd` discard work |
+| `Bash(gh:*)` | ✅ denied | can open/merge/close PRs and issues on GitHub |
+
+Everything else the agent needs to actually work — `npm`/`node`/`pytest`/`cargo`/…, `git add`,
+`git commit`, `git status|diff|log|show`, `git switch`, `ls`/`cat`/`find`/`mkdir`/`mv`/`cp` —
+is allowed. `git switch` covers the legitimate branch-change case that `git checkout` used to.
+
+### Turning them back on
+
+Per project, set `allow_destructive_tools` to `true`:
+
+```jsonc
+// ~/.agentboard/config.json
+{
+  "projects": {
+    "MYPROJ": { "allow_destructive_tools": true }
+  }
+}
+```
+
+or on the project row / run config (`allow_destructive_tools: true`). When enabled, the denied
+categories above are added back to the allowlist for that project's runs, and the server-side
+tool gate stops blocking them. **Only do this on a repo you are willing to lose.**
+
+The same decision is enforced *server-side* for every provider (Claude, Codex, Copilot,
+council) via the `record_tool` policy gate — the allowlist is defence in depth, not the only
+line. If the gate cannot be evaluated (server unreachable, malformed response), the tool is
+**denied** and the reason is logged.
+
+---
+
+## 🧪 Manual checks
+
+CI runs lint, format, typecheck, unit tests, DB-migration verification, architecture
+boundaries, generated-bundle freshness and the UI dist check on every push — all of them
+gating (no `continue-on-error`).
+
+The **Playwright UI e2e suite is not in CI** and must be run manually before a release:
+
+```bash
+npm run build:ui
+npm run test:e2e          # spins the server + drives the board in a headless browser
+```
+
+It is excluded because it needs a real server, a real browser and a writable `~/.agentboard`,
+which makes it slow and flaky on the three-OS CI matrix. Treat a green `test:e2e` as a
+release gate, not a per-commit one.
 
 ---
 
