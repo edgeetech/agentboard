@@ -8,9 +8,17 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 const DATA_DIR = process.env.AGENTBOARD_DATA_DIR || join(homedir(), '.agentboard');
-const CFG = safeJson(join(DATA_DIR, 'config.json')) || {};
-const BASE = `http://127.0.0.1:${CFG.port || 0}`;
-const AUTH = CFG.token ? `Bearer ${CFG.token}` : '';
+const CFG_PATH = join(DATA_DIR, 'config.json');
+
+// Read fresh on every call instead of once at module load. This process is
+// spawned by Claude Code at session start and kept alive for the whole
+// session, but the core server (booted by the SessionStart hook) can still
+// be installing deps / starting up at that point, or its port can change
+// across a respawn. Caching config.json at import time meant a session
+// could get stuck believing the server was never running.
+function loadConfig() {
+  return safeJson(CFG_PATH) || {};
+}
 
 const TOOLS = [
   {
@@ -146,34 +154,41 @@ function send(obj) { process.stdout.write(JSON.stringify(obj) + '\n'); }
 // ───────── Tool dispatch ─────────
 
 async function callTool(name, args) {
-  if (!CFG.port) throw new Error('agentboard server not running — run /agentboard:open first');
+  const cfg = loadConfig();
+  if (!cfg.port) {
+    const hint = cfg.boot_error ? ` Last boot error: ${cfg.boot_error}` : '';
+    throw new Error(
+      `agentboard server not running yet.${hint} It boots automatically in the background ` +
+      `on session start (first run installs deps, ~20s) — wait a moment and retry, or run /agentboard:doctor.`
+    );
+  }
 
   switch (name) {
     case 'list_projects':
-      return (await call('GET', '/api/projects/list'));
+      return (await call(cfg, 'GET', '/api/projects/list'));
     case 'get_board':
-      return (await call('GET', '/api/tasks'));
+      return (await call(cfg, 'GET', '/api/tasks'));
     case 'get_task':
-      return (await call('GET', `/api/tasks/${enc(args.task_code)}`));
+      return (await call(cfg, 'GET', `/api/tasks/${enc(args.task_code)}`));
     case 'list_comments':
-      return (await call('GET', `/api/tasks/${enc(args.task_code)}`)).comments;
+      return (await call(cfg, 'GET', `/api/tasks/${enc(args.task_code)}`)).comments;
     case 'list_runs':
-      return (await call('GET', `/api/tasks/${enc(args.task_code)}`)).runs;
+      return (await call(cfg, 'GET', `/api/tasks/${enc(args.task_code)}`)).runs;
     case 'server_status':
-      return (await call('GET', '/healthz'));
+      return (await call(cfg, 'GET', '/healthz'));
     case 'dispatch_task': {
       const body = { role: args.role };
       if (args.provider) body.provider = args.provider;
       if (args.use_council) body.use_council = true;
-      return (await call('POST', `/api/tasks/${enc(args.task_code)}/run-agent`, body));
+      return (await call(cfg, 'POST', `/api/tasks/${enc(args.task_code)}/run-agent`, body));
     }
     case 'approve_task':
-      return (await call('POST', `/api/tasks/${enc(args.task_code)}/transition`, {
+      return (await call(cfg, 'POST', `/api/tasks/${enc(args.task_code)}/transition`, {
         to_status: 'done', to_assignee: 'human', by_role: 'human',
       }));
     case 'reject_task':
       if (!args.comment || args.comment.length < 10) throw new Error('comment must be ≥ 10 chars');
-      return (await call('POST', `/api/tasks/${enc(args.task_code)}/transition`, {
+      return (await call(cfg, 'POST', `/api/tasks/${enc(args.task_code)}/transition`, {
         to_status: 'agent_working', to_assignee: 'worker', by_role: 'human', reject_comment: args.comment,
       }));
     default:
@@ -181,15 +196,32 @@ async function callTool(name, args) {
   }
 }
 
-async function call(method, path, body) {
-  const res = await fetch(BASE + path, {
-    method,
-    headers: {
-      'Authorization': AUTH,
-      'Content-Type': body ? 'application/json' : undefined,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+// Retries only transient connection failures (server mid-boot/mid-respawn),
+// never HTTP-level errors from an already-answering server.
+async function call(cfg, method, path, body, attempt = 0) {
+  const base = `http://127.0.0.1:${cfg.port}`;
+  const auth = cfg.token ? `Bearer ${cfg.token}` : '';
+  let res;
+  try {
+    res = await fetch(base + path, {
+      method,
+      headers: {
+        'Authorization': auth,
+        'Content-Type': body ? 'application/json' : undefined,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    const maxAttempts = 4;
+    if (attempt < maxAttempts - 1) {
+      await sleep(300 * (attempt + 1));
+      return call(cfg, method, path, body, attempt + 1);
+    }
+    throw new Error(
+      `agentboard server not reachable at ${base} (${e?.message || e}) — ` +
+      `still starting? wait a few seconds and retry, or run /agentboard:doctor.`
+    );
+  }
   const txt = await res.text();
   let json;
   try { json = txt ? JSON.parse(txt) : null; } catch { json = { raw: txt }; }
@@ -197,5 +229,6 @@ async function call(method, path, body) {
   return json;
 }
 
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 function enc(s) { return encodeURIComponent(s); }
 function safeJson(p) { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; } }

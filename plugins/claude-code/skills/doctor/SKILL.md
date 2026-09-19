@@ -12,6 +12,7 @@ Output a checklist (one line per item, `[ok]` / `[warn]` / `[fail]` prefix):
 5. Read `~/.agentboard/config.json`:
    - `port`, `pid` present → `GET http://127.0.0.1:<port>/alive` — compare `server_id` and `plugin_version` from the response.
    - If mismatch: advise `/agentboard stop` then `/agentboard open`.
+   - No `port`, or `/alive` unreachable → check `boot_error` / `boot_error_at`. If present, print `[fail] last boot attempt failed (<boot_error_at>): <boot_error>`. If absent, the background bootstrap may still be installing deps on first run — print `[warn] server not up yet, retry in a few seconds` instead of treating it as a hard failure.
 6. List project DBs under `~/.agentboard/projects/`. For each, probe schema_version in `meta`.
 7. Print `PRICING_VERSION` (from `agentboard-core/src/pricing.mjs`) and the "last sourced" date from that file's header comment. Warn if >180 days old.
 8. **Update check** (best-effort, non-fatal if network fails):

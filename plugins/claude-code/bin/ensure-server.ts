@@ -36,6 +36,9 @@ const PLUGIN_JSON: Record<string, unknown> | null =
 const PLUGIN_VERSION: string = (typeof PLUGIN_JSON?.['version'] === 'string' ? PLUGIN_JSON['version'] : null) ?? '0.1.0';
 
 const silent: boolean = process.argv.includes('--silent');
+// Set by spawnBootstrapDetached() on the child it launches, so that child
+// always takes the full lock+install+spawn path regardless of --silent.
+const BOOTSTRAP_CHILD: boolean = process.env['AGENTBOARD_BOOTSTRAP_CHILD'] === '1';
 
 await main();
 
@@ -59,6 +62,35 @@ type ReadyResult = ReadyOk | ReadyErr;
 
 async function main(): Promise<void> {
   mkdirSync(DATA_DIR, { recursive: true });
+
+  if (!BOOTSTRAP_CHILD) {
+    // Lock-free fast path for the common case (server already running).
+    // Must never block the SessionStart hook — every session start pays
+    // this cost, so it stays a single ≤1.5s probe with no lock churn.
+    const cfg = (readJsonSafe(CFG_PATH) as ServerConfig | null) ?? {};
+    if (cfg.port) {
+      const alive = await probeAlive(cfg.port, 1500);
+      if (alive && alive.server_id === cfg.server_id && alive.plugin_version === PLUGIN_VERSION) {
+        if (!silent) console.log(`agentboard: reusing server http://127.0.0.1:${cfg.port}`);
+        clearBootError();
+        return;
+      }
+    }
+    if (silent) {
+      // First boot (or a dead/stale server) needs ensureCoreDeps() (~20s
+      // npm install on first run) + spawn + READY wait (~8s). Doing that
+      // synchronously here would block Claude Code's SessionStart hook and
+      // can trip its hook timeout on a slow first install — that was the
+      // "first session errors out" bug. Hand off to a detached background
+      // process instead and return immediately; the MCP proxy re-reads
+      // config.json per call and retries with backoff until it's ready.
+      spawnBootstrapDetached();
+      return;
+    }
+    // Explicit /agentboard:open with no reusable server: fall through to
+    // the synchronous path below — the user is actively waiting for a URL.
+  }
+
   const lock = await tryLock();
   try {
     const cfg: ServerConfig = (readJsonSafe(CFG_PATH) as ServerConfig | null) ?? {};
@@ -66,6 +98,7 @@ async function main(): Promise<void> {
       const alive = await probeAlive(cfg.port, 1500);
       if (alive && alive.server_id === cfg.server_id && alive.plugin_version === PLUGIN_VERSION) {
         if (!silent) console.log(`agentboard: reusing server http://127.0.0.1:${cfg.port}`);
+        clearBootError();
         return;
       }
       if (alive && alive.plugin_version !== PLUGIN_VERSION) {
@@ -81,9 +114,31 @@ async function main(): Promise<void> {
   }
 }
 
+// Re-invokes this same script as a detached child with AGENTBOARD_BOOTSTRAP_CHILD=1,
+// so the child takes the full lock+install+spawn path in the background while
+// this (hook) process returns immediately.
+function spawnBootstrapDetached(): void {
+  try {
+    const child = spawn(process.execPath, [
+      '--experimental-strip-types', '--no-warnings', fileURLToPath(import.meta.url), '--silent',
+    ], {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env, AGENTBOARD_BOOTSTRAP_CHILD: '1' },
+      windowsHide: true,
+    });
+    child.unref();
+  } catch (e) {
+    // Best-effort — the next SessionStart hook or MCP call retries.
+    writeBootError(`failed to launch background bootstrap: ${(e as Error)?.message ?? String(e)}`);
+  }
+}
+
 async function spawnServer(): Promise<void> {
   if (!existsSync(SERVER_JS)) {
-    console.error(`agentboard: core server not found at ${SERVER_JS}`);
+    const msg = `core server not found at ${SERVER_JS}`;
+    writeBootError(msg);
+    console.error(`agentboard: ${msg}`);
     process.exit(2);
   }
   ensureCoreDeps();
@@ -100,10 +155,16 @@ async function spawnServer(): Promise<void> {
 
   child.unref();
 
-  // Wait for READY line on stdout
+  // Wait for READY line on stdout. Cold start (first --experimental-strip-types
+  // parse of the whole src/ tree, node:sqlite init) can legitimately take
+  // longer than a few seconds, especially on Windows under disk/AV load —
+  // 8s produced false "timeout" failures against a server that came up fine
+  // a moment later. 20s gives real cold starts headroom; a genuinely dead
+  // child still resolves immediately via the 'exit' handler below.
+  const READY_TIMEOUT_MS = 20000;
   const ready = await new Promise<ReadyResult>((resolveReady) => {
     let buf = '';
-    const t = setTimeout(() => resolveReady({ ok: false, err: 'timeout' }), 8000);
+    const t = setTimeout(() => resolveReady({ ok: false, err: 'timeout' }), READY_TIMEOUT_MS);
     (child.stdout as NodeJS.ReadableStream).on('data', (d: Buffer) => {
       buf += d.toString();
       const m = /READY http:\/\/127\.0\.0\.1:(\d+)/.exec(buf);
@@ -114,9 +175,24 @@ async function spawnServer(): Promise<void> {
   });
 
   if (!ready.ok) {
+    // A 'timeout' (as opposed to a real 'exit <code>') only means we missed
+    // the stdout line — the child writes its own config.json (port/server_id)
+    // in the same tick it prints READY, so check that directly before
+    // declaring failure.
+    if (ready.err === 'timeout') {
+      const cfg = (readJsonSafe(CFG_PATH) as ServerConfig | null) ?? {};
+      const alive = cfg.port ? await probeAlive(cfg.port, 2000) : null;
+      if (alive && alive.server_id === cfg.server_id) {
+        clearBootError();
+        if (!silent) console.log(`agentboard: started http://127.0.0.1:${cfg.port} (READY line missed, confirmed via /alive)`);
+        return;
+      }
+    }
+    writeBootError(`server failed to start: ${ready.err}`);
     console.error('agentboard: server failed to start:', ready.err);
     process.exit(3);
   }
+  clearBootError();
   if (!silent) console.log(`agentboard: started http://127.0.0.1:${ready.port}`);
 }
 
@@ -170,9 +246,31 @@ function ensureCoreDeps(): void {
   const syncOpts: SpawnSyncOptions = { cwd: CORE_ROOT, stdio: silent ? 'ignore' : 'inherit', shell: IS_WINDOWS };
   const res = spawnSync(cmd, args, syncOpts);
   if (res.status !== 0) {
-    console.error(`agentboard: failed to install core deps (exit ${res.status}). Run: cd "${CORE_ROOT}" && ${useBun ? 'bun' : 'npm'} install`);
+    const msg = `failed to install core deps (exit ${res.status}). Run: cd "${CORE_ROOT}" && ${useBun ? 'bun' : 'npm'} install`;
+    writeBootError(msg);
+    console.error(`agentboard: ${msg}`);
     process.exit(4);
   }
+}
+
+// Best-effort merge-write so /agentboard:doctor and the MCP proxy can surface
+// *why* the server never came up, instead of a bare "not running" that looks
+// identical to "still booting".
+function writeBootError(msg: string): void {
+  try {
+    const cur = (readJsonSafe(CFG_PATH) as ServerConfig | null) ?? {};
+    writeFileSync(CFG_PATH, JSON.stringify({ ...cur, boot_error: msg, boot_error_at: new Date().toISOString() }, null, 2));
+  } catch { /* best-effort */ }
+}
+
+function clearBootError(): void {
+  try {
+    const cur = (readJsonSafe(CFG_PATH) as ServerConfig | null) ?? {};
+    if (cur.boot_error === undefined) return;
+    delete cur.boot_error;
+    delete cur.boot_error_at;
+    writeFileSync(CFG_PATH, JSON.stringify(cur, null, 2));
+  } catch { /* best-effort */ }
 }
 
 function which(bin: string): boolean {
