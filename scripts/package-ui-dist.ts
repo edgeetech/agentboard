@@ -110,8 +110,7 @@ async function assertStampCurrent(): Promise<void> {
  */
 async function hashUiSources(): Promise<string> {
   const hash = createHash("sha256");
-  for (const row of await uiSourceRows()) hash.update(row + "
-");
+  for (const row of await uiSourceRows()) hash.update(row + "\n");
   return hash.digest("hex");
 }
 
@@ -151,11 +150,7 @@ async function uiSourceRows(): Promise<string[]> {
     .filter((line) => line.length > 0);
   if (ids.length !== files.length)
     throw new Error("UI source stamp: git hash-object returned a short list");
-  const rows = files.map((file, i) => `${file} ${ids[i]}`);
-
-  const hash = createHash("sha256");
-  for (const row of rows) hash.update(row + "\n");
-  return hash.digest("hex");
+  return files.map((file, i) => `${file} ${ids[i]}`);
 }
 
 async function readFiles(directory: string): Promise<Map<string, Buffer>> {
