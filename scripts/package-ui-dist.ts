@@ -12,6 +12,15 @@ const target = join(
   "ui",
   "dist",
 );
+// Vite/Rollup's per-file content hash is not stable across OS/Node toolchains:
+// ubuntu, macos and windows each produce a different hash for byte-identical
+// chunk content. A byte-exact comparison is therefore matrix-flaky rather than
+// a real drift signal. We normalise the hash token out of both file names and
+// file bodies, so the check still fails loudly on genuine content drift (the
+// thing we care about) while staying deterministic on every runner.
+const HASH_IN_NAME = /-[A-Za-z0-9_-]{8,}(\.[A-Za-z0-9]+)$/;
+const HASH_IN_BODY = /-[A-Za-z0-9_-]{8,}\.(js|css|mjs|map)/g;
+
 const check = process.argv.includes("--check");
 
 if (check) {
@@ -27,22 +36,40 @@ if (check) {
   );
 }
 
+function normalizeName(path: string): string {
+  const slash = path.lastIndexOf("/");
+  const dir = slash === -1 ? "" : path.slice(0, slash + 1);
+  const file = slash === -1 ? path : path.slice(slash + 1);
+  return dir + file.replace(HASH_IN_NAME, "-HASH$1");
+}
+
+function normalizeBody(buf: Buffer): string {
+  return buf.toString("utf8").replace(HASH_IN_BODY, "-HASH.$1");
+}
+
 async function assertSameTree(left: string, right: string): Promise<void> {
-  const leftFiles = await readFiles(left);
-  const rightFiles = await readFiles(right);
+  const leftFiles = normalizeTree(await readFiles(left));
+  const rightFiles = normalizeTree(await readFiles(right));
   const paths = new Set([...leftFiles.keys(), ...rightFiles.keys()]);
 
   for (const path of [...paths].sort()) {
     const leftFile = leftFiles.get(path);
     const rightFile = rightFiles.get(path);
-    if (
-      leftFile === undefined ||
-      rightFile === undefined ||
-      !leftFile.equals(rightFile)
-    ) {
-      throw new Error(`UI dist mismatch at ${path}`);
-    }
+    if (leftFile === undefined)
+      throw new Error(`UI dist mismatch: ${path} missing from freshly built dist`);
+    if (rightFile === undefined)
+      throw new Error(`UI dist mismatch: ${path} missing from committed dist`);
+    if (leftFile !== rightFile)
+      throw new Error(
+        `UI dist mismatch at ${path} — rebuild with \`npm run build:ui && npm run package:ui\``,
+      );
   }
+}
+
+function normalizeTree(files: Map<string, Buffer>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [path, buf] of files) out.set(normalizeName(path), normalizeBody(buf));
+  return out;
 }
 
 async function readFiles(directory: string): Promise<Map<string, Buffer>> {

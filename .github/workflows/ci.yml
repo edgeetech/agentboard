@@ -45,7 +45,6 @@ jobs:
         run: npm --prefix apps/ui install --legacy-peer-deps
 
       - name: Core lint and formatting
-        continue-on-error: true
         run: npm run lint && npm --prefix plugins/claude-code/agent-board-core run format:check
 
       - name: Typecheck
@@ -60,18 +59,15 @@ jobs:
       - name: Architecture boundaries
         run: npm run test:architecture
 
-      - name: Verify SDK bundle freshness
-        run: npm run build:provider-bundles && git diff --exit-code plugins/providers/*/dist/
-        if: always()
+      - name: Verify generated provider bundle freshness
+        # build-provider-bundles.mjs writes into the core's src/generated/ —
+        # that is the tree a stale bundle shows up in, so that is what we diff.
+        run: npm run build:provider-bundles && git diff --exit-code plugins/claude-code/agent-board-core/src/generated/
 
       - name: UI package freshness
-        # Vite/Rollup's per-file content hash for the JS chunk is not stable
-        # across OS/Node toolchains (observed: ubuntu-latest and macos-latest
-        # each produce a different hash than the committed, Windows-built
-        # dist, from otherwise-identical source) — so a byte-exact dist
-        # comparison here is inherently matrix-flaky, not a real content
-        # drift signal. Same rationale as "Core lint and formatting" above.
-        continue-on-error: true
+        # scripts/package-ui-dist.ts --check normalises Vite's per-file content
+        # hash out of both file names and file bodies, so this compares real
+        # content and is stable across the OS matrix.
         run: npm run build:ui && npm run check:ui-dist
 
       - name: Build
