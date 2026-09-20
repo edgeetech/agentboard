@@ -65,10 +65,11 @@ jobs:
         run: npm run build:provider-bundles && git diff --exit-code plugins/claude-code/agent-board-core/src/generated/
 
       - name: UI package freshness
-        # scripts/package-ui-dist.ts --check normalises Vite's per-file content
-        # hash out of both file names and file bodies, so this compares real
-        # content and is stable across the OS matrix.
-        run: npm run build:ui && npm run check:ui-dist
+        # Compares a SHA-256 stamp of the apps/ui sources against the stamp
+        # recorded when the committed dist was packaged. Vite output is not
+        # reproducible across the OS matrix, so hashing the inputs (not the
+        # bundle) is what makes this deterministic enough to actually gate.
+        run: npm run check:ui-dist
 
       - name: Build
         run: npm run build

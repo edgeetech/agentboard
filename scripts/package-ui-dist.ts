@@ -1,9 +1,19 @@
-import { cp, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const source = join(root, "apps", "ui", "dist");
+const uiRoot = join(root, "apps", "ui");
+const source = join(uiRoot, "dist");
 const target = join(
   root,
   "plugins",
@@ -12,69 +22,116 @@ const target = join(
   "ui",
   "dist",
 );
-// Vite/Rollup's per-file content hash is not stable across OS/Node toolchains:
-// ubuntu, macos and windows each produce a different hash for byte-identical
-// chunk content. A byte-exact comparison is therefore matrix-flaky rather than
-// a real drift signal. We normalise the hash token out of both file names and
-// file bodies, so the check still fails loudly on genuine content drift (the
-// thing we care about) while staying deterministic on every runner.
-const HASH_IN_NAME = /-[A-Za-z0-9_-]{8,}(\.[A-Za-z0-9]+)$/;
-const HASH_IN_BODY = /-[A-Za-z0-9_-]{8,}\.(js|css|mjs|map)/g;
+const stampPath = join(target, ".source-stamp.json");
+
+// Why a source stamp instead of a dist byte-diff:
+//
+// Vite/Rollup output is not reproducible across the CI matrix — ubuntu, macos
+// and windows each produce a different chunk hash (and differing bytes) from
+// identical source. Diffing the built dist against the committed dist is
+// therefore matrix-flaky, not a drift signal, which is why that check used to
+// be `continue-on-error` (i.e. it gated nothing).
+//
+// The thing we actually need to catch is: someone changed UI source and forgot
+// to repackage. That is answered deterministically by hashing the UI *inputs*
+// at package time and re-hashing them at check time. No build required, stable
+// on every runner, and it fails loudly on real staleness.
+const SOURCE_GLOB_DIRS = ["src", "public"];
+const SOURCE_FILES = [
+  "index.html",
+  "package.json",
+  "tsconfig.json",
+  "tsconfig.node.json",
+  "vite.config.ts",
+];
 
 const check = process.argv.includes("--check");
 
 if (check) {
-  await assertSameTree(source, target);
-  console.log("Packaged UI dist is current.");
+  await assertStampCurrent();
 } else {
   await stat(source);
   await rm(target, { recursive: true, force: true });
   await mkdir(dirname(target), { recursive: true });
   await cp(source, target, { recursive: true });
+  await writeFile(
+    stampPath,
+    JSON.stringify({ sourceHash: await hashUiSources() }, null, 2) + "\n",
+    "utf8",
+  );
   console.log(
     `Packaged ${relative(root, source)} into ${relative(root, target)}.`,
   );
 }
 
-function normalizeName(path: string): string {
-  const slash = path.lastIndexOf("/");
-  const dir = slash === -1 ? "" : path.slice(0, slash + 1);
-  const file = slash === -1 ? path : path.slice(slash + 1);
-  return dir + file.replace(HASH_IN_NAME, "-HASH$1");
-}
+async function assertStampCurrent(): Promise<void> {
+  const distFiles = await readFiles(target);
+  if (distFiles.size === 0)
+    throw new Error(
+      "Packaged UI dist is missing — run `npm run build:ui && npm run package:ui`.",
+    );
 
-function normalizeBody(buf: Buffer): string {
-  return buf.toString("utf8").replace(HASH_IN_BODY, "-HASH.$1");
-}
-
-async function assertSameTree(left: string, right: string): Promise<void> {
-  const leftFiles = normalizeTree(await readFiles(left));
-  const rightFiles = normalizeTree(await readFiles(right));
-  const paths = new Set([...leftFiles.keys(), ...rightFiles.keys()]);
-
-  for (const path of [...paths].sort()) {
-    const leftFile = leftFiles.get(path);
-    const rightFile = rightFiles.get(path);
-    if (leftFile === undefined)
-      throw new Error(`UI dist mismatch: ${path} missing from freshly built dist`);
-    if (rightFile === undefined)
-      throw new Error(`UI dist mismatch: ${path} missing from committed dist`);
-    if (leftFile !== rightFile)
-      throw new Error(
-        `UI dist mismatch at ${path} — rebuild with \`npm run build:ui && npm run package:ui\``,
-      );
+  let stamped: string | null = null;
+  try {
+    stamped = (
+      JSON.parse(await readFile(stampPath, "utf8")) as { sourceHash?: string }
+    ).sourceHash ?? null;
+  } catch {
+    stamped = null;
   }
+  if (stamped === null)
+    throw new Error(
+      "Packaged UI dist has no source stamp — run `npm run build:ui && npm run package:ui`.",
+    );
+
+  const actual = await hashUiSources();
+  if (actual !== stamped)
+    throw new Error(
+      `Packaged UI dist is stale: apps/ui sources hash ${actual} but the committed dist was built from ${stamped}. ` +
+        "Run `npm run build:ui && npm run package:ui` and commit the result.",
+    );
+  console.log("Packaged UI dist is current.");
 }
 
-function normalizeTree(files: Map<string, Buffer>): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const [path, buf] of files) out.set(normalizeName(path), normalizeBody(buf));
-  return out;
+/** SHA-256 over every UI source input, path-sorted and newline-normalised. */
+async function hashUiSources(): Promise<string> {
+  const entries: [string, Buffer][] = [];
+  for (const dir of SOURCE_GLOB_DIRS) {
+    const abs = join(uiRoot, dir);
+    try {
+      await stat(abs);
+    } catch {
+      continue;
+    }
+    for (const [path, buf] of await readFiles(abs))
+      entries.push([`${dir}/${path}`, buf]);
+  }
+  for (const file of SOURCE_FILES) {
+    try {
+      entries.push([file, await readFile(join(uiRoot, file))]);
+    } catch {
+      /* optional file */
+    }
+  }
+
+  const hash = createHash("sha256");
+  for (const [path, buf] of entries.sort(([a], [b]) => (a < b ? -1 : 1))) {
+    hash.update(path);
+    hash.update("\0");
+    // Normalise CRLF so a Windows checkout and a Linux checkout agree.
+    hash.update(buf.toString("utf8").replaceAll("\r\n", "\n"));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
 }
 
 async function readFiles(directory: string): Promise<Map<string, Buffer>> {
   const files = new Map<string, Buffer>();
-  await walk(directory, directory);
+  try {
+    await walk(directory, directory);
+  } catch {
+    return files;
+  }
   return files;
 
   async function walk(current: string, base: string): Promise<void> {
@@ -84,10 +141,9 @@ async function readFiles(directory: string): Promise<Map<string, Buffer>> {
       if (entry.isDirectory()) {
         await walk(path, base);
       } else if (entry.isFile()) {
-        files.set(
-          relative(base, path).replaceAll("\\", "/"),
-          await readFile(path),
-        );
+        const rel = relative(base, path).replaceAll("\\", "/");
+        if (rel === ".source-stamp.json") continue;
+        files.set(rel, await readFile(path));
       }
     }
   }
