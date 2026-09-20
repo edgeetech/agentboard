@@ -86,6 +86,12 @@ async function assertStampCurrent(): Promise<void> {
     );
 
   const actual = await hashUiSources();
+  if (actual !== stamped) {
+    // Dump the per-file ids so a mismatch is diagnosable from the CI log
+    // instead of needing a local repro on the same OS.
+    console.error("UI source stamp inputs:");
+    for (const row of await uiSourceRows()) console.error(`  ${row}`);
+  }
   if (actual !== stamped)
     throw new Error(
       `Packaged UI dist is stale: apps/ui sources hash ${actual} but the committed dist was built from ${stamped}. ` +
@@ -103,6 +109,13 @@ async function assertStampCurrent(): Promise<void> {
  * disagreeing with ubuntu/macos on otherwise-identical source).
  */
 async function hashUiSources(): Promise<string> {
+  const hash = createHash("sha256");
+  for (const row of await uiSourceRows()) hash.update(row + "
+");
+  return hash.digest("hex");
+}
+
+async function uiSourceRows(): Promise<string[]> {
   const paths = [
     ...SOURCE_GLOB_DIRS.map((d) => `apps/ui/${d}`),
     ...SOURCE_FILES.map((f) => `apps/ui/${f}`),
