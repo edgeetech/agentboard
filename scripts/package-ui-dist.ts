@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   cp,
@@ -33,9 +34,9 @@ const stampPath = join(target, ".source-stamp.json");
 // be `continue-on-error` (i.e. it gated nothing).
 //
 // The thing we actually need to catch is: someone changed UI source and forgot
-// to repackage. That is answered deterministically by hashing the UI *inputs*
-// at package time and re-hashing them at check time. No build required, stable
-// on every runner, and it fails loudly on real staleness.
+// to repackage. That is answered deterministically by stamping the UI *inputs*
+// (their git blob ids) at package time and re-deriving them at check time. No
+// build required, identical on every runner, loud on real staleness.
 const SOURCE_GLOB_DIRS = ["src", "public"];
 const SOURCE_FILES = [
   "index.html",
@@ -93,35 +94,54 @@ async function assertStampCurrent(): Promise<void> {
   console.log("Packaged UI dist is current.");
 }
 
-/** SHA-256 over every UI source input, path-sorted and newline-normalised. */
+/**
+ * SHA-256 over the git blob ids of every UI source input.
+ *
+ * Blob ids are computed by git from the normalised (index) content, so they are
+ * byte-identical on every platform regardless of checkout line-ending rules —
+ * which a content hash of the working tree is not (observed: windows CI
+ * disagreeing with ubuntu/macos on otherwise-identical source).
+ */
 async function hashUiSources(): Promise<string> {
-  const entries: [string, Buffer][] = [];
-  for (const dir of SOURCE_GLOB_DIRS) {
-    const abs = join(uiRoot, dir);
+  const paths = [
+    ...SOURCE_GLOB_DIRS.map((d) => `apps/ui/${d}`),
+    ...SOURCE_FILES.map((f) => `apps/ui/${f}`),
+  ];
+  const git = (args: string[]): string => {
     try {
-      await stat(abs);
-    } catch {
-      continue;
+      return execFileSync("git", args, {
+        cwd: root,
+        encoding: "utf8",
+        maxBuffer: 32 * 1024 * 1024,
+      });
+    } catch (err) {
+      throw new Error(
+        `UI source stamp needs git ${args[0]}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
-    for (const [path, buf] of await readFiles(abs))
-      entries.push([`${dir}/${path}`, buf]);
-  }
-  for (const file of SOURCE_FILES) {
-    try {
-      entries.push([file, await readFile(join(uiRoot, file))]);
-    } catch {
-      /* optional file */
-    }
-  }
+  };
+
+  const files = git(["ls-files", "--", ...paths])
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .sort();
+  if (files.length === 0)
+    throw new Error("UI source stamp found no tracked apps/ui sources");
+
+  // hash-object applies the same clean filters git would on commit, so the id
+  // matches on every platform, and it reads the working tree — so packaging
+  // before staging still stamps what you are about to commit.
+  const ids = git(["hash-object", "--", ...files])
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (ids.length !== files.length)
+    throw new Error("UI source stamp: git hash-object returned a short list");
+  const rows = files.map((file, i) => `${file} ${ids[i]}`);
 
   const hash = createHash("sha256");
-  for (const [path, buf] of entries.sort(([a], [b]) => (a < b ? -1 : 1))) {
-    hash.update(path);
-    hash.update("\0");
-    // Normalise CRLF so a Windows checkout and a Linux checkout agree.
-    hash.update(buf.toString("utf8").replaceAll("\r\n", "\n"));
-    hash.update("\0");
-  }
+  for (const row of rows) hash.update(row + "\n");
   return hash.digest("hex");
 }
 
