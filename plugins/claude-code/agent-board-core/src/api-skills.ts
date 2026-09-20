@@ -15,18 +15,8 @@ import {
 import { json, readJson } from './http-util.ts';
 import { getActiveDb } from './project-registry.ts';
 import { getProject } from './repo.ts';
-import {
-  getSkill,
-  latestScan,
-  listSkills,
-  recordScan,
-  type ScanRow,
-  type SkillRow,
-  upsertSkillIndex as _unusedUpsert,
-} from './skill-repo.ts';
+import { getSkill, latestScan, listSkills, recordScan, type SkillRow } from './skill-repo.ts';
 import { parseFrontmatter } from './skill-scanner.ts';
-
-void _unusedUpsert; // keep import resolution stable; not called here
 
 // ── Response types ───────────────────────────────────────────────────────────
 
@@ -513,7 +503,4 @@ function serveScanSse(req: IncomingMessage, res: ServerResponse, projectCode: st
 
   req.on('close', cleanup);
   req.on('error', cleanup);
-
-  // Reference to silence unused warning.
-  void (null as unknown as ScanRow);
 }

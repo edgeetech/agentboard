@@ -145,8 +145,6 @@ export function shouldIgnore(
     const subLc = sub.toLowerCase();
     if (absLc === subLc || absLc.startsWith(subLc + '/')) return true;
   }
-  // Quiet: rootDir param reserved for future relative-path logic.
-  void rootDir;
   return false;
 }
 

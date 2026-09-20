@@ -149,8 +149,8 @@ export async function executeCouncilRun(
     const memberToolGate = buildToolGate(memberHookParams);
 
     const baseOptsNoHooks: Omit<ProviderRuntimeContext, 'hooks'> = (() => {
-      const { hooks: _h, ...rest } = baseOpts;
-      void _h;
+      const rest: ProviderRuntimeContext = { ...baseOpts };
+      delete (rest as { hooks?: unknown }).hooks;
       return rest;
     })();
     const memberCtx: ProviderRuntimeContext = {

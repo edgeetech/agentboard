@@ -21,9 +21,8 @@ describe('WorkspaceManager', () => {
     for (const r of roots) {
       try {
         rmSync(r, { recursive: true, force: true });
-      } catch (e) {
+      } catch {
         // best-effort cleanup; ignore errors
-        void e;
       }
     }
     roots.length = 0;
