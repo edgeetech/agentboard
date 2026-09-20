@@ -438,8 +438,12 @@ line. If the gate cannot be evaluated (server unreachable, malformed response), 
 ## 🧪 Manual checks
 
 CI runs lint, format, typecheck, unit tests, DB-migration verification, architecture
-boundaries, generated-bundle freshness and the UI dist check on every push — all of them
-gating (no `continue-on-error`).
+boundaries and generated-bundle freshness on every push across Linux/macOS/Windows — all of
+them gating (no `continue-on-error`). The **UI dist freshness** check also gates, but runs on
+the Linux job only: it compares git blob ids of `apps/ui` sources against the stamp recorded
+when the committed `ui/dist` was packaged, and the Windows runner's git derives different
+blob ids for identical tracked sources. Staleness is a property of the commit, so one runner
+is enough.
 
 The **Playwright UI e2e suite is not in CI** and must be run manually before a release:
 

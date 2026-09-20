@@ -65,10 +65,17 @@ jobs:
         run: npm run build:provider-bundles && git diff --exit-code plugins/claude-code/agent-board-core/src/generated/
 
       - name: UI package freshness
-        # Compares a SHA-256 stamp of the apps/ui sources against the stamp
-        # recorded when the committed dist was packaged. Vite output is not
-        # reproducible across the OS matrix, so hashing the inputs (not the
-        # bundle) is what makes this deterministic enough to actually gate.
+        # Gating (no continue-on-error), but Linux-only on purpose.
+        #
+        # The check compares a stamp of the apps/ui source blob ids against the
+        # stamp recorded when the committed dist was packaged, so it catches the
+        # real failure mode: UI source changed, dist not repackaged. Vite output
+        # itself is not reproducible across the matrix, and git on the Windows
+        # runner derives different blob ids for the same tracked sources than
+        # Linux/macOS do — so running this on all three OSes reintroduces the
+        # flakiness the check exists to remove. One gating runner is enough:
+        # staleness is a property of the commit, not of the OS.
+        if: runner.os == 'Linux'
         run: npm run check:ui-dist
 
       - name: Build
