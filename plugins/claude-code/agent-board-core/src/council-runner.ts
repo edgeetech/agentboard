@@ -12,7 +12,7 @@ import { providerFor } from './provider-registry.ts';
 import type { ProviderRuntimeContext, ProviderRuntimeResult } from './provider-runtime.ts';
 import type { TokenUsage } from './provider-types.ts';
 import { addComment, claimRun, finishRun, getRun, setRunCost, setRunSessionRef } from './repo.ts';
-import { buildSdkHooks } from './run-hooks.ts';
+import { buildSdkHooks, buildToolGate } from './run-hooks.ts';
 import { isoNow } from './time.ts';
 import type { AgentProvider, CouncilRoleConfig } from './types.ts';
 import { ulid } from './ulid.ts';
@@ -138,14 +138,15 @@ export async function executeCouncilRun(
     // child run_token so abrun.record_tool authenticates against the child
     // row (parent baseOpts.hooks is intentionally unset by executor.ts for
     // the council path).
-    const memberHooks =
-      memberProvider === 'claude'
-        ? buildSdkHooks({
-            runToken: childToken,
-            mcpUrl: `http://127.0.0.1:${baseOpts.serverPort}/mcp`,
-            serverToken: baseOpts.serverToken,
-          })
-        : undefined;
+    const memberHookParams = {
+      runToken: childToken,
+      mcpUrl: `http://127.0.0.1:${baseOpts.serverPort}/mcp`,
+      serverToken: baseOpts.serverToken,
+    };
+    const memberHooks = memberProvider === 'claude' ? buildSdkHooks(memberHookParams) : undefined;
+    // Non-Claude members have no PreToolUse hook; they get the same policy via
+    // the fail-closed runner-boundary gate, bound to the child run_token.
+    const memberToolGate = buildToolGate(memberHookParams);
 
     const baseOptsNoHooks: Omit<ProviderRuntimeContext, 'hooks'> = (() => {
       const { hooks: _h, ...rest } = baseOpts;
@@ -156,6 +157,7 @@ export async function executeCouncilRun(
       ...baseOptsNoHooks,
       runId: childId,
       prompt: augmentedPrompt,
+      toolGate: memberToolGate,
       ...(memberHooks !== undefined ? { hooks: memberHooks } : {}),
     };
 

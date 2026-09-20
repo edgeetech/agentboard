@@ -141,3 +141,73 @@ export function toProviderRuntimeResponse(
       : {}),
   };
 }
+
+// ── Provider-agnostic tool gate ───────────────────────────────────────────────
+//
+// Claude runs get a PreToolUse hook. Argv/SDK-spawned providers (Codex,
+// Copilot) have no equivalent, so they call a `ProviderToolGate` with every
+// tool attempt they observe on their event stream. A `block` decision aborts
+// the run: the provider has no way to veto a single call mid-turn, so the only
+// honest enforcement is to stop the agent.
+
+export interface ProviderToolAttempt {
+  /** Normalised tool name (`Bash`, `Edit`, `Write`, `Read`, …). */
+  tool: string;
+  /** Shell command or file path the tool was invoked with. */
+  target: string;
+}
+
+export interface ProviderToolDecision {
+  decision: "allow" | "block";
+  reason: string | null;
+}
+
+export type ProviderToolGate = (
+  attempt: ProviderToolAttempt,
+) => Promise<ProviderToolDecision> | ProviderToolDecision;
+
+/** Thrown by a runner when the tool gate denies an attempted tool call. */
+export class ProviderToolDeniedError extends Error {
+  readonly tool: string;
+  readonly target: string;
+
+  constructor(attempt: ProviderToolAttempt, reason: string | null) {
+    super(
+      `tool denied by agentboard policy: ${attempt.tool}${
+        attempt.target ? ` (${attempt.target.slice(0, 200)})` : ""
+      }${reason ? ` — ${reason}` : ""}`,
+    );
+    this.name = "ProviderToolDeniedError";
+    this.tool = attempt.tool;
+    this.target = attempt.target;
+  }
+}
+
+/**
+ * Run the gate fail-closed: any thrown error or malformed decision denies.
+ * Providers without a configured gate are allowed through (the caller decides
+ * whether a missing gate is acceptable).
+ */
+export async function evaluateProviderToolAttempt(
+  gate: ProviderToolGate | undefined,
+  attempt: ProviderToolAttempt,
+): Promise<ProviderToolDecision> {
+  if (gate === undefined) return { decision: "allow", reason: null };
+  try {
+    const result = await gate(attempt);
+    if (result.decision === "block")
+      return { decision: "block", reason: result.reason ?? "blocked by policy" };
+    if (result.decision === "allow") return { decision: "allow", reason: null };
+    return {
+      decision: "block",
+      reason: "tool gate returned an unrecognised decision — denying",
+    };
+  } catch (err) {
+    return {
+      decision: "block",
+      reason: `tool gate evaluation failed — denying: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
+}

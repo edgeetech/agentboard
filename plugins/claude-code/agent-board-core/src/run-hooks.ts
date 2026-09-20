@@ -52,34 +52,43 @@ const target = evt?.tool_input?.file_path || evt?.tool_input?.command || '';
 const runToken   = process.env.AGENTBOARD_RUN_TOKEN;
 const mcpUrl     = process.env.AGENTBOARD_MCP_URL;
 const serverTok  = process.env.AGENTBOARD_SERVER_TOKEN;
-if (!runToken || !mcpUrl || !serverTok) process.exit(0); // best-effort: never block on misconfig
+
+function deny(reason) {
+  // Fail closed: if the policy cannot be evaluated we must not let the tool run.
+  process.stderr.write('agentboard: tool denied — ' + reason);
+  process.exit(2);
+}
+
+if (!runToken || !mcpUrl || !serverTok) {
+  deny('hook misconfigured (missing AGENTBOARD_RUN_TOKEN / AGENTBOARD_MCP_URL / AGENTBOARD_SERVER_TOKEN)');
+}
 
 const body = {
   jsonrpc: '2.0', id: 1, method: 'tools/call',
   params: { name: 'record_tool', arguments: { run_token: runToken, tool, target } },
 };
 
-let decision = 'allow', reason = null;
+let decision, reason = null;
 try {
   const r = await fetch(mcpUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + serverTok },
     body: JSON.stringify(body),
   });
+  if (!r.ok) deny('policy server returned HTTP ' + r.status);
   const j = await r.json();
   const txt = j?.result?.content?.[0]?.text;
-  if (txt) {
-    try { const parsed = JSON.parse(txt); decision = parsed.decision || 'allow'; reason = parsed.reason || null; }
-    catch { /* allow */ }
-  }
-} catch { /* allow on hook failure — never wedge the agent */ }
-
-if (decision === 'block') {
-  // Claude Code hook contract: stderr + exit 2 = block with feedback.
-  process.stderr.write(reason || 'agentboard: tool blocked by phase policy');
-  process.exit(2);
+  if (!txt) deny('policy server returned no decision');
+  const parsed = JSON.parse(txt);
+  decision = parsed.decision;
+  reason = parsed.reason || null;
+} catch (err) {
+  deny('policy check failed: ' + (err && err.message ? err.message : String(err)));
 }
-process.exit(0);
+
+if (decision === 'allow') process.exit(0);
+// Claude Code hook contract: stderr + exit 2 = block with feedback.
+deny(reason || (decision === 'block' ? 'blocked by phase policy' : 'unrecognised policy decision'));
 `;
 
 // ─── Settings.json delivery ───────────────────────────────────────────────────
@@ -134,6 +143,15 @@ export function buildSdkHooks(params: SdkHookParams): {
       method: 'tools/call',
       params: { name: 'record_tool', arguments: { run_token: params.runToken, tool, target } },
     };
+    const denied = (reason: string): HookResult => {
+      // Fail closed: an un-evaluable policy check denies, and says why.
+      console.warn(`[run-hooks] denying ${tool}: ${reason}`);
+      return {
+        continue: false,
+        stopReason: `agentboard: tool denied — ${reason}`,
+        decision: 'block',
+      };
+    };
     try {
       const r = await fetch(params.mcpUrl, {
         method: 'POST',
@@ -143,27 +161,26 @@ export function buildSdkHooks(params: SdkHookParams): {
         },
         body: JSON.stringify(body),
       });
+      if (!r.ok) return denied(`policy server returned HTTP ${r.status}`);
       const j = (await r.json()) as Record<string, unknown>;
       const result = j.result as Record<string, unknown> | undefined;
       const content = result?.content;
-      const txt = Array.isArray(content)
-        ? ((content[0] as Record<string, unknown>).text as string | undefined)
+      const first = Array.isArray(content)
+        ? (content[0] as Record<string, unknown> | undefined)
         : undefined;
-      if (txt !== undefined) {
-        const parsed = JSON.parse(txt) as Record<string, unknown>;
-        if (parsed.decision === 'block') {
-          return {
-            continue: false,
-            stopReason:
-              (parsed.reason as string | undefined) ?? 'agentboard: tool blocked by phase policy',
-            decision: 'block',
-          };
-        }
-      }
-    } catch {
-      /* allow on hook failure */
+      const txt = typeof first?.text === 'string' ? first.text : undefined;
+      if (txt === undefined) return denied('policy server returned no decision');
+      const parsed = JSON.parse(txt) as Record<string, unknown>;
+      if (parsed.decision === 'allow') return { continue: true };
+      return denied(
+        (parsed.reason as string | undefined) ??
+          (parsed.decision === 'block'
+            ? 'blocked by phase policy'
+            : 'unrecognised policy decision'),
+      );
+    } catch (err) {
+      return denied(`policy check failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-    return { continue: true };
   };
 
   return {
@@ -173,5 +190,76 @@ export function buildSdkHooks(params: SdkHookParams): {
         hooks: [callback],
       },
     ],
+  };
+}
+
+// ─── Provider-agnostic tool gate ──────────────────────────────────────────────
+
+export interface ToolGateAttempt {
+  tool: string;
+  target: string;
+}
+
+export interface ToolGateDecision {
+  decision: 'allow' | 'block';
+  reason: string | null;
+}
+
+/**
+ * Build the policy gate handed to argv/SDK-spawned providers (Codex, Copilot,
+ * council members) that have no PreToolUse hook. Same `record_tool` call as the
+ * Claude hook, same fail-closed contract: anything other than an explicit
+ * `allow` is a denial, with a logged reason.
+ */
+export function buildToolGate(
+  params: SdkHookParams,
+): (attempt: ToolGateAttempt) => Promise<ToolGateDecision> {
+  return async (attempt: ToolGateAttempt): Promise<ToolGateDecision> => {
+    const denied = (reason: string): ToolGateDecision => {
+      console.warn(`[tool-gate] denying ${attempt.tool}: ${reason}`);
+      return { decision: 'block', reason };
+    };
+    const body = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {
+        name: 'record_tool',
+        arguments: {
+          run_token: params.runToken,
+          tool: attempt.tool,
+          target: attempt.target,
+        },
+      },
+    };
+    try {
+      const r = await fetch(params.mcpUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + params.serverToken,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) return denied(`policy server returned HTTP ${r.status}`);
+      const j = (await r.json()) as Record<string, unknown>;
+      const result = j.result as Record<string, unknown> | undefined;
+      const content = result?.content;
+      const first = Array.isArray(content)
+        ? (content[0] as Record<string, unknown> | undefined)
+        : undefined;
+      const txt = typeof first?.text === 'string' ? first.text : undefined;
+      if (txt === undefined) return denied('policy server returned no decision');
+      const parsed = JSON.parse(txt) as Record<string, unknown>;
+      if (parsed.decision === 'allow') return { decision: 'allow', reason: null };
+      return denied(
+        (parsed.reason as string | undefined) ??
+          (parsed.decision === 'block'
+            ? 'blocked by phase policy'
+            : 'unrecognised policy decision'),
+      );
+    } catch (err) {
+      return denied(`policy check failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 }

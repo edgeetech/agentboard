@@ -2,9 +2,15 @@ import type {
   ProviderRateLimiter,
   ProviderRunResult,
   ProviderSessionLog,
+  ProviderToolAttempt,
+  ProviderToolGate,
   ProviderTokenUsage,
 } from "../../../../packages/plugin-sdk/src/runtime.ts";
-import { withProviderTurnTimeout } from "../../../../packages/plugin-sdk/src/runtime.ts";
+import {
+  evaluateProviderToolAttempt,
+  ProviderToolDeniedError,
+  withProviderTurnTimeout,
+} from "../../../../packages/plugin-sdk/src/runtime.ts";
 
 const DEFAULT_TURN_TIMEOUT_MS = parseInt(
   (globalThis as { process?: { env?: Record<string, string | undefined> } })
@@ -81,6 +87,7 @@ export type CopilotMcpServerConfig =
 export interface CopilotSessionConfig {
   workingDirectory: string;
   onPermissionRequest: unknown;
+  excludedTools?: string[];
   onEvent?: (event: CopilotSessionEvent) => void;
   systemMessage?: { mode: "replace"; content: string };
   mcpServers?: Record<string, CopilotMcpServerConfig>;
@@ -106,6 +113,14 @@ export interface CopilotRunnerOptions {
   sessionLog?: ProviderSessionLog | null;
   onEvent?: (eventName: string, detail: Record<string, unknown>) => void;
   loadCopilotSdk?: () => Promise<CopilotSdkModule>;
+  /**
+   * Provider-agnostic policy gate. Copilot's permission request carries only a
+   * coarse `kind`, so command-level policy is applied to the tool events on the
+   * session stream; a `block` decision aborts the session and fails the run.
+   */
+  toolGate?: ProviderToolGate;
+  /** Native Copilot tool exclusions applied at session creation. */
+  excludedTools?: readonly string[];
 }
 
 interface PartialState {
@@ -243,13 +258,65 @@ export class CopilotRunner {
     abortController.signal.addEventListener("abort", onAbort);
     turnSignal.addEventListener("abort", onAbort);
 
+    let denial: ProviderToolDeniedError | null = null;
+    const gateChecks: Promise<void>[] = [];
+    const enforceToolAttempt = (attempt: ProviderToolAttempt): void => {
+      gateChecks.push(
+        (async () => {
+          if (denial !== null) return;
+          const verdict = await evaluateProviderToolAttempt(
+            this.opts.toolGate,
+            attempt,
+          );
+          if (verdict.decision === "block" && denial === null) {
+            denial = new ProviderToolDeniedError(attempt, verdict.reason);
+            sessionLog?.error(
+              {
+                runId,
+                tool: attempt.tool,
+                target: attempt.target.slice(0, 200),
+                reason: verdict.reason,
+              },
+              "Copilot tool denied by policy — aborting run",
+            );
+            onEvent?.("run.tool-denied", {
+              tool: attempt.tool,
+              target: attempt.target,
+              reason: verdict.reason,
+            });
+            onAbort();
+          }
+        })(),
+      );
+    };
+
+    // Copilot's permission request only carries a coarse `kind`, so it cannot
+    // decide on the command text — but it IS a pre-execution veto point. Once
+    // the stream gate has latched a denial, reject everything from here on.
+    const permissionHandler = (
+      request: unknown,
+      invocation: unknown,
+    ): unknown => {
+      if (denial !== null)
+        return { kind: "reject", feedback: (denial as Error).message };
+      return (approveAll as (r: unknown, i: unknown) => unknown)(
+        request,
+        invocation,
+      );
+    };
+
     try {
       const sessionConfig: CopilotSessionConfig = {
         workingDirectory: cwd,
-        onPermissionRequest: approveAll,
+        onPermissionRequest: permissionHandler,
         onEvent: (event): void => {
           onEvent?.(event.type, event as unknown as Record<string, unknown>);
           sessionLog?.info({ type: event.type, runId }, "Copilot event");
+
+          const attempt = extractCopilotToolAttempt(
+            event as unknown as Record<string, unknown>,
+          );
+          if (attempt !== null) enforceToolAttempt(attempt);
 
           if (isModelChangeEvent(event)) {
             const m = event.data.newModel;
@@ -290,12 +357,20 @@ export class CopilotRunner {
       ) {
         sessionConfig.mcpServers = copilotMcpServers;
       }
+      if (
+        this.opts.excludedTools !== undefined &&
+        this.opts.excludedTools.length > 0
+      ) {
+        sessionConfig.excludedTools = [...this.opts.excludedTools];
+      }
 
       session = await client.createSession(sessionConfig);
       this.sessionId = session.sessionId;
       result.sessionId = session.sessionId;
 
       await session.sendAndWait({ prompt }, turnTimeoutMs);
+      await Promise.allSettled(gateChecks);
+      if (denial !== null) throw denial;
       result.status = "completed";
     } finally {
       abortController.signal.removeEventListener("abort", onAbort);
@@ -321,6 +396,59 @@ export class CopilotRunner {
     result.usage = usage;
     return result;
   }
+}
+
+/**
+ * Normalise a Copilot session event into a tool attempt, or null when the event
+ * is not a tool call. Copilot emits `tool.*` / `assistant.tool_call` events
+ * whose payload carries the tool name plus its arguments.
+ */
+export function extractCopilotToolAttempt(
+  event: Record<string, unknown>,
+): ProviderToolAttempt | null {
+  const type = typeof event.type === "string" ? event.type : "";
+  if (!/tool/i.test(type)) return null;
+  const data =
+    typeof event.data === "object" && event.data !== null
+      ? (event.data as Record<string, unknown>)
+      : event;
+  const rawName =
+    (typeof data.name === "string" ? data.name : undefined) ??
+    (typeof data.toolName === "string" ? data.toolName : undefined) ??
+    (typeof data.tool === "string" ? data.tool : undefined);
+  if (rawName === undefined) return null;
+
+  const argsRaw = data.arguments ?? data.args ?? data.input ?? data.parameters;
+  let args: Record<string, unknown> = {};
+  if (typeof argsRaw === "string") {
+    try {
+      args = JSON.parse(argsRaw) as Record<string, unknown>;
+    } catch {
+      args = { command: argsRaw };
+    }
+  } else if (typeof argsRaw === "object" && argsRaw !== null) {
+    args = argsRaw as Record<string, unknown>;
+  }
+
+  const commandRaw = args.command ?? args.cmd ?? args.script;
+  const command = Array.isArray(commandRaw)
+    ? commandRaw.map(String).join(" ")
+    : typeof commandRaw === "string"
+      ? commandRaw
+      : null;
+
+  if (/^(shell|bash|run_in_terminal|terminal|exec)/i.test(rawName)) {
+    return { tool: "Bash", target: command ?? "" };
+  }
+  const path =
+    (typeof args.path === "string" ? args.path : undefined) ??
+    (typeof args.file_path === "string" ? args.file_path : undefined) ??
+    "";
+  if (/^(write|create|edit|str_replace|apply_patch)/i.test(rawName)) {
+    return { tool: "Edit", target: path };
+  }
+  if (command !== null) return { tool: "Bash", target: command };
+  return { tool: rawName, target: path };
 }
 
 function normalizeMcpServers(

@@ -54,6 +54,36 @@ async function withProviderTurnTimeout(fn, timeoutMs, parentSignal) {
     parentSignal?.removeEventListener('abort', abortFromParent);
   }
 }
+var ProviderToolDeniedError = class extends Error {
+  tool;
+  target;
+  constructor(attempt, reason) {
+    super(
+      `tool denied by agentboard policy: ${attempt.tool}${attempt.target ? ` (${attempt.target.slice(0, 200)})` : ''}${reason ? ` \u2014 ${reason}` : ''}`,
+    );
+    this.name = 'ProviderToolDeniedError';
+    this.tool = attempt.tool;
+    this.target = attempt.target;
+  }
+};
+async function evaluateProviderToolAttempt(gate, attempt) {
+  if (gate === void 0) return { decision: 'allow', reason: null };
+  try {
+    const result = await gate(attempt);
+    if (result.decision === 'block')
+      return { decision: 'block', reason: result.reason ?? 'blocked by policy' };
+    if (result.decision === 'allow') return { decision: 'allow', reason: null };
+    return {
+      decision: 'block',
+      reason: 'tool gate returned an unrecognised decision \u2014 denying',
+    };
+  } catch (err) {
+    return {
+      decision: 'block',
+      reason: `tool gate evaluation failed \u2014 denying: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
 
 // plugins/providers/codex/src/config.ts
 import { existsSync, readFileSync } from 'node:fs';
@@ -471,6 +501,34 @@ ${prompt}`
     };
     abortController.signal.addEventListener('abort', killChild, { once: true });
     turnSignal.addEventListener('abort', killChild, { once: true });
+    let denial = null;
+    const gateChecks = [];
+    const enforceToolAttempt = (attempt) => {
+      gateChecks.push(
+        (async () => {
+          if (denial !== null) return;
+          const verdict = await evaluateProviderToolAttempt(this.opts.toolGate, attempt);
+          if (verdict.decision === 'block' && denial === null) {
+            denial = new ProviderToolDeniedError(attempt, verdict.reason);
+            sessionLog?.error(
+              {
+                runId,
+                tool: attempt.tool,
+                target: attempt.target.slice(0, 200),
+                reason: verdict.reason,
+              },
+              'Codex tool denied by policy \u2014 aborting run',
+            );
+            onEvent?.('run.tool-denied', {
+              tool: attempt.tool,
+              target: attempt.target,
+              reason: verdict.reason,
+            });
+            killChild();
+          }
+        })(),
+      );
+    };
     let stdoutBuf = '';
     let stderrBuf = '';
     child.stdout.setEncoding('utf8');
@@ -480,7 +538,7 @@ ${prompt}`
       const lines = stdoutBuf.split(/\r?\n/);
       stdoutBuf = lines.pop() ?? '';
       for (const line of lines)
-        this.handleJsonLine(line, result, usage, onEvent, sessionLog, runId);
+        this.handleJsonLine(line, result, usage, onEvent, sessionLog, runId, enforceToolAttempt);
     });
     child.stderr.on('data', (chunk) => {
       stderrBuf += chunk;
@@ -499,7 +557,17 @@ ${prompt}`
       turnSignal.removeEventListener('abort', killChild);
     }
     if (stdoutBuf.trim())
-      this.handleJsonLine(stdoutBuf.trim(), result, usage, onEvent, sessionLog, runId);
+      this.handleJsonLine(
+        stdoutBuf.trim(),
+        result,
+        usage,
+        onEvent,
+        sessionLog,
+        runId,
+        enforceToolAttempt,
+      );
+    await Promise.allSettled(gateChecks);
+    if (denial !== null) throw denial;
     if (exitCode === 0) result.status = 'completed';
     else throw new Error(stderrBuf.trim() || `codex exited with code ${String(exitCode)}`);
     if (existsSync2(lastMessagePath)) {
@@ -512,7 +580,7 @@ ${prompt}`
     result.usage = usage;
     return result;
   }
-  handleJsonLine(line, result, usage, onEvent, sessionLog, runId) {
+  handleJsonLine(line, result, usage, onEvent, sessionLog, runId, enforceToolAttempt) {
     const trimmed = (line.length > 0 ? line : '').trim();
     if (!trimmed) return;
     let obj;
@@ -527,6 +595,10 @@ ${prompt}`
     const eventName = typeVal ?? eventVal ?? 'codex.event';
     onEvent?.(eventName, obj);
     sessionLog?.info({ runId, type: eventName }, 'Codex event');
+    if (enforceToolAttempt !== void 0) {
+      const attempt = extractCodexToolAttempt(obj);
+      if (attempt !== null) enforceToolAttempt(attempt);
+    }
     const sessionIdCandidate =
       typeof obj.session_id === 'string' && obj.session_id.length > 0
         ? obj.session_id
@@ -558,6 +630,35 @@ ${prompt}`
     }
   }
 };
+function extractCodexToolAttempt(obj) {
+  const type = typeof obj.type === 'string' ? obj.type : '';
+  const item = typeof obj.item === 'object' && obj.item !== null ? obj.item : void 0;
+  const itemType = typeof item?.type === 'string' ? item.type : '';
+  const args = typeof obj.arguments === 'object' && obj.arguments !== null ? obj.arguments : void 0;
+  const commandRaw = obj.command ?? item?.command ?? args?.command ?? obj.cmd ?? item?.cmd;
+  const command = Array.isArray(commandRaw)
+    ? commandRaw.map(String).join(' ')
+    : typeof commandRaw === 'string'
+      ? commandRaw
+      : null;
+  const isShell =
+    type === 'exec_command_begin' ||
+    type === 'exec_command_start' ||
+    itemType === 'command_execution' ||
+    itemType === 'local_shell_call' ||
+    (typeof obj.tool_name === 'string' && /^(shell|bash|exec|local_shell)$/i.test(obj.tool_name));
+  if (command !== null && (isShell || command.length > 0)) {
+    return { tool: 'Bash', target: command };
+  }
+  const isPatch =
+    type === 'patch_apply_begin' || itemType === 'file_change' || itemType === 'patch_apply';
+  if (isPatch) {
+    const path =
+      typeof obj.path === 'string' ? obj.path : typeof item?.path === 'string' ? item.path : '';
+    return { tool: 'Edit', target: path };
+  }
+  return null;
+}
 function buildCodexExecArgs(args) {
   return [
     'exec',
@@ -680,11 +781,19 @@ var codexProviderManifest = {
     tools: ['Read', 'Edit', 'Bash', 'Grep', 'Glob'],
   },
   enforcement: {
-    enforced: ['cwd', 'mcpServerNames', 'abortSignal', 'rateLimitBackoff', 'filesystemSandbox'],
-    intentionallyIgnored: ['maxTurns', 'allowedTools', 'hooksEnabled', 'approvalMode'],
+    enforced: [
+      'allowedTools',
+      'cwd',
+      'mcpServerNames',
+      'abortSignal',
+      'rateLimitBackoff',
+      'filesystemSandbox',
+    ],
+    intentionallyIgnored: ['maxTurns', 'hooksEnabled', 'approvalMode'],
     notes: [
       'Legacy Codex runner launches with workspace-write sandboxing and fixed approve-for-me automation.',
       'Requested approvalMode is intentionally ignored until provider-specific approval mapping is implemented.',
+      'Tool policy is enforced at the runner boundary: every tool call on the JSON event stream is checked against the agentboard policy gate (fail-closed) and a denial aborts the run.',
     ],
   },
 };
@@ -723,6 +832,7 @@ export {
   codexProviderManifest,
   codexReferencedEnvKeys,
   createCodexProviderAdapter,
+  extractCodexToolAttempt,
   inheritedUserMcpKeys,
   inheritedUserMcpServers,
   quoteTomlPathKey,

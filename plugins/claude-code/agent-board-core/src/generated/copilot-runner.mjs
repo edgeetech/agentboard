@@ -48,6 +48,36 @@ async function withProviderTurnTimeout(fn, timeoutMs, parentSignal) {
     parentSignal?.removeEventListener('abort', abortFromParent);
   }
 }
+var ProviderToolDeniedError = class extends Error {
+  tool;
+  target;
+  constructor(attempt, reason) {
+    super(
+      `tool denied by agentboard policy: ${attempt.tool}${attempt.target ? ` (${attempt.target.slice(0, 200)})` : ''}${reason ? ` \u2014 ${reason}` : ''}`,
+    );
+    this.name = 'ProviderToolDeniedError';
+    this.tool = attempt.tool;
+    this.target = attempt.target;
+  }
+};
+async function evaluateProviderToolAttempt(gate, attempt) {
+  if (gate === void 0) return { decision: 'allow', reason: null };
+  try {
+    const result = await gate(attempt);
+    if (result.decision === 'block')
+      return { decision: 'block', reason: result.reason ?? 'blocked by policy' };
+    if (result.decision === 'allow') return { decision: 'allow', reason: null };
+    return {
+      decision: 'block',
+      reason: 'tool gate returned an unrecognised decision \u2014 denying',
+    };
+  } catch (err) {
+    return {
+      decision: 'block',
+      reason: `tool gate evaluation failed \u2014 denying: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
 
 // plugins/providers/copilot/src/runner.ts
 var DEFAULT_TURN_TIMEOUT_MS = parseInt(
@@ -160,13 +190,47 @@ var CopilotRunner = class {
     };
     abortController.signal.addEventListener('abort', onAbort);
     turnSignal.addEventListener('abort', onAbort);
+    let denial = null;
+    const gateChecks = [];
+    const enforceToolAttempt = (attempt) => {
+      gateChecks.push(
+        (async () => {
+          if (denial !== null) return;
+          const verdict = await evaluateProviderToolAttempt(this.opts.toolGate, attempt);
+          if (verdict.decision === 'block' && denial === null) {
+            denial = new ProviderToolDeniedError(attempt, verdict.reason);
+            sessionLog?.error(
+              {
+                runId,
+                tool: attempt.tool,
+                target: attempt.target.slice(0, 200),
+                reason: verdict.reason,
+              },
+              'Copilot tool denied by policy \u2014 aborting run',
+            );
+            onEvent?.('run.tool-denied', {
+              tool: attempt.tool,
+              target: attempt.target,
+              reason: verdict.reason,
+            });
+            onAbort();
+          }
+        })(),
+      );
+    };
+    const permissionHandler = (request, invocation) => {
+      if (denial !== null) return { kind: 'reject', feedback: denial.message };
+      return approveAll(request, invocation);
+    };
     try {
       const sessionConfig = {
         workingDirectory: cwd,
-        onPermissionRequest: approveAll,
+        onPermissionRequest: permissionHandler,
         onEvent: (event) => {
           onEvent?.(event.type, event);
           sessionLog?.info({ type: event.type, runId }, 'Copilot event');
+          const attempt = extractCopilotToolAttempt(event);
+          if (attempt !== null) enforceToolAttempt(attempt);
           if (isModelChangeEvent(event)) {
             const m = event.data.newModel;
             if (m !== 'auto' && result.model === null) {
@@ -200,10 +264,15 @@ var CopilotRunner = class {
       if (copilotMcpServers !== void 0 && Object.keys(copilotMcpServers).length > 0) {
         sessionConfig.mcpServers = copilotMcpServers;
       }
+      if (this.opts.excludedTools !== void 0 && this.opts.excludedTools.length > 0) {
+        sessionConfig.excludedTools = [...this.opts.excludedTools];
+      }
       session = await client.createSession(sessionConfig);
       this.sessionId = session.sessionId;
       result.sessionId = session.sessionId;
       await session.sendAndWait({ prompt }, turnTimeoutMs);
+      await Promise.allSettled(gateChecks);
+      if (denial !== null) throw denial;
       result.status = 'completed';
     } finally {
       abortController.signal.removeEventListener('abort', onAbort);
@@ -229,6 +298,45 @@ var CopilotRunner = class {
     return result;
   }
 };
+function extractCopilotToolAttempt(event) {
+  const type = typeof event.type === 'string' ? event.type : '';
+  if (!/tool/i.test(type)) return null;
+  const data = typeof event.data === 'object' && event.data !== null ? event.data : event;
+  const rawName =
+    (typeof data.name === 'string' ? data.name : void 0) ??
+    (typeof data.toolName === 'string' ? data.toolName : void 0) ??
+    (typeof data.tool === 'string' ? data.tool : void 0);
+  if (rawName === void 0) return null;
+  const argsRaw = data.arguments ?? data.args ?? data.input ?? data.parameters;
+  let args = {};
+  if (typeof argsRaw === 'string') {
+    try {
+      args = JSON.parse(argsRaw);
+    } catch {
+      args = { command: argsRaw };
+    }
+  } else if (typeof argsRaw === 'object' && argsRaw !== null) {
+    args = argsRaw;
+  }
+  const commandRaw = args.command ?? args.cmd ?? args.script;
+  const command = Array.isArray(commandRaw)
+    ? commandRaw.map(String).join(' ')
+    : typeof commandRaw === 'string'
+      ? commandRaw
+      : null;
+  if (/^(shell|bash|run_in_terminal|terminal|exec)/i.test(rawName)) {
+    return { tool: 'Bash', target: command ?? '' };
+  }
+  const path =
+    (typeof args.path === 'string' ? args.path : void 0) ??
+    (typeof args.file_path === 'string' ? args.file_path : void 0) ??
+    '';
+  if (/^(write|create|edit|str_replace|apply_patch)/i.test(rawName)) {
+    return { tool: 'Edit', target: path };
+  }
+  if (command !== null) return { tool: 'Bash', target: command };
+  return { tool: rawName, target: path };
+}
 function normalizeMcpServers(mcpServers) {
   const out = {};
   for (const [name, rawCfg] of Object.entries(mcpServers)) {
@@ -297,17 +405,12 @@ var copilotProviderManifest = {
     tools: [],
   },
   enforcement: {
-    enforced: ['cwd', 'mcpServerNames', 'abortSignal', 'rateLimitBackoff'],
-    intentionallyIgnored: [
-      'maxTurns',
-      'allowedTools',
-      'hooksEnabled',
-      'approvalMode',
-      'filesystemSandbox',
-    ],
+    enforced: ['cwd', 'allowedTools', 'mcpServerNames', 'abortSignal', 'rateLimitBackoff'],
+    intentionallyIgnored: ['maxTurns', 'hooksEnabled', 'approvalMode', 'filesystemSandbox'],
     notes: [
-      'Legacy Copilot runner uses approveAll and does not enforce maxTurns or allowedTools.',
+      'Legacy Copilot runner uses approveAll and does not enforce maxTurns.',
       'Approval mode is intentionally ignored until Copilot-specific approval mapping is implemented.',
+      'Tool policy is enforced at the runner boundary: session tool events are checked against the agentboard policy gate (fail-closed), a denial aborts the session, and native excludedTools are passed through when configured.',
     ],
   },
 };
@@ -337,4 +440,9 @@ function createCopilotProviderAdapter(args) {
     },
   };
 }
-export { CopilotRunner, copilotProviderManifest, createCopilotProviderAdapter };
+export {
+  CopilotRunner,
+  copilotProviderManifest,
+  createCopilotProviderAdapter,
+  extractCopilotToolAttempt,
+};

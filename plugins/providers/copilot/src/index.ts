@@ -1,7 +1,7 @@
 import type { ProviderManifest } from "../../../../packages/plugin-sdk/src/provider.ts";
 import type { ProviderRunResult } from "../../../../packages/plugin-sdk/src/runtime.ts";
 
-export { CopilotRunner } from "./runner.ts";
+export { CopilotRunner, extractCopilotToolAttempt } from "./runner.ts";
 export type {
   CopilotRunnerOptions,
   CopilotSdkModule,
@@ -20,17 +20,23 @@ export const copilotProviderManifest = {
     tools: [],
   },
   enforcement: {
-    enforced: ["cwd", "mcpServerNames", "abortSignal", "rateLimitBackoff"],
+    enforced: [
+      "cwd",
+      "allowedTools",
+      "mcpServerNames",
+      "abortSignal",
+      "rateLimitBackoff",
+    ],
     intentionallyIgnored: [
       "maxTurns",
-      "allowedTools",
       "hooksEnabled",
       "approvalMode",
       "filesystemSandbox",
     ],
     notes: [
-      "Legacy Copilot runner uses approveAll and does not enforce maxTurns or allowedTools.",
+      "Legacy Copilot runner uses approveAll and does not enforce maxTurns.",
       "Approval mode is intentionally ignored until Copilot-specific approval mapping is implemented.",
+      "Tool policy is enforced at the runner boundary: session tool events are checked against the agentboard policy gate (fail-closed), a denial aborts the session, and native excludedTools are passed through when configured.",
     ],
   },
 } as const satisfies ProviderManifest;

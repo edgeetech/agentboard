@@ -5,10 +5,14 @@ import { dirname, join } from "node:path";
 
 import type { ProviderSandboxPolicy } from "../../../../packages/plugin-sdk/src/provider.ts";
 import {
+  evaluateProviderToolAttempt,
+  ProviderToolDeniedError,
   withProviderTurnTimeout,
   type ProviderRateLimiter,
   type ProviderRunResult,
   type ProviderSessionLog,
+  type ProviderToolAttempt,
+  type ProviderToolGate,
   type ProviderTokenUsage,
 } from "../../../../packages/plugin-sdk/src/runtime.ts";
 
@@ -50,6 +54,12 @@ export interface CodexRunnerOptions {
   rateLimiter?: ProviderRateLimiter;
   turnTimeoutMs?: number;
   runConfigDir?: () => string;
+  /**
+   * Provider-agnostic policy gate. Codex has no PreToolUse hook, so every tool
+   * call observed on the JSON event stream is checked here; a `block` decision
+   * kills the child and fails the run.
+   */
+  toolGate?: ProviderToolGate;
 }
 
 interface PartialState {
@@ -240,6 +250,41 @@ export class CodexRunner {
     abortController.signal.addEventListener("abort", killChild, { once: true });
     turnSignal.addEventListener("abort", killChild, { once: true });
 
+    // Tool gate. Codex has no PreToolUse hook, so every tool call seen on the
+    // JSON stream is checked against the same policy the Claude hook uses. A
+    // denial kills the child immediately and fails the run.
+    let denial: ProviderToolDeniedError | null = null;
+    const gateChecks: Promise<void>[] = [];
+    const enforceToolAttempt = (attempt: ProviderToolAttempt): void => {
+      gateChecks.push(
+        (async () => {
+          if (denial !== null) return;
+          const verdict = await evaluateProviderToolAttempt(
+            this.opts.toolGate,
+            attempt,
+          );
+          if (verdict.decision === "block" && denial === null) {
+            denial = new ProviderToolDeniedError(attempt, verdict.reason);
+            sessionLog?.error(
+              {
+                runId,
+                tool: attempt.tool,
+                target: attempt.target.slice(0, 200),
+                reason: verdict.reason,
+              },
+              "Codex tool denied by policy — aborting run",
+            );
+            onEvent?.("run.tool-denied", {
+              tool: attempt.tool,
+              target: attempt.target,
+              reason: verdict.reason,
+            });
+            killChild();
+          }
+        })(),
+      );
+    };
+
     let stdoutBuf = "";
     let stderrBuf = "";
     child.stdout.setEncoding("utf8");
@@ -249,7 +294,15 @@ export class CodexRunner {
       const lines = stdoutBuf.split(/\r?\n/);
       stdoutBuf = lines.pop() ?? "";
       for (const line of lines)
-        this.handleJsonLine(line, result, usage, onEvent, sessionLog, runId);
+        this.handleJsonLine(
+          line,
+          result,
+          usage,
+          onEvent,
+          sessionLog,
+          runId,
+          enforceToolAttempt,
+        );
     });
     child.stderr.on("data", (chunk: string) => {
       stderrBuf += chunk;
@@ -275,7 +328,10 @@ export class CodexRunner {
         onEvent,
         sessionLog,
         runId,
+        enforceToolAttempt,
       );
+    await Promise.allSettled(gateChecks);
+    if (denial !== null) throw denial;
     if (exitCode === 0) result.status = "completed";
     else
       throw new Error(
@@ -306,6 +362,7 @@ export class CodexRunner {
       | undefined,
     sessionLog: CodexRunnerOptions["sessionLog"],
     runId: string,
+    enforceToolAttempt?: (attempt: ProviderToolAttempt) => void,
   ): void {
     const trimmed = (line.length > 0 ? line : "").trim();
     if (!trimmed) return;
@@ -321,6 +378,10 @@ export class CodexRunner {
     const eventName = typeVal ?? eventVal ?? "codex.event";
     onEvent?.(eventName, obj);
     sessionLog?.info({ runId, type: eventName }, "Codex event");
+    if (enforceToolAttempt !== undefined) {
+      const attempt = extractCodexToolAttempt(obj);
+      if (attempt !== null) enforceToolAttempt(attempt);
+    }
     const sessionIdCandidate =
       typeof obj.session_id === "string" && obj.session_id.length > 0
         ? obj.session_id
@@ -351,6 +412,66 @@ export class CodexRunner {
       }
     }
   }
+}
+
+/**
+ * Normalise a Codex JSON stream event into a tool attempt, or null when the
+ * event is not a tool call. Codex has changed its event shape across versions,
+ * so several are recognised:
+ *   {type:"exec_command_begin", command:[...]}          (legacy exec stream)
+ *   {type:"item.started", item:{type:"command_execution", command:"..."}}
+ *   {type:"patch_apply_begin", changes:{...}}           (file writes)
+ *   {type:"turn.tool_call", tool_name:"...", arguments:{command:"..."}}
+ */
+export function extractCodexToolAttempt(
+  obj: Record<string, unknown>,
+): ProviderToolAttempt | null {
+  const type = typeof obj.type === "string" ? obj.type : "";
+  const item =
+    typeof obj.item === "object" && obj.item !== null
+      ? (obj.item as Record<string, unknown>)
+      : undefined;
+  const itemType = typeof item?.type === "string" ? item.type : "";
+  const args =
+    typeof obj.arguments === "object" && obj.arguments !== null
+      ? (obj.arguments as Record<string, unknown>)
+      : undefined;
+
+  const commandRaw =
+    obj.command ?? item?.command ?? args?.command ?? obj.cmd ?? item?.cmd;
+  const command = Array.isArray(commandRaw)
+    ? commandRaw.map(String).join(" ")
+    : typeof commandRaw === "string"
+      ? commandRaw
+      : null;
+
+  const isShell =
+    type === "exec_command_begin" ||
+    type === "exec_command_start" ||
+    itemType === "command_execution" ||
+    itemType === "local_shell_call" ||
+    (typeof obj.tool_name === "string" &&
+      /^(shell|bash|exec|local_shell)$/i.test(obj.tool_name));
+
+  if (command !== null && (isShell || command.length > 0)) {
+    return { tool: "Bash", target: command };
+  }
+
+  const isPatch =
+    type === "patch_apply_begin" ||
+    itemType === "file_change" ||
+    itemType === "patch_apply";
+  if (isPatch) {
+    const path =
+      typeof obj.path === "string"
+        ? obj.path
+        : typeof item?.path === "string"
+          ? item.path
+          : "";
+    return { tool: "Edit", target: path };
+  }
+
+  return null;
 }
 
 export function buildCodexExecArgs(args: {

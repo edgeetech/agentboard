@@ -78,6 +78,14 @@ export interface ProviderRuntimeContext {
   limits: ProviderRuntimeLimits;
   sandbox: ProviderSandboxPolicy;
   hooks?: Record<string, unknown>;
+  /**
+   * Provider-agnostic policy gate. Claude runs enforce policy through the
+   * PreToolUse hook; Codex/Copilot runners call this instead. Fail-closed.
+   */
+  toolGate?: (attempt: {
+    tool: string;
+    target: string;
+  }) => Promise<{ decision: 'allow' | 'block'; reason: string | null }>;
   abortController: AbortController;
   rateLimiter: ProviderRateLimiter;
   sessionLog: ProviderSessionLog;

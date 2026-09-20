@@ -53,7 +53,7 @@ import {
   setRunSessionRef,
 } from './repo.ts';
 import { scheduleRetry } from './retry-manager.ts';
-import { buildSdkHooks } from './run-hooks.ts';
+import { buildSdkHooks, buildToolGate } from './run-hooks.ts';
 import { sessionLogger } from './session-logger.ts';
 import { listSkills } from './skill-repo.ts';
 import { Supervisor } from './supervisor.ts';
@@ -340,14 +340,18 @@ async function tryClaimAndRun(
   // attempt to abrun.record_tool, blocks per phase policy.
   // Hooks only attach for single-claude runs; council members manage their own
   // session lifetime per member.
+  const hookParams = {
+    runToken: run_token,
+    mcpUrl: `http://127.0.0.1:${port}/mcp`,
+    serverToken,
+  };
   const sdkHooks =
-    !isCouncil && effectiveProvider === 'claude'
-      ? buildSdkHooks({
-          runToken: run_token,
-          mcpUrl: `http://127.0.0.1:${port}/mcp`,
-          serverToken,
-        })
-      : undefined;
+    !isCouncil && effectiveProvider === 'claude' ? buildSdkHooks(hookParams) : undefined;
+
+  // Providers without a PreToolUse hook (Codex, Copilot, council members) get
+  // the same policy through an explicit, fail-closed gate at the runner
+  // boundary. Every provider is covered — no silent bypass.
+  const toolGate = buildToolGate(hookParams);
 
   // Periodic heartbeat ticker. Bumps last_heartbeat_at every 30s while the
   // AgentRunner promise is still pending, so long-running single tools
@@ -416,6 +420,7 @@ async function tryClaimAndRun(
     limits: runtimePolicy.limits,
     sandbox: runtimePolicy.sandbox,
     ...(sdkHooks !== undefined ? { hooks: sdkHooks } : {}),
+    toolGate,
     abortController,
     rateLimiter,
     sessionLog,

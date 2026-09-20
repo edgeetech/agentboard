@@ -1,7 +1,11 @@
 import type { ProviderManifest } from "../../../../packages/plugin-sdk/src/provider.ts";
 import type { ProviderRunResult } from "../../../../packages/plugin-sdk/src/runtime.ts";
 
-export { CodexRunner, buildCodexExecArgs } from "./runner.ts";
+export {
+  CodexRunner,
+  buildCodexExecArgs,
+  extractCodexToolAttempt,
+} from "./runner.ts";
 export type { CodexRunnerOptions } from "./runner.ts";
 export {
   codexBridgedClaudeMcps,
@@ -32,6 +36,7 @@ export const codexProviderManifest = {
   },
   enforcement: {
     enforced: [
+      "allowedTools",
       "cwd",
       "mcpServerNames",
       "abortSignal",
@@ -40,13 +45,13 @@ export const codexProviderManifest = {
     ],
     intentionallyIgnored: [
       "maxTurns",
-      "allowedTools",
       "hooksEnabled",
       "approvalMode",
     ],
     notes: [
       "Legacy Codex runner launches with workspace-write sandboxing and fixed approve-for-me automation.",
       "Requested approvalMode is intentionally ignored until provider-specific approval mapping is implemented.",
+      "Tool policy is enforced at the runner boundary: every tool call on the JSON event stream is checked against the agentboard policy gate (fail-closed) and a denial aborts the run.",
     ],
   },
 } as const satisfies ProviderManifest;

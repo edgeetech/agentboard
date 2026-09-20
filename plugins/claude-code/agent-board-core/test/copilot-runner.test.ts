@@ -11,7 +11,7 @@ function createCopilotSdkMock() {
     return { createSession, stop };
   });
   return {
-    approveAll: {},
+    approveAll: vi.fn(() => ({ kind: 'allow' })),
     CopilotClient,
     createSession,
     stop,
@@ -207,7 +207,11 @@ describe('CopilotRunner', () => {
           },
         },
       });
-      expect(config?.onPermissionRequest).toBe(copilotSdkMock.approveAll);
+      // Wrapped by the policy gate; must still delegate to approveAll when
+      // no tool has been denied.
+      expect(typeof config?.onPermissionRequest).toBe('function');
+      (config?.onPermissionRequest as (r: unknown, i: unknown) => unknown)({}, {});
+      expect(copilotSdkMock.approveAll).toHaveBeenCalled();
       expect(session.sendAndWait).toHaveBeenCalledWith({ prompt: 'Implement it' }, 5_000);
       expect(session.disconnect).toHaveBeenCalledTimes(1);
       expect(copilotSdkMock.stop).toHaveBeenCalledTimes(1);
