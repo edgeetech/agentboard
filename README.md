@@ -66,7 +66,7 @@
   `allow_destructive_tools: true` on a project to restore them; doing so gives the agent the
   ability to delete files and rewrite history in that repo. See
   [Destructive-tool opt-in](#-destructive-tool-opt-in).
-- **The pricing table is a hardcoded snapshot, last sourced `2026-04-30`.** Costs shown are
+- **The pricing table is a hardcoded snapshot, last sourced `2026-09-20`** (`PRICING_TABLE_DATE` in `src/pricing.ts`)**.** Costs shown are
   estimates against list prices and will drift as providers change pricing. An unknown model
   id is reported as uncosted, not as `$0`.
 - **First run performs `npm install`.** The marketplace ships source only; the first

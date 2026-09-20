@@ -1,7 +1,17 @@
-// Hardcoded Anthropic & Copilot pricing (USD per 1M tokens). Bump PRICING_VERSION when edited.
-// Last sourced: 2026-04-30.
+// Hardcoded Anthropic / OpenAI / Copilot list pricing (USD per 1M tokens).
+//
+// ⚠️ THIS TABLE IS A DATED SNAPSHOT — see PRICING_TABLE_DATE. Costs computed
+// from it are estimates and drift as providers change prices. Bump
+// PRICING_VERSION whenever a rate changes so `/agentboard reprice` can
+// recompute historical runs.
+//
+// Only add a model id when you can source its list price. An unknown id is
+// reported as `uncosted`, which is honest; a guessed price is not.
 
-export const PRICING_VERSION = 3;
+/** Date the rates below were last verified against published list prices. */
+export const PRICING_TABLE_DATE = '2026-09-20';
+
+export const PRICING_VERSION = 4;
 
 interface Rate {
   input: number;
@@ -13,7 +23,8 @@ interface Rate {
 const COPILOT_FALLBACK: Rate = { input: 1, output: 3, cache_write: 1.25, cache_read: 0.1 };
 const CLAUDE_SONNET_RATE: Rate = { input: 3, output: 15, cache_write: 3.75, cache_read: 0.3 };
 const CLAUDE_OPUS_RATE: Rate = { input: 15, output: 75, cache_write: 18.75, cache_read: 1.5 };
-const CLAUDE_HAIKU_RATE: Rate = { input: 0.8, output: 4, cache_write: 1.0, cache_read: 0.08 };
+// Haiku 4.5 list price (verified 2026-09-20): $1 / $5 per 1M in/out.
+const CLAUDE_HAIKU_RATE: Rate = { input: 1, output: 5, cache_write: 1.25, cache_read: 0.1 };
 const GPT_4_1_RATE: Rate = { input: 2, output: 8, cache_write: 2.5, cache_read: 0.5 };
 const GPT_5_RATE: Rate = { input: 1.25, output: 10, cache_write: 1.5, cache_read: 0.125 };
 const GPT_5_MINI_RATE: Rate = { input: 0.25, output: 2, cache_write: 0.3, cache_read: 0.025 };
