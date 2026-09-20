@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildTaskAudit, renderTaskAuditMarkdown } from '../src/audit-export.ts';
+import { buildTaskAudit, redactSecrets, renderTaskAuditMarkdown } from '../src/audit-export.ts';
 
 import { makeP0Db, seedP0Project } from './p0-support-db.ts';
 
@@ -66,5 +66,83 @@ describe('task audit export', () => {
     expect(markdown).not.toContain('abcdefabcdef');
     expect(markdown).not.toContain('secret-value');
     expect(markdown).not.toContain('sk-ant-api03-abcdefghijklmnopqrstuvwxyz');
+  });
+});
+
+describe('redactSecrets pattern coverage', () => {
+  // Fixtures are assembled from fragments so no complete token-shaped literal
+  // ever lands in the repo — GitHub push protection rejects those on sight.
+  const j = (...parts: string[]): string => parts.join('');
+
+  const cases: [string, string][] = [
+    [
+      'jwt',
+      'token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk',
+    ],
+    ['aws access key', j('AKIA', 'IOSFODNN7EXAMPLE')],
+    ['aws session key', j('ASIA', 'Y34FZKBOKMUTVV7A')],
+    ['aws secret', j('aws_secret_access_key=', 'wJalrXUtnFEMI/K7MDENG/', 'bPxRfiCYEXAMPLEKEY')],
+    ['github classic pat', j('ghp', '_', '1234567890abcdefghijklmnopqrstuvwx')],
+    ['github oauth', j('gho', '_', '16C7e42F292c6912E7710c838347Ae178B4a')],
+    ['github user-to-server', j('ghu', '_', '16C7e42F292c6912E7710c838347Ae178B4a')],
+    ['github server-to-server', j('ghs', '_', '16C7e42F292c6912E7710c838347Ae178B4a')],
+    ['github refresh', j('ghr', '_', '16C7e42F292c6912E7710c838347Ae178B4a')],
+    [
+      'github fine-grained pat',
+      j('github', '_pat_', '11ABCDEFG0abcdefghijkl', '_1234567890abcdefghijklmnop'),
+    ],
+    ['slack bot token', j('xox', 'b-', '123456789012-1234567890123-', 'AbCdEfGhIjKlMnOpQrStUvWx')],
+    ['slack user token', j('xox', 'p-', '123456789012-1234567890123-', 'AbCdEfGhIjKlMnOpQrStUvWx')],
+    ['slack app token', j('xapp', '-1-', 'A012BCDEFGH-1234567890123-', 'abcdefabcdefabcdefabcdef')],
+    [
+      'slack webhook',
+      j(
+        'https://hooks.slack.com',
+        '/services/',
+        'T00000000/B00000000/',
+        'XXXXXXXXXXXXXXXXXXXXXXXX',
+      ),
+    ],
+    ['openai key', j('sk', '-proj-', 'abcdefghijklmnopqrstuvwxyz0123456789')],
+    ['anthropic key', j('sk', '-ant-api03-', 'abcdefghijklmnopqrstuvwxyz0123456789')],
+    ['google api key', j('AIza', 'Sy_1234567890abcdefghijklmnopqrstuv')],
+  ];
+
+  it.each(cases)('redacts a %s out of a free-text string', (_name, secret) => {
+    const out = redactSecrets(`log line before ${secret} log line after`);
+    expect(out).not.toContain(secret);
+    expect(out).toContain('[REDACTED]');
+    expect(out).toContain('log line before');
+    expect(out).toContain('log line after');
+  });
+
+  it.each(cases)('redacts a %s nested in an object', (_name, secret) => {
+    const out = redactSecrets({ comments: [{ body: `here: ${secret}` }] });
+    expect(JSON.stringify(out)).not.toContain(secret);
+  });
+
+  it('keeps the Bearer prefix while redacting a bearer JWT', () => {
+    const out = redactSecrets(
+      'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghij',
+    );
+    expect(out).toBe('Authorization: Bearer [REDACTED]');
+  });
+
+  it('redacts a PEM private key block', () => {
+    const out = redactSecrets(
+      '-----BEGIN RSA PRIVATE KEY-----\nMIIEow==\n-----END RSA PRIVATE KEY-----',
+    );
+    expect(out).toBe('[REDACTED]');
+  });
+
+  it('leaves ordinary prose and code alone', () => {
+    for (const benign of [
+      'Refactored src/pricing.ts and bumped PRICING_VERSION to 4.',
+      'git commit -m "fix: redact tokens"',
+      'The AKIA prefix identifies an AWS key.',
+      'See https://github.com/edgeetech/agentboard/pull/4',
+    ]) {
+      expect(redactSecrets(benign)).toBe(benign);
+    }
   });
 });

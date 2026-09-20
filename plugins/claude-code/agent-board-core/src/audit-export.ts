@@ -174,11 +174,35 @@ function redact(value: unknown): unknown {
       /* fall through to text redaction */
     }
   }
-  return value
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
-    .replace(/\b(?:gho|ghp|github_pat|sk|xox[abprs])[_-][A-Za-z0-9_:-]{12,}\b/g, '[REDACTED]')
-    .replace(/\b[A-Fa-f0-9]{48,}\b/g, '[REDACTED]');
+  return SECRET_PATTERNS.reduce<string>((acc, [re, to]) => acc.replace(re, to), value);
 }
+
+// Ordered: `Bearer` first so `Bearer <jwt>` keeps its prefix, then the
+// provider-specific token shapes, then the generic long-hex catch-all.
+const SECRET_PATTERNS: [RegExp, string][] = [
+  [/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]'],
+  // JSON Web Tokens — header.payload.signature, header always starts `eyJ`.
+  [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]'],
+  // AWS access key ids (AKIA, plus the other documented 4-char prefixes).
+  [/\b(?:AKIA|ASIA|AGPA|AIDA|AROA|ANPA|ANVA|ABIA|ACCA)[0-9A-Z]{16}\b/g, '[REDACTED]'],
+  [/\b(aws_secret_access_key|aws_session_token)(\s*[=:]\s*)\S+/gi, '$1$2[REDACTED]'],
+  // GitHub tokens: ghp_/gho_/ghu_/ghs_/ghr_ + fine-grained github_pat_.
+  [/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, '[REDACTED]'],
+  [/\bgh[pousr]_[A-Za-z0-9]{16,}\b/g, '[REDACTED]'],
+  // Slack: bot/user/app/refresh/legacy tokens, app-level tokens, webhook URLs.
+  [/\bxox[abceoprs]-[A-Za-z0-9-]{10,}/g, '[REDACTED]'],
+  [/\bxapp-\d-[A-Za-z0-9-]{10,}/g, '[REDACTED]'],
+  [/https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/+_-]{10,}/g, '[REDACTED]'],
+  // OpenAI / Anthropic style keys.
+  [/\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{16,}\b/g, '[REDACTED]'],
+  [/\b(?:sk|xox[abprs])[_-][A-Za-z0-9_:-]{12,}\b/g, '[REDACTED]'],
+  // Google API keys.
+  [/\bAIza[0-9A-Za-z_-]{35}\b/g, '[REDACTED]'],
+  // PEM private key blocks.
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[REDACTED]'],
+  // Generic long hex (session ids, HMACs).
+  [/\b[A-Fa-f0-9]{48,}\b/g, '[REDACTED]'],
+];
 
 function isSecretKey(key: string): boolean {
   return /(^|[_-])(token|secret|api[_-]?key|authorization|password)([_-]|$)/i.test(key);
