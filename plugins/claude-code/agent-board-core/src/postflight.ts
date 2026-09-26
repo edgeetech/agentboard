@@ -5,6 +5,7 @@ import type { ActorRole, AssigneeRole, Phase, RunRole } from './types.ts';
 export interface CommentLike {
   body?: string | null;
   author_role?: ActorRole;
+  created_at?: string;
 }
 
 export interface TaskLike {
@@ -38,12 +39,25 @@ export function checkPhaseGate(role: RunRole, runPhase: Phase | null | undefined
   return `phase ${runPhase ?? 'DISCOVERY'} is not DONE — call abrun.advance until DONE before finish_run(succeeded)`;
 }
 
+/**
+ * `comments` has no `run_id` column (see db/schema.sql), so we scope "this
+ * run's required comments" by author_role + created_at >= sinceIso (the
+ * run's own started_at). Without this, a rework run inherits credit for a
+ * PRIOR run's `DEV_COMPLETED`/`REVIEW_VERDICT` comment, or a human comment
+ * that happens to start with `REVIEW_VERDICT:` satisfies the reviewer gate.
+ * Pass `sinceIso: null` only for callers that can't supply a run start time
+ * (falls back to unscoped — do not use for finish_run's real enforcement).
+ */
 export function checkPostflight(
   role: RunRole,
   task: TaskLike,
   comments: readonly CommentLike[],
+  sinceIso: string | null,
 ): string | null {
-  const bodies = comments.map(c => c.body ?? '');
+  const scoped = comments.filter(
+    (c) => c.author_role === role && (sinceIso === null || (c.created_at ?? '') >= sinceIso),
+  );
+  const bodies = scoped.map(c => c.body ?? '');
   const hasPrefix = (pre: string): boolean => bodies.some(b => b.startsWith(pre));
 
   if (role === 'pm') {
@@ -76,6 +90,34 @@ export function checkPostflight(
   if (!hasPrefix('REVIEW_VERDICT')) return 'missing REVIEW_VERDICT comment';
   if (!hasPrefix('RATIONALE'))      return 'missing RATIONALE comment';
   return null;
+}
+
+export interface RunCompletionRun {
+  role: RunRole;
+  parent_run_id?: string | null;
+  member_index?: number | null;
+  council_size?: number | null;
+}
+
+/**
+ * Single source of truth for "may this run call finish_run(succeeded)?" —
+ * council-skip, then required-comments, then the inner phase gate, in that
+ * order. Used by BOTH the MCP finish_run path (src/api-mcp.ts) and the
+ * executor's natural-end-of-turn path (src/executor.ts) so an agent that
+ * quietly stops talking without calling finish_run can't skip the phase
+ * gate that finish_run itself enforces.
+ */
+export function evaluateRunCompletion(
+  run: RunCompletionRun,
+  task: TaskLike,
+  comments: readonly CommentLike[],
+  phase: Phase | null | undefined,
+  sinceIso: string | null,
+): string | null {
+  if (isNonFinalCouncilMember(run)) return null;
+  const pfErr = checkPostflight(run.role, task, comments, sinceIso);
+  if (pfErr !== null) return pfErr;
+  return checkPhaseGate(run.role, phase);
 }
 
 // Rework / NEEDS_PM comment guard: when reassigning to 'worker' (from reviewer)

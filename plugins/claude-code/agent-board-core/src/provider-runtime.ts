@@ -25,7 +25,11 @@ export interface ProviderRuntimeResult {
   model?: string | null;
   totalCostUsd?: number | null;
   error?: string;
-  errorKind?: 'timeout' | 'error';
+  errorKind?: 'timeout' | 'error' | 'rate_limit';
+  /** ISO timestamp the provider's usage limit resets, when known (errorKind='rate_limit'). */
+  resetsAt?: string | null;
+  /** Provider-reported auth source for this run (e.g. Claude SDK `apiKeySource`). */
+  authSource?: string | null;
 }
 
 export interface ProviderRuntimeLimits {
@@ -89,9 +93,14 @@ export interface ProviderRuntimeContext {
   abortController: AbortController;
   rateLimiter: ProviderRateLimiter;
   sessionLog: ProviderSessionLog;
-  serverToken: string;
+  /** Per-run MCP bearer (the run_token). Never the server token. */
+  mcpBearerToken: string;
   serverPort: number;
   onEvent: (eventName: string, detail: Record<string, unknown>) => void;
+  /** Whitelisted child-process environment (see child-env.ts) — never {...process.env}. */
+  env: Record<string, string>;
+  /** Per-provider auth mode resolved from project.auth_config_json (default 'auto'). */
+  authMode?: 'subscription' | 'api_key' | 'auto';
 }
 
 export interface ProviderResumeCapability {

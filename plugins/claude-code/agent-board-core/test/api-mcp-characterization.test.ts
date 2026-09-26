@@ -21,6 +21,7 @@ async function makeDb(): Promise<DbHandle> {
       max_parallel INTEGER NOT NULL DEFAULT 1,
       agent_provider TEXT NOT NULL DEFAULT 'claude',
       agent_config_json TEXT,
+      auth_config_json TEXT,
       scan_ignore_json TEXT NOT NULL DEFAULT '[]',
       allow_git INTEGER NOT NULL DEFAULT 0,
       concerns_json TEXT NOT NULL DEFAULT '[]',
@@ -142,42 +143,7 @@ beforeEach(async () => {
 });
 
 describe('MCP callTool characterization', () => {
-  it('lists queued runs in FIFO order with task summary fields', () => {
-    insertTask('T1', 'TST-1', 'Older task');
-    insertTask('T2', 'TST-2', 'Newer task');
-    insertRun({
-      id: 'R-running',
-      taskId: 'T1',
-      role: 'worker',
-      status: 'running',
-      queuedAt: '2026-01-01T00:00:00Z',
-      token: 'running-token',
-    });
-    insertRun({
-      id: 'R-new',
-      taskId: 'T2',
-      role: 'worker',
-      status: 'queued',
-      queuedAt: '2026-01-01T00:02:00Z',
-    });
-    insertRun({
-      id: 'R-old',
-      taskId: 'T1',
-      role: 'pm',
-      status: 'queued',
-      queuedAt: '2026-01-01T00:01:00Z',
-    });
-
-    const result = callTool(db, 'list_queue', {}) as { queue: Row[] };
-
-    expect(result.queue.map((row) => row.id)).toEqual(['R-old', 'R-new']);
-    expect(result.queue[0]).toMatchObject({
-      task_code: 'TST-1',
-      task_title: 'Older task',
-    });
-  });
-
-  it('claims queued reviewer runs with a fresh token and verification phase', () => {
+  it('does not expose list_queue or claim_run — the executor claims runs itself', () => {
     insertTask('T1', 'TST-1', 'Review task');
     insertRun({
       id: 'R-review',
@@ -185,25 +151,12 @@ describe('MCP callTool characterization', () => {
       role: 'reviewer',
       status: 'queued',
       queuedAt: '2026-01-01T00:01:00Z',
-      token: 'existing-token-must-not-return',
     });
-
-    const result = callTool(db, 'claim_run', { run_id: 'R-review' }) as {
-      run_token: string;
-      task_id: string;
-    };
-    const row = getRun('R-review');
-    const history = JSON.parse(String(row.phase_history_json)) as Row[];
-
-    expect(result.task_id).toBe('T1');
-    expect(result.run_token).toMatch(/^[a-f0-9]{48}$/);
-    expect(result.run_token).not.toBe('existing-token-must-not-return');
-    expect(row.status).toBe('running');
-    expect(row.token).toBe(result.run_token);
-    expect(row.phase).toBe('VERIFICATION');
-    expect(history).toEqual([
-      expect.objectContaining({ from: 'DISCOVERY', to: 'VERIFICATION', by: 'reviewer' }),
-    ]);
+    expect(() => callTool(db, 'list_queue', {})).toThrow(/unknown tool/);
+    expect(() => callTool(db, 'claim_run', { run_id: 'R-review' })).toThrow(/unknown tool/);
+    // Queued run is untouched — no MCP tool can claim it (and thereby mint
+    // its run_token) on the agent's behalf.
+    expect(getRun('R-review').status).toBe('queued');
   });
 
   it('blocks git writes without project allow_git and records audit activity', () => {

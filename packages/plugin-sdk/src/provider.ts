@@ -85,7 +85,7 @@ export interface ProviderRuntimeResponse {
   readonly usage?: ProviderRuntimeUsage;
   readonly events?: readonly ProviderRuntimeEvent[];
   readonly error?: {
-    readonly kind: "timeout" | "provider" | "cancelled" | "unknown";
+    readonly kind: "timeout" | "provider" | "cancelled" | "unknown" | "rate_limit";
     readonly message: string;
   };
 }

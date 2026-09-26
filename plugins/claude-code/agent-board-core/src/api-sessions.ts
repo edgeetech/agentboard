@@ -1,77 +1,31 @@
-// Read-only view of session SQLite databases.
+// Read-only HTTP view of recorded sessions.
 //
-// Primary source: agentboard's own session recorder at `~/.agentboard/sessions/`
-// (hooks in plugins/claude-code/hooks/session/ write these). Back-compat:
-// also reads context-mode's `~/.claude/context-mode/sessions/` if present,
-// so users with both tools see a merged history.
+// Primary source: AgentBoard's own session recorder at `~/.agentboard/sessions/`
+// (hooks in plugins/claude-code/hooks/session/ write these). Back-compat: also
+// reads context-mode's session dir so users with both tools see one history.
+// Overrides: `AGENTBOARD_SESSION_DIR` (primary), `INSIGHT_SESSION_DIR` (legacy).
 //
-// Overrides: `AGENTBOARD_SESSION_DIR` (primary), `INSIGHT_SESSION_DIR`
-// (back-compat). DBs are opened read-only.
+// Listing is served from SessionIndex (worker-thread scans, paged); the detail
+// endpoint opens a single DB and pages its events.
 
-import { existsSync, readdirSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 
 import { json } from './http-util.ts';
 import { listProjectDbs, getDb } from './project-registry.ts';
-
-// ─── minimal DbHandle shape used for read-only session DBs ───────────────
-
-interface SessionDbHandle {
-  prepare(sql: string): {
-    run: (...args: unknown[]) => unknown;
-    get: (...args: unknown[]) => unknown;
-    all: (...args: unknown[]) => unknown[];
-  };
-  close(): void;
-}
-
-interface WritableSessionDbHandle extends SessionDbHandle {
-  exec(sql: string): void;
-}
-
-type DbOpener = (path: string) => SessionDbHandle;
-
-// ─── SQL row shapes ───────────────────────────────────────────────────────
-
-interface SessionMetaRow {
-  session_id: string;
-  project_dir: string | null;
-  started_at: string | null;
-  last_event_at: string | null;
-  event_count: number;
-  compact_count: number;
-}
-
-interface SessionEventRow {
-  id: number;
-  type: string;
-  category: string | null;
-  priority: number | null;
-  data: string | null;
-  source_hook: string | null;
-  created_at: string | null;
-}
-
-interface SessionResumeRow {
-  snapshot: string | null;
-  event_count: number;
-  consumed: number;
-}
-
-interface TopFileRow {
-  path: string | null;
-  n: number;
-}
-
-interface DataRow {
-  data: string | null;
-}
-
-interface ProjectRepoRow {
-  repo_path: string | null;
-}
+import {
+  SessionIndex,
+  workerScanner,
+  type SessionLink,
+  type SessionSourceFilter,
+} from './session-index.ts';
+import {
+  deleteAgentboardSessions as deleteSessionsFromStore,
+  getReadOpener,
+  isSafeHash,
+  readSessionDetail,
+  resolveDbPath,
+  sessionsDirs,
+} from './session-store.ts';
 
 interface AgentboardRunRow {
   sid: string | null;
@@ -80,308 +34,38 @@ interface AgentboardRunRow {
   provider: string | null;
 }
 
-interface AgentboardEntry {
-  source: 'agentboard';
-  taskCode: string | null;
-  role: string | null;
-  provider: string;
-  repoPath: string | null;
-  projectCode: string;
-}
-
-interface EnrichResult {
-  firstPrompt: string | null;
-  intent: string | null;
-  role: string | null;
-  topFiles: { path: string; count: number }[];
-  planFiles: string[];
-}
-
-interface DbFileEntry {
-  name: string;
-  path: string;
-  size: number;
-}
-
-// ─── directory helpers ────────────────────────────────────────────────────
-
-function sessionsDirs(): string[] {
-  const primary = primarySessionsDir();
-  const legacy =
-    process.env.INSIGHT_SESSION_DIR ?? join(homedir(), '.claude', 'context-mode', 'sessions');
-  const seen = new Set<string>();
-  return [primary, legacy].filter(
-    (d): d is string => Boolean(d) && !seen.has(d) && Boolean(seen.add(d)),
-  );
-}
-
-function primarySessionsDir(): string {
-  return process.env.AGENTBOARD_SESSION_DIR ?? join(homedir(), '.agentboard', 'sessions');
-}
-
-// ─── lazy SQLite opener ───────────────────────────────────────────────────
-
-let openerPromise: Promise<DbOpener | null> | null = null;
-
-async function getOpener(): Promise<DbOpener | null> {
-  if (openerPromise) return openerPromise;
-  openerPromise = (async (): Promise<DbOpener | null> => {
-    try {
-      type BetterSqliteCtor = new (p: string, o: Record<string, unknown>) => SessionDbHandle;
-      // @ts-expect-error better-sqlite3 is optional — no @types package required
-      const mod = (await import('better-sqlite3')) as { default: BetterSqliteCtor };
-      return (path: string): SessionDbHandle =>
-        new mod.default(path, { readonly: true, fileMustExist: true });
-    } catch {
-      /* fall through */
-    }
-    try {
-      type NodeSqliteCtor = new (p: string, o: Record<string, unknown>) => SessionDbHandle;
-      const mod = (await import('node:sqlite')) as { DatabaseSync: NodeSqliteCtor };
-      return (path: string): SessionDbHandle =>
-        new mod.DatabaseSync(path, { readOnly: true, open: true });
-    } catch {
-      /* fall through */
-    }
-    return null;
-  })();
-  return openerPromise;
-}
-
-async function getWritableOpener(): Promise<((path: string) => WritableSessionDbHandle) | null> {
-  try {
-    type BetterSqliteCtor = new (p: string) => WritableSessionDbHandle;
-    // @ts-expect-error better-sqlite3 is optional — no @types package required
-    const mod = (await import('better-sqlite3')) as { default: BetterSqliteCtor };
-    return (path: string): WritableSessionDbHandle => new mod.default(path);
-  } catch {
-    /* fall through */
-  }
-  try {
-    type NodeSqliteCtor = new (p: string) => WritableSessionDbHandle;
-    const mod = (await import('node:sqlite')) as { DatabaseSync: NodeSqliteCtor };
-    return (path: string): WritableSessionDbHandle => new mod.DatabaseSync(path);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Remove session rows explicitly linked to AgentBoard runs. Only the primary
- * AgentBoard session directory is writable; the legacy context-mode directory
- * remains a read-only compatibility source.
- */
-export async function deleteAgentboardSessions(sessionIds: readonly string[]): Promise<number> {
-  const ids = [...new Set(sessionIds.filter((id) => id !== ''))];
-  if (ids.length === 0) return 0;
-
-  const open = await getWritableOpener();
-  if (!open) throw new Error('sqlite adapter unavailable for session cleanup');
-
-  let deleted = 0;
-  for (const file of listDbFiles(primarySessionsDir())) {
-    let db: WritableSessionDbHandle | undefined;
-    try {
-      db = open(file.path);
-      db.prepare('PRAGMA busy_timeout = 5000').run();
-      const tables = new Set(
-        (
-          db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as {
-            name?: unknown;
-          }[]
-        )
-          .map((row) => row.name)
-          .filter((name): name is string => typeof name === 'string'),
-      );
-      if (!tables.has('session_meta')) continue;
-
-      db.exec('BEGIN IMMEDIATE');
-      try {
-        const before = db
-          .prepare(
-            `SELECT COUNT(*) AS count FROM session_meta WHERE session_id IN (${ids.map(() => '?').join(',')})`,
-          )
-          .get(...ids) as { count?: unknown } | undefined;
-        for (const table of ['session_events', 'session_resume', 'session_meta']) {
-          if (!tables.has(table)) continue;
-          const stmt = db.prepare(`DELETE FROM ${table} WHERE session_id = ?`);
-          for (const id of ids) stmt.run(id);
-        }
-        db.exec('COMMIT');
-        deleted += typeof before?.count === 'number' ? before.count : 0;
-      } catch (error) {
-        try {
-          db.exec('ROLLBACK');
-        } catch {
-          /* preserve the original cleanup error */
-        }
-        throw error;
-      }
-    } finally {
-      try {
-        db?.close();
-      } catch {
-        /* best effort */
-      }
-    }
-  }
-  return deleted;
-}
-
-// ─── utilities ────────────────────────────────────────────────────────────
-
-function listDbFiles(dir: string): DbFileEntry[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((n) => n.endsWith('.db'))
-    .map((n) => {
-      const path = join(dir, n);
-      let size = 0;
-      try {
-        size = statSync(path).size;
-      } catch {
-        /* best effort */
-      }
-      return { name: n, path, size };
-    })
-    .sort((a, b) => b.size - a.size);
-}
-
-function formatBytes(b: number): string {
-  if (b < 1024) return `${b} B`;
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
-  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
-  return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
-
-const EVENT_LIMIT = 500;
-const HASH_RE = /^[a-zA-Z0-9_.-]{1,80}$/;
-const PROMPT_MAX_LEN = 220;
-
-function safeDb(db: SessionDbHandle, sql: string, params: unknown[], mode: 'get'): unknown;
-function safeDb(db: SessionDbHandle, sql: string, params?: unknown[], mode?: 'all'): unknown[];
-function safeDb(
-  db: SessionDbHandle,
-  sql: string,
-  params: unknown[] = [],
-  mode: 'get' | 'all' = 'all',
-): unknown {
-  try {
-    if (typeof db.prepare !== 'function') return mode === 'get' ? null : [];
-    const stmt = db.prepare(sql);
-    return mode === 'get' ? stmt.get(...params) : stmt.all(...params);
-  } catch {
-    return mode === 'get' ? null : [];
-  }
-}
-
-function normPrompt(s: unknown): string | null {
-  if (s === null || s === undefined || s === '') return null;
-  const t = String(s).replace(/\s+/g, ' ').trim();
-  return t.length > PROMPT_MAX_LEN ? t.slice(0, PROMPT_MAX_LEN) + '…' : t;
-}
-
-// ─── session enrichment ───────────────────────────────────────────────────
-
-function enrichSession(db: SessionDbHandle, sessionId: string): EnrichResult {
-  const firstRow = safeDb(
-    db,
-    `SELECT data FROM session_events
-     WHERE session_id = ? AND type = 'user_prompt' AND LENGTH(TRIM(COALESCE(data,''))) >= 6
-     ORDER BY id ASC LIMIT 1`,
-    [sessionId],
-    'get',
-  ) as DataRow | null;
-
-  const intentRow = safeDb(
-    db,
-    `SELECT data FROM session_events WHERE session_id = ? AND type = 'intent'
-     ORDER BY id ASC LIMIT 1`,
-    [sessionId],
-    'get',
-  ) as DataRow | null;
-
-  const roleRow = safeDb(
-    db,
-    `SELECT data FROM session_events WHERE session_id = ? AND type = 'role'
-     ORDER BY id ASC LIMIT 1`,
-    [sessionId],
-    'get',
-  ) as DataRow | null;
-
-  const topFiles = (
-    safeDb(
-      db,
-      `SELECT data AS path, COUNT(*) AS n FROM session_events
-     WHERE session_id = ? AND type IN ('file_edit','file_write') AND COALESCE(data,'') != ''
-     GROUP BY data ORDER BY n DESC, MAX(id) DESC LIMIT 3`,
-      [sessionId],
-    ) as TopFileRow[]
-  ).map((r) => ({ path: r.path ?? '', count: r.n }));
-
-  const planFiles = (
-    safeDb(
-      db,
-      `SELECT DISTINCT data FROM session_events
-     WHERE session_id = ? AND type = 'plan_file_write' AND COALESCE(data,'') != ''
-     ORDER BY id ASC LIMIT 3`,
-      [sessionId],
-    ) as DataRow[]
-  ).map((r) => r.data ?? '');
-
-  return {
-    firstPrompt: normPrompt(firstRow?.data),
-    intent: intentRow?.data ?? null,
-    role: roleRow?.data ?? null,
-    topFiles,
-    planFiles,
-  };
-}
-
-// ─── agentboard session map ───────────────────────────────────────────────
-
-async function loadAgentboardSessionMap(): Promise<Map<string, AgentboardEntry>> {
-  const map = new Map<string, AgentboardEntry>();
+/** Map session id → AgentBoard run metadata across every project DB. */
+async function loadAgentboardLinks(): Promise<Map<string, SessionLink>> {
+  const map = new Map<string, SessionLink>();
   for (const code of listProjectDbs()) {
-    let db;
-    try {
-      db = await getDb(code);
-    } catch {
-      continue;
-    }
+    const db = await getDb(code).catch(() => null);
+    if (!db) continue;
     let repoPath: string | null = null;
-    try {
-      const proj = db.prepare(`SELECT repo_path FROM project LIMIT 1`).get() as
-        | ProjectRepoRow
-        | undefined;
-      repoPath = proj?.repo_path ?? null;
-    } catch {
-      /* best effort */
-    }
     let rows: AgentboardRunRow[] = [];
     try {
+      const proj = db.prepare(`SELECT repo_path FROM project LIMIT 1`).get() as
+        | { repo_path: string | null }
+        | undefined;
+      repoPath = proj?.repo_path ?? null;
       rows = db
         .prepare(
-          `
-        SELECT COALESCE(r.session_id, r.claude_session_id) AS sid, r.role AS role, t.code AS task_code,
-               COALESCE(r.session_provider, t.agent_provider_override, p.agent_provider, 'claude') AS provider
-        FROM agent_run r
-        LEFT JOIN task t ON t.id = r.task_id
-        LEFT JOIN project p ON p.id = t.project_id
-        WHERE COALESCE(r.session_id, r.claude_session_id) IS NOT NULL
-          AND COALESCE(r.session_id, r.claude_session_id) != ''
-      `,
+          `SELECT COALESCE(r.session_id, r.claude_session_id) AS sid, r.role AS role,
+                  t.code AS task_code,
+                  COALESCE(r.session_provider, t.agent_provider_override, p.agent_provider, 'claude') AS provider
+           FROM agent_run r
+           LEFT JOIN task t ON t.id = r.task_id
+           LEFT JOIN project p ON p.id = t.project_id
+           WHERE COALESCE(r.session_id, r.claude_session_id, '') != ''`,
         )
         .all() as AgentboardRunRow[];
     } catch {
-      /* best effort */
+      continue;
     }
     for (const r of rows) {
-      if (!r.sid) continue;
+      if (r.sid === null) continue;
       map.set(r.sid, {
-        source: 'agentboard',
-        taskCode: r.task_code ?? null,
-        role: r.role ?? null,
+        taskCode: r.task_code,
+        role: r.role,
         provider: r.provider ?? 'claude',
         repoPath,
         projectCode: code,
@@ -391,157 +75,99 @@ async function loadAgentboardSessionMap(): Promise<Map<string, AgentboardEntry>>
   return map;
 }
 
-// ─── list all sessions ────────────────────────────────────────────────────
+let index: SessionIndex | null = null;
 
-async function listSessionsAll(res: ServerResponse): Promise<void> {
-  const open = await getOpener();
-  if (!open) {
-    json(res, 200, { dbs: [], error: 'sqlite adapter unavailable' });
+export function getSessionIndex(): SessionIndex {
+  index ??= new SessionIndex({
+    dirs: sessionsDirs,
+    scanner: workerScanner(),
+    links: loadAgentboardLinks,
+  });
+  return index;
+}
+
+/** Delete AgentBoard-linked sessions and make the index notice immediately. */
+export async function deleteAgentboardSessions(sessionIds: readonly string[]): Promise<number> {
+  const deleted = await deleteSessionsFromStore(sessionIds);
+  getSessionIndex().invalidate();
+  return deleted;
+}
+
+const SOURCES: readonly SessionSourceFilter[] = ['all', 'agentboard', 'cli'];
+
+function intParam(url: URL, name: string): number | undefined {
+  const raw = url.searchParams.get(name);
+  if (raw === null || raw === '') return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+async function listSessions(res: ServerResponse, url: URL): Promise<void> {
+  if (!(await getReadOpener())) {
+    json(res, 503, { error: 'sqlite adapter unavailable' });
     return;
   }
-
-  const dirs = sessionsDirs();
-  const files: DbFileEntry[] = [];
-  const seenPaths = new Set<string>();
-  for (const d of dirs) {
-    for (const f of listDbFiles(d)) {
-      if (seenPaths.has(f.path)) continue;
-      seenPaths.add(f.path);
-      files.push(f);
-    }
+  const source = url.searchParams.get('source') ?? 'all';
+  if (!SOURCES.includes(source as SessionSourceFilter)) {
+    json(res, 400, { error: 'invalid source' });
+    return;
   }
-
-  const dbs: unknown[] = [];
-  const abMap = await loadAgentboardSessionMap();
-
-  for (const f of files) {
-    let db: SessionDbHandle | undefined;
-    try {
-      db = open(f.path);
-    } catch {
-      continue;
-    }
-    try {
-      const rows = safeDb(
-        db,
-        `SELECT session_id, project_dir, started_at, last_event_at, event_count, compact_count
-         FROM session_meta ORDER BY started_at DESC`,
-      ) as SessionMetaRow[];
-      dbs.push({
-        hash: f.name.replace(/\.db$/, ''),
-        size: formatBytes(f.size),
-        sizeBytes: f.size,
-        sessions: rows.map((s) => {
-          const e = enrichSession(db, s.session_id);
-          const ab = abMap.get(s.session_id);
-          return {
-            id: s.session_id,
-            projectDir: s.project_dir,
-            startedAt: s.started_at,
-            lastEventAt: s.last_event_at,
-            eventCount: s.event_count,
-            compactCount: s.compact_count,
-            firstPrompt: e.firstPrompt,
-            intent: e.intent,
-            role: e.role ?? ab?.role ?? null,
-            topFiles: e.topFiles,
-            planFiles: e.planFiles,
-            source: ab ? 'agentboard' : 'cli',
-          };
-        }),
-      });
-    } catch {
-      // schema mismatch — skip
-    } finally {
-      try {
-        db.close();
-      } catch {
-        /* best effort */
-      }
-    }
-  }
-  json(res, 200, { dir: dirs[0], dirs, dbs });
+  const page = await getSessionIndex().query({
+    q: url.searchParams.get('q') ?? '',
+    source: source as SessionSourceFilter,
+    offset: intParam(url, 'offset'),
+    limit: intParam(url, 'limit'),
+  });
+  json(res, 200, page);
 }
 
-// ─── list events for a single session ────────────────────────────────────
-
-function isSafeHash(s: unknown): s is string {
-  return typeof s === 'string' && HASH_RE.test(s);
-}
-
-async function listSessionEvents(
+async function sessionDetail(
   res: ServerResponse,
+  url: URL,
   hash: string,
   sessionId: string,
 ): Promise<void> {
-  const open = await getOpener();
-  if (!open) {
-    json(res, 200, { events: [], resume: null, error: 'sqlite adapter unavailable' });
-    return;
-  }
   if (!isSafeHash(hash)) {
     json(res, 400, { error: 'invalid hash' });
     return;
   }
-
-  let dbPath: string | null = null;
-  for (const d of sessionsDirs()) {
-    const candidate = join(d, hash + '.db');
-    if (existsSync(candidate)) {
-      dbPath = candidate;
-      break;
-    }
+  const open = await getReadOpener();
+  if (!open) {
+    json(res, 503, { error: 'sqlite adapter unavailable' });
+    return;
   }
-  if (!dbPath) {
+  const dbPath = resolveDbPath(hash);
+  if (dbPath === null) {
     json(res, 404, { error: 'db not found' });
     return;
   }
 
-  let db: SessionDbHandle;
+  let db: ReturnType<typeof open>;
   try {
     db = open(dbPath);
   } catch (e) {
-    json(res, 500, { error: String((e instanceof Error ? e.message : null) ?? e) });
+    json(res, 500, { error: e instanceof Error ? e.message : String(e) });
     return;
   }
-
   try {
-    const meta = safeDb(
-      db,
-      `SELECT session_id, project_dir, started_at, last_event_at, event_count, compact_count
-       FROM session_meta WHERE session_id = ?`,
-      [sessionId],
-      'get',
-    ) as SessionMetaRow | null;
-
-    const events = safeDb(
-      db,
-      `SELECT id, type, category, priority, data, source_hook, created_at
-       FROM session_events WHERE session_id = ? ORDER BY id ASC LIMIT ${EVENT_LIMIT}`,
-      [sessionId],
-    ) as SessionEventRow[];
-
-    const resume = safeDb(
-      db,
-      `SELECT snapshot, event_count, consumed FROM session_resume WHERE session_id = ?`,
-      [sessionId],
-      'get',
-    ) as SessionResumeRow | null;
-
-    const enrich = meta ? enrichSession(db, sessionId) : null;
-    const abMap = await loadAgentboardSessionMap();
-    const ab = abMap.get(sessionId);
-
+    const detail = readSessionDetail(db, sessionId, {
+      after: intParam(url, 'after'),
+      limit: intParam(url, 'limit'),
+    });
+    if (!detail.meta && detail.events.length === 0) {
+      json(res, 404, { error: 'session not found' });
+      return;
+    }
+    const link = await getSessionIndex().linkFor(sessionId);
     json(res, 200, {
       hash,
       sessionId,
-      meta,
-      events,
-      resume,
-      enrich,
-      provider: ab?.provider ?? 'claude',
+      ...detail,
+      provider: link?.provider ?? 'claude',
+      taskCode: link?.taskCode ?? null,
+      projectCode: link?.projectCode ?? null,
+      repoPath: link?.repoPath ?? null,
     });
-    return;
   } finally {
     try {
       db.close();
@@ -551,8 +177,6 @@ async function listSessionEvents(
   }
 }
 
-// ─── public handler ───────────────────────────────────────────────────────
-
 export async function handleSessions(
   req: IncomingMessage,
   res: ServerResponse,
@@ -561,15 +185,13 @@ export async function handleSessions(
   if (req.method !== 'GET') return null;
 
   if (url.pathname === '/api/sessions') {
-    await listSessionsAll(res);
+    await listSessions(res, url);
     return true;
   }
 
   const m = /^\/api\/sessions\/([^/]+)\/events\/(.+)$/.exec(url.pathname);
   if (m) {
-    const hash = decodeURIComponent(m[1] ?? '');
-    const sessionId = decodeURIComponent(m[2] ?? '');
-    await listSessionEvents(res, hash, sessionId);
+    await sessionDetail(res, url, decodeURIComponent(m[1] ?? ''), decodeURIComponent(m[2] ?? ''));
     return true;
   }
 

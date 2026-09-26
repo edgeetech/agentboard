@@ -26,7 +26,30 @@
     "clear": "Temizle",
     "copied": "Kopyalandı ✓",
     "remove": "Kaldır",
-    "view": "Detayı gör"
+    "view": "Detayı gör",
+    "retry": "Yeniden dene",
+    "yes": "evet",
+    "no": "hayır",
+    "optional": "isteğe bağlı",
+    "loading": "Yükleniyor…",
+    "breadcrumb": "Konum"
+  },
+  "health": {
+    "health": "Sağlık",
+    "unavailable": "kullanılamıyor",
+    "queue": "Kuyruk",
+    "queue_value": "{{queued}} kuyrukta / {{running}} çalışıyor",
+    "awaiting": "Bekleyen",
+    "tracker": "Takipçi",
+    "skills": "Yetenekler",
+    "not_scanned": "taranmadı",
+    "cost": "Maliyet",
+    "uncosted": "Maliyetsiz",
+    "tracker_disabled": "devre dışı",
+    "tracker_missing_env": "env eksik",
+    "tracker_rate_limited": "hız sınırlı",
+    "tracker_error": "hata",
+    "tracker_issue_count": "{{count}} sorun"
   },
   "prompt": {
     "copy": "Kopyala",
@@ -67,15 +90,17 @@
     "repo_path": "Kod dizini",
     "repo_hint": "Tam yol. Worker bu dizindeki dosyaları düzenler.",
     "agent_provider": "Ajanları çalıştırmak için hangi motor kullanılacağını seç",
-  "agent_provider_claude": "Claude (Anthropic SDK)",
-  "agent_provider_github_copilot": "GitHub CoPilot",
-  "agent_provider_codex": "Codex CLI",
+    "agent_provider_claude": "Claude (Anthropic SDK)",
+    "agent_provider_github_copilot": "GitHub CoPilot",
+    "agent_provider_codex": "Codex CLI",
     "auto_dispatch_pm": "Yeni görevde PM otomatik çalıştırılsın",
     "max_parallel": "Eş zamanlı çalışan ajan limiti",
     "max_parallel_hint": "1–3. Bu proje için eş zamanlı ajan çalışması.",
     "version_mismatch": "Proje başka yerde değiştirildi — yenileyip tekrar deneyin.",
     "scan_ignore": "Şu klasörleri atla",
-    "scan_ignore_hint": "Her satıra bir tane. Klasör adı (örn. `legacy`) veya repo altındaki yol (örn. `Tax/__archived_maintenance`). `node_modules`, `bin`, `vendor` gibi varsayılanlar her zaman atlanır."
+    "scan_ignore_hint": "Her satıra bir tane. Klasör adı (örn. `legacy`) veya repo altındaki yol (örn. `Tax/__archived_maintenance`). `node_modules`, `bin`, `vendor` gibi varsayılanlar her zaman atlanır.",
+    "agent_config": "Ajan yapılandırması",
+    "agent_config_help": "Tek bir sağlayıcı seç veya 2–5 sıralı üyeden oluşan bir Konsey kur. Konsey sırayla çalışır: her üye önceki çıktıları görür; son üye nihai sonucu sentezler."
   },
   "wizard": {
     "header": "İlk projeni oluştur",
@@ -111,7 +136,13 @@
     "col_status": "Durum",
     "col_assignee": "Atanan",
     "col_cost": "Maliyet",
-    "col_actions": "İşlemler"
+    "col_actions": "İşlemler",
+    "view_board": "Pano görünümü",
+    "view_list": "Liste görünümü",
+    "load_failed_title": "Görevler yüklenemedi",
+    "empty_title": "Henüz görev yok",
+    "empty_body": "Bir ajanı çalıştırmak için ilk görevini oluştur.",
+    "transition_failed": "Görev durumu değiştirilemedi"
   },
   "task": {
     "title": "Başlık",
@@ -151,7 +182,25 @@
     "run_agent": "Ajan Çalıştır",
     "run_agent_role": "Ajan rolü",
     "run_agent_busy": "Çalışma zaten kuyruğa alındı/aktif",
-    "resume_copied": "Kopyalandı — terminale yapıştır"
+    "resume_copied": "Kopyalandı — terminale yapıştır",
+    "run_agent_provider": "Sağlayıcı",
+    "run_agent_provider_default": "Rol varsayılanı",
+    "run_agent_provider_council": "Konsey",
+    "export_json": "Denetim JSON'ını dışa aktar",
+    "export_markdown": "Denetim Markdown'ını dışa aktar",
+    "phase_section": "Faz ve borç",
+    "run_error": "Hata",
+    "run_agent_failed": "Ajan çalıştırılamadı",
+    "cancel_run_failed": "İptal başarısız",
+    "add_comment_failed": "Yorum eklenemedi",
+    "export_failed": "Denetim dışa aktarımı başarısız",
+    "load_failed_title": "Görev yüklenemedi",
+    "load_failed_body": "Bir şeyler yanlış gitti.",
+    "confirm_cancel_run": "Aktif ajan çalışmasını iptal et?",
+    "cost_calculating": "hesaplanıyor…",
+    "cost_na": "maliyet yok",
+    "cost_estimate_hint": "Aboneliğiniz kapsamında — bu bir ücret değil, API eşdeğeri tahmindir.",
+    "no_runs": "Henüz ajan çalıştırması yok"
   },
   "files": {
     "label": "Dosya yolları",
@@ -194,9 +243,14 @@
     "body": "İçerik",
     "body_hint": "SKILL.md'nin markdown gövdesi. Düzenlemeler diske yazılır.",
     "allowed_tools": "İzin verilen araçlar",
+    "allowed_tools_hint": "SKILL.md frontmatter'ından virgülle ayrılmış araç adları.",
     "file_path": "Dosya",
     "builtin": "Yerleşik",
-    "builtin_readonly": "Yerleşik yetenek — salt okunur."
+    "builtin_readonly": "Yerleşik yetenek — salt okunur.",
+    "expand_all": "Tümünü genişlet",
+    "collapse_all": "Tümünü daralt",
+    "not_found_body": "{{id}} kimlikli yetenek yok.",
+    "view_diagram": "Diyagram"
   },
   "personas": {
     "title": "Personas",
@@ -210,7 +264,8 @@
     "emblem": "Amblem",
     "description": "Açıklama",
     "skills": "Yetenekler",
-    "skills_hint": "Eklemek/çıkarmak için tıkla. Persona kartında görünür ve gönderimi etkiler."
+    "skills_hint": "Eklemek/çıkarmak için tıkla. Persona kartında görünür ve gönderimi etkiler.",
+    "not_found_body": "{{id}} kimlikli persona yok."
   },
   "roles": {
     "title": "Roller",
@@ -228,15 +283,15 @@
   },
   "sessions": {
     "title": "Oturumlar",
-    "subtitle": "Kayıt altına alınmış tüm AI kodlama oturumları.",
-    "search": "Proje veya oturum ID ara…",
-    "empty_title": "Kayıtlı oturum yok",
-    "empty_body": "context-mode henüz oturum veritabanı yazmadı. Beklenen dizin:",
+    "subtitle": "Kaydedilen tüm yapay zekâ kodlama oturumları, en yenisi önce.",
+    "search": "İstem, proje, görev veya kimlik ara…",
+    "empty_title": "Henüz kayıtlı oturum yok",
+    "empty_body": "AgentBoard oturum hook’ları bir Claude Code, Codex veya Copilot oturumunu kaydettiğinde burada görünür. Bakılan dizinler:",
     "unavail_title": "SQLite bağdaştırıcısı yok",
     "error_title": "Oturumlar okunamadı",
     "filter_source": "Kaynağa göre filtrele",
     "source_all": "Tümü",
-    "source_agentboard": "Agentboard",
+    "source_agentboard": "AgentBoard",
     "source_cli": "CLI / Diğer",
     "total_sessions": "Oturum",
     "total_events": "Olay",
@@ -277,7 +332,6 @@
       "Compact": "Sıkıştırma oldu. Eski mesajlar özetlendi; sohbet özet üzerinden devam eder.",
       "hook_started": "Bir hook süreci çalışmaya başladı. context-mode hook gecikmesini ölçmek için kaydeder.",
       "hook_response": "Hook bitti ve çıktısını (stdin-enjekte bağlam veya stdout) oturuma döndürdü.",
-
       "file_read": "Claude bir dosyayı okudu (Read aracı). Yol, oturumun okunmuş dosyalar kümesine eklenir.",
       "file_write": "Claude yeni bir dosya oluşturdu (Write aracı).",
       "file_edit": "Claude mevcut bir dosyayı değiştirdi (Edit veya NotebookEdit aracı).",
@@ -308,7 +362,18 @@
       "role": "Kullanıcı persona atadı (`act as senior engineer`, `you are…`). Oturum boyunca sabit rol.",
       "intent": "İstemden türetilmiş oturum niyeti: investigate | implement | discuss | review.",
       "data": "~1 KB'den uzun istem ham veri olarak kaydedildi (yapıştırılan log/dump vb.)."
-    }
+    },
+    "search_label": "Oturumlarda ara",
+    "dur_m": "{{m}} dk",
+    "dur_hm": "{{h}} sa {{m}} dk",
+    "dur_s": "{{s}} sn",
+    "load_more": "Daha fazla yükle",
+    "end_of_list": "{{n}} oturumun tamamı gösteriliyor",
+    "indexing": "Oturum veritabanları arka planda indeksleniyor…",
+    "task": "Görev",
+    "no_events": "Olay yok",
+    "consumed": "kullanıldı",
+    "n_events": "{{n}} olay"
   },
   "theme": {
     "title": "Tema",
@@ -321,15 +386,9 @@
     "click_apply": "Uygulamak için tıkla",
     "dark_only": "Sadece karanlık mod",
     "dark_only_hint": "Bu palet yalnızca Karanlık renk modu seçildiğinde uygulanır.",
-    "palette_default_tagline": "Sıcak nötrler, amber + kil — varsayılan palet.",
-    "palette_edgeetech_tagline": "Marka logosundan macenta → indigo → safir geçişi.",
-    "palette_primer_tagline": "GitHub Primer renkleri — erişilebilir, açık ve koyu uyumlu.",
-    "palette_mono_tagline": "Gri, kömür ve siyah tonları — minimal, editoryal.",
-    "palette_neon_tagline": "Zifiri siyah üzerinde neon yeşil, elektrik mavi, canlı pembe.",
-    "palette_warm_tagline": "Yumuşak siyah ile mercan, altın ve yanık turuncu — sıcak, davetkâr.",
-    "palette_pastel_tagline": "Arduvaz gri ile açık camgöbeği, yumuşak pembe, lavanta — sakin, eğlenceli.",
-    "palette_jewel_tagline": "Zengin siyah ile turkuaz, yakut, orman yeşili — prestijli, zarif.",
-    "palette_vibrant_tagline": "Koyu fon üzerinde canlı turuncu, derin mor, parlak sarı."
+    "palette_default_tagline": "Sıcak nötrler, amber + kil — özgün ana palet.",
+    "palette_edgeetech_tagline": "Marka logosundaki gibi masmavi + sinyal pembesi.",
+    "palette_mono_tagline": "Gri, kömür ve siyah tonları — minimal, editoryal."
   },
   "project": {
     "title": "Proje",
@@ -337,9 +396,52 @@
     "none_title": "Aktif proje yok",
     "none_body": "Önce Pano sayfasından bir proje oluştur.",
     "not_found_title": "Proje bulunamadı",
-    "not_found_body": "<c>{{code}}</c> projesi mevcut değil. Aşağıdan birini seç veya yeni bir proje oluştur."
+    "not_found_body": "<c>{{code}}</c> projesi mevcut değil. Aşağıdan birini seç veya yeni bir proje oluştur.",
+    "delete_title": "Projeyi Sil",
+    "delete_warning": "Bu projeyi ve AgentBoard görevlerini/oturumlarını kaldır. Repo dizini ve içeriği değişmeyecek.",
+    "delete_action": "Projeyi Sil",
+    "delete_confirm": "Silmeyi onaylamak için “{{name}}” yaz.",
+    "delete_confirm_action": "Projeyi kalıcı olarak sil",
+    "deleting": "Siliniyor…",
+    "tracker_no_status": "Henüz takipçi durumu yok.",
+    "doctor_checking": "Kurulum kontrol ediliyor…",
+    "doctor_title": "Doktor",
+    "tracker_kind": "Takipçi",
+    "tracker_slug": "Proje kısa adı",
+    "tracker_env": "API anahtarı env değişkeni",
+    "tracker_endpoint": "Uç nokta",
+    "tracker_interval": "Yoklama aralığı (ms)",
+    "tracker_assignee": "Atanan",
+    "tracker_active_states": "Aktif durumlar",
+    "tracker_terminal_states": "Bitiş durumları",
+    "tracker_save": "Takipçiyi kaydet",
+    "tracker_enable": "Etkinleştir",
+    "tracker_disable": "Devre dışı bırak",
+    "tracker_sync": "Şimdi senkronize et",
+    "tracker_enabled": "Etkin",
+    "tracker_env_present": "Env mevcut",
+    "tracker_issues": "Sorunlar",
+    "tracker_last_poll": "Son yoklama",
+    "tracker_last_success": "Son başarı",
+    "tracker_next_poll": "Sonraki yoklama",
+    "tracker_rate_limited": "Hız sınırlı",
+    "tracker_last_error": "Son hata"
   },
   "catalog": {
     "local_note": "Sunucu bir katalog API'si ekleyene kadar yalnızca bu tarayıcıda saklanır."
+  },
+  "auth": {
+    "title": "Oturum açma ve faturalama",
+    "mode_subscription": "Aboneliğim",
+    "mode_api_key": "API anahtarı",
+    "mode_auto": "Otomatik",
+    "mode_for": "{{provider}} için oturum açma",
+    "help": "Her ajanın nasıl oturum açacağını seçin. \"Aboneliğim\" Claude Pro/Max, ChatGPT veya Copilot girişinizi kullanır ve ortamdaki API anahtarlarını yok sayar. \"API anahtarı\" ilgili anahtar değişkenini gerektirir. \"Otomatik\" kararı CLI’a bırakır — ortamda API anahtarı varsa girişinizin önüne geçer.",
+    "hint_subscription": "Bir kez giriş yapın: {{cmd}}",
+    "hint_api_key": "Sunucu ortamında {{vars}} gerekir",
+    "hint_auto": "{{vars}} tanımlıysa onu, değilse girişinizi kullanır",
+    "source_title": "Bu çalıştırmanın oturum açma yöntemi",
+    "source_subscription": "abonelik",
+    "source_api_key": "API anahtarı"
   }
 }

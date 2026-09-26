@@ -374,12 +374,19 @@ AgentBoard exposes two MCP endpoints, each with a specific purpose:
 **Consumed by:** Headless agent processes (Claude, Copilot, future)  
 **Transport:** HTTP with Bearer token auth  
 **Config:** Passed via `--mcp-config` file to agent spawn command  
-**Auth:** Server Bearer token (outer) + per-run `run_token` (inner, rotated per claim)  
+**Auth:** `Authorization: Bearer <run_token>` ONLY — a per-run token minted when
+the executor claims a queued run (`src/repo.ts::claimRun`), rotated every
+claim, scoped to that one running run. The server's own Bearer token (which
+can approve/PATCH/delete anything as the human) is **never** accepted on
+`/mcp` and is never handed to a spawned agent. A `run_token` field inside
+`arguments` must match the header token exactly or the call is rejected.
+`claim_run` is not exposed here — the executor claims runs itself, so no
+agent tool can list the queue or mint another run's token (see
+[CLAUDE.md § Security model](CLAUDE.md#security-model)).
 
 **Tools available (role-agnostic):**
 
 Run lifecycle:
-- `claim_run` — Claim a queued run (CAS, returns one-shot `run_token`)
 - `get_task` — Fetch current task, AC, PM notes
 - `update_task` — Modify task title, description, status
 - `add_comment` — Append audit comment (postflight, rework notes)
@@ -417,7 +424,7 @@ All three roles share the inner phase-machine + skill tools (`next`, `advance`, 
 
 #### PM Role
 ```
-- claim_run, get_task, update_task (refine AC, expand description)
+- get_task, update_task (refine AC, expand description)
 - add_comment (post ENRICHMENT_SUMMARY)
 - finish_run, add_heartbeat
 - next, advance, record_debt, resolve_debt, record_tool, use_skill
@@ -425,8 +432,8 @@ All three roles share the inner phase-machine + skill tools (`next`, `advance`, 
 
 #### Worker Role
 ```
-- claim_run, get_task (fetch AC, PM notes)
-- update_task (implement, test, commit)
+- get_task (fetch AC, PM notes)
+- update_task (status/assignee only — description/AC are PM-only)
 - add_comment (post DEV_COMPLETED, FILES_CHANGED, DIFF_SUMMARY)
 - finish_run, add_heartbeat
 - next, advance, record_debt, resolve_debt, record_tool, use_skill
@@ -435,8 +442,8 @@ All three roles share the inner phase-machine + skill tools (`next`, `advance`, 
 
 #### Reviewer Role
 ```
-- claim_run, get_task (fetch AC, worker output, PM intent)
-- update_task (mark tested, verified)
+- get_task (fetch AC, worker output, PM intent)
+- update_task (status/assignee, or flip existing AC item checked/checked_by/checked_at — never add/remove/retext AC)
 - add_comment (post REVIEW_VERDICT, RATIONALE, REWORK if rejecting)
 - finish_run, add_heartbeat
 - next, advance, record_debt, resolve_debt, record_tool, use_skill
@@ -454,11 +461,13 @@ Both Claude Code and Copilot CLI agents can access:
 
 **Skill API routes:** `GET /api/skills`, `GET /api/skills/:id`, `PUT /api/skills/:id`, `POST /api/skills/scan`, `GET /api/skills/scan/latest`, `GET /api/skills/scan/events` (SSE), `GET /api/skills/dirs`.
 
-**Whitelisted environment variables** (passed to agents):
-- PATH, HOME, USER, LANG, TZ
-- Claude auth: `ANTHROPIC_API_KEY`
-- GitHub: `GH_TOKEN`
-- AWS: `AWS_PROFILE`, `AWS_REGION` (explicit list only, not `AWS_*` wildcard)
+**Whitelisted environment variables** (passed to agents, never `{...process.env}`):
+- PATH, HOME/USERPROFILE, USER, LANG, TZ, proxy/CA vars (`HTTPS_PROXY`, `NODE_EXTRA_CA_CERTS`, …)
+- Claude auth: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`
+- Codex auth: `OPENAI_API_KEY`, `CODEX_API_KEY`, `CODEX_HOME`
+- Copilot auth: `GH_TOKEN`, `GITHUB_TOKEN`, `COPILOT_GITHUB_TOKEN`, `COPILOT_TOKEN`, `COPILOT_HOME`
+- Exact list lives in `plugins/claude-code/agent-board-core/src/child-env.ts` (and its Codex-side duplicate `plugins/providers/codex/src/environment.ts`) — AWS/SSH/GCP/cloud-SDK vars are dropped.
+- **Per-provider `auth_mode`** (project setting, `'subscription' | 'api_key' | 'auto'`) additionally strips that provider's API-key vars from the run's env in `'subscription'` mode, so a stray key can't silently override an interactive login and bill the API.
 - For details, see **Modification Rules** in [CLAUDE.md](CLAUDE.md#security-model-specifics)
 
 ---

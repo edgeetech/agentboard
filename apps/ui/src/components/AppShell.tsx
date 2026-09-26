@@ -8,6 +8,7 @@ import { LanguageSelector } from '../features/board/LanguageSelector';
 import { useCurrentProject } from '../hooks/useCurrentProjectCode';
 import { useTheme } from '../theme/ThemeProvider';
 
+import { Icon } from './Icon';
 import { Logo } from './Logo';
 import { ProjectPicker } from './ProjectPicker';
 
@@ -75,28 +76,28 @@ export function AppShell() {
       <aside className="app-side">
         <div className="section">{t('nav.workspace', 'Workspace')}</div>
         <NavLink to={boardHref} end title={t('nav.board', 'Board')}>
-          <span className="icon" aria-hidden>▦</span>
+          <span className="icon"><Icon name="board" size={18} /></span>
           <span className="nav-label">{t('nav.board', 'Board')}</span>
         </NavLink>
         <NavLink to="/skills" title={t('nav.skills', 'Skills')}>
-          <span className="icon" aria-hidden>✦</span>
+          <span className="icon"><Icon name="skills" size={18} /></span>
           <span className="nav-label">{t('nav.skills', 'Skills')}</span>
         </NavLink>
         <NavLink to="/personas" title={t('nav.personas', 'Personas')}>
-          <span className="icon" aria-hidden>👤</span>
+          <span className="icon"><Icon name="persona" size={18} /></span>
           <span className="nav-label">{t('nav.personas', 'Personas')}</span>
         </NavLink>
         <NavLink to="/sessions" title={t('nav.sessions', 'Sessions')}>
-          <span className="icon" aria-hidden>⟳</span>
+          <span className="icon"><Icon name="sessions" size={18} /></span>
           <span className="nav-label">{t('nav.sessions', 'Sessions')}</span>
         </NavLink>
         <div className="section">{t('nav.manage', 'Manage')}</div>
         <NavLink to={projectHref} title={t('nav.project', 'Project')}>
-          <span className="icon" aria-hidden>⌘</span>
+          <span className="icon"><Icon name="project" size={18} /></span>
           <span className="nav-label">{t('nav.project', 'Project')}</span>
         </NavLink>
         <NavLink to="/theme" title={t('nav.theme', 'Theme')}>
-          <span className="icon" aria-hidden>◐</span>
+          <span className="icon"><Icon name="theme" size={18} /></span>
           <span className="nav-label">{t('nav.theme', 'Theme')}</span>
         </NavLink>
         <ProjectPicker />

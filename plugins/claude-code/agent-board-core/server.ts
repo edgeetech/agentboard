@@ -64,7 +64,7 @@ import { handleSessions } from './src/api-sessions.ts';
 import { handleSkills } from './src/api-skills.ts';
 import { handleTasks } from './src/api-tasks.ts';
 import { handleTracker } from './src/api-tracker.ts';
-import { generateServerToken } from './src/auth.ts';
+import { constantTimeEqual, generateServerToken } from './src/auth.ts';
 import { readConfig, writeConfig } from './src/config.ts';
 import { startExecutor } from './src/executor.ts';
 import { startBackgroundWorkers } from './src/generated/server-bootstrap.mjs';
@@ -75,12 +75,6 @@ import { getActiveDb } from './src/project-registry.ts';
 import { dispatchRestHandlers } from './src/rest-dispatch.ts';
 import { startAllSkillScanWorkers, stopAllSkillScanWorkers } from './src/skill-scan-runtime.ts';
 import { startTrackerPoller } from './src/tracker-poller.ts';
-
-// Debug: Check Copilot auth env vars at server startup
-console.warn('[SERVER STARTUP] Checking Copilot auth environment:');
-for (const v of ['GITHUB_TOKEN', 'COPILOT_TOKEN', 'COPILOT_CLI', 'COPILOT_CLI_BINARY_VERSION']) {
-  console.warn(`  ${v}: ${process.env[v] ? 'SET' : 'NOT SET'}`);
-}
 
 const SERVER_BOOT_ID = randomUUID();
 const UI_DIST = new URL('./ui/dist/', import.meta.url);
@@ -167,12 +161,27 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       return;
     }
 
+    // MCP endpoint (used by spawned headless runs). Authenticates each call
+    // with the caller's own run_token (a RUNNING run's rotating credential),
+    // NOT the server Bearer token — a spawned/prompt-injected agent must never
+    // hold a credential that can act as the human (approve its own work,
+    // flip allow_destructive_tools, delete projects). See CLAUDE.md
+    // "Security model" and src/api-mcp.ts for the auth contract.
+    if (p === '/mcp') {
+      const mcp = await handleMcp(req, res, url);
+      if (mcp) return;
+      json(res, 404, { error: 'not found' });
+      return;
+    }
+
     // Authenticated from here. Accept Bearer header OR ab_token cookie
     // (cookie path is for `<a href="/api/logs/..">` links the browser opens directly.)
     const authHeader = req.headers.authorization ?? '';
     const bearer = /^Bearer\s+(.+)$/.exec(authHeader)?.[1];
     const cookieTok = parseCookie(req.headers.cookie ?? '').ab_token;
-    if (bearer !== token && cookieTok !== token) {
+    const bearerOk = bearer !== undefined && constantTimeEqual(bearer, token);
+    const cookieOk = cookieTok !== undefined && constantTimeEqual(cookieTok, token);
+    if (!bearerOk && !cookieOk) {
       json(res, 401, { error: 'unauthorized' });
       return;
     }
@@ -189,10 +198,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       });
       return;
     }
-
-    // MCP endpoint (used by spawned headless runs)
-    const mcp = await handleMcp(req, res, url);
-    if (mcp) return;
 
     // Activity feed (SSE + history) — must run before catch-all so EventSource
     // reaches the streaming branch instead of 404.
@@ -370,7 +375,16 @@ function parseCookie(header: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const part of header.split(/;\s*/)) {
     const eq = part.indexOf('=');
-    if (eq > 0) out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1));
+    if (eq > 0) {
+      try {
+        out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1));
+      } catch {
+        // Malformed percent-encoding on an unauthenticated path — skip this
+        // cookie rather than letting decodeURIComponent's URIError crash the
+        // request (server.ts's outer try/catch would otherwise turn it into
+        // a 500 before auth even runs).
+      }
+    }
   }
   return out;
 }

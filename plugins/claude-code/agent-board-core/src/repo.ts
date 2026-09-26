@@ -31,6 +31,8 @@ export interface ProjectRow {
   max_parallel: number;
   agent_provider: 'claude' | 'github_copilot' | 'codex';
   agent_config_json: string | null;
+  /** Per-provider auth mode ({claude,codex,github_copilot}: 'subscription'|'api_key'|'auto'), JSON-encoded. */
+  auth_config_json: string | null;
   concerns_json: string;
   allow_git: number;
   scan_ignore_json: string;
@@ -100,6 +102,8 @@ export interface AgentRunRow {
   council_size: number | null;
   session_provider_override: AgentProvider | null;
   cost_breakdown_json: string;
+  /** Actual auth source the provider reported for this run (e.g. Claude SDK apiKeySource: 'user'|'project'|'org'|'temporary'|'oauth'), null if unreported. */
+  auth_source: string | null;
 }
 
 export interface CommentRow {
@@ -212,7 +216,18 @@ export function createProject(
 }
 
 export function getProject(db: DbHandle): ProjectRow | undefined {
-  return getProjectViaPersistence(db);
+  const project = getProjectViaPersistence(db);
+  if (project === undefined) return undefined;
+  // auth_config_json is additive metadata not modelled in the persistence
+  // adapter yet; read it directly so callers see a complete ProjectRow.
+  return { ...project, auth_config_json: readAuthConfigJson(db, project.id) };
+}
+
+function readAuthConfigJson(db: DbHandle, projectId: string): string | null {
+  const row = db.prepare(`SELECT auth_config_json FROM project WHERE id=?`).get(projectId) as
+    | { auth_config_json: string | null }
+    | undefined;
+  return row?.auth_config_json ?? null;
 }
 
 export function updateProject(
@@ -220,7 +235,18 @@ export function updateProject(
   patch: ProjectPatch,
   expectedVersion: number,
 ): { ok: boolean; project?: ProjectRow; reason?: string } {
-  return updateProjectViaPersistence(db, patch, expectedVersion);
+  const hasAuthPatch = 'auth_config_json' in patch;
+  const { auth_config_json: authConfigPatch, ...rest } = patch;
+  const out = updateProjectViaPersistence(db, rest, expectedVersion);
+  if (!out.ok || out.project === undefined) return out;
+  if (hasAuthPatch) {
+    db.prepare(`UPDATE project SET auth_config_json=?, version=version+1, updated_at=? WHERE id=?`).run(
+      authConfigPatch ?? null,
+      isoNow(),
+      out.project.id,
+    );
+  }
+  return { ok: true, project: getProject(db) ?? out.project };
 }
 
 /* ─── TASKS ────────────────────────────────────────────────────────────── */
@@ -645,6 +671,10 @@ export function setRunSessionRef(db: DbHandle, run_id: string, session: RunSessi
     WHERE id=?
   `,
   ).run(session.provider, session.sessionId, session.sessionId, run_id);
+}
+
+export function setRunAuthSource(db: DbHandle, run_id: string, authSource: string | null): void {
+  db.prepare(`UPDATE agent_run SET auth_source=? WHERE id=?`).run(authSource, run_id);
 }
 
 export function finishRun(

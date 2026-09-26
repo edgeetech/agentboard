@@ -25,32 +25,91 @@ function boardBase(): string {
     : '/api/board';
 }
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token()}`,
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** Typed error thrown by call()/raw() — carries HTTP status + parsed body
+ *  (when the response was JSON) so call sites can branch on status instead
+ *  of string-matching `error.message`. */
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+/** Combine a caller-supplied AbortSignal (e.g. react-query's queryFn signal)
+ *  with a timeout, so slow/hung requests don't poll forever. Falls back to a
+ *  plain timeout-only controller when AbortSignal.any isn't available. */
+function withTimeout(signal?: AbortSignal, timeoutMs = DEFAULT_TIMEOUT_MS): AbortSignal {
+  const timeoutSignal =
+    typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(timeoutMs) : null;
+  if (signal && timeoutSignal && typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([signal, timeoutSignal]);
+  }
+  if (signal) return signal;
+  if (timeoutSignal) return timeoutSignal;
+  const controller = new AbortController();
+  setTimeout(() => { controller.abort(); }, timeoutMs);
+  return controller.signal;
+}
+
+async function request(
+  method: string,
+  path: string,
+  body?: unknown,
+  opts?: { signal?: AbortSignal },
+): Promise<{ res: Response; text: string; json: unknown }> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token()}`,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: withTimeout(opts?.signal),
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new ApiError('Request timed out or was cancelled', 0, null);
+    }
+    throw new ApiError(err instanceof Error ? err.message : 'Network error', 0, null);
+  }
   const text = await res.text();
   const json = text ? safeJson(text) : null;
-  if (!res.ok) throw new Error(json?.error || text || `HTTP ${res.status}`);
+  return { res, text, json };
+}
+
+export async function call<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  opts?: { signal?: AbortSignal },
+): Promise<T> {
+  const { res, text, json } = await request(method, path, body, opts);
+  if (!res.ok) {
+    const message = (json as { error?: string } | null)?.error || text || `HTTP ${res.status}`;
+    throw new ApiError(message, res.status, json);
+  }
   return json as T;
 }
 
-async function raw(method: string, path: string): Promise<Blob> {
-  const res = await fetch(path, {
-    method,
-    headers: { Authorization: `Bearer ${token()}` },
-  });
+async function raw(
+  method: string,
+  path: string,
+  opts?: { signal?: AbortSignal },
+): Promise<Blob> {
+  const { res, text, json } = await request(method, path, undefined, opts);
   if (!res.ok) {
-    const text = await res.text();
-    const parsed = text ? safeJson(text) : null;
-    throw new Error(parsed?.error || text || `HTTP ${res.status}`);
+    const message = (json as { error?: string } | null)?.error || text || `HTTP ${res.status}`;
+    throw new ApiError(message, res.status, json);
   }
-  return res.blob();
+  return new Blob([text]);
 }
 function safeJson(s: string) {
   try {
@@ -61,13 +120,16 @@ function safeJson(s: string) {
 }
 
 export const api = {
-  alive: () => fetch('/alive').then((r) => r.json()),
+  alive: (opts?: { signal?: AbortSignal }) =>
+    call<{ ok: boolean; server_id: string; plugin_version: string }>('GET', '/alive', undefined, opts),
   healthz: () => call<any>('GET', '/healthz'),
   doctor: () => call<DoctorResult>('GET', '/api/doctor'),
   projectDoctor: (code: string) =>
     call<DoctorResult>('GET', `/api/projects/${encodeURIComponent(code)}/doctor`),
-  listProjects: () => call<{ projects: any[] }>('GET', '/api/projects/list'),
-  activeProject: () => call<{ project: any | null }>('GET', '/api/projects/active'),
+  listProjects: (opts?: { signal?: AbortSignal }) =>
+    call<{ projects: Project[] }>('GET', '/api/projects/list', undefined, opts),
+  activeProject: (opts?: { signal?: AbortSignal }) =>
+    call<{ project: Project | null }>('GET', '/api/projects/active', undefined, opts),
   selectActiveProject: (code: string) =>
     call<{ ok: boolean }>('PATCH', '/api/projects/active', { code }),
   suggestCode: (name: string) =>
@@ -78,18 +140,22 @@ export const api = {
     description?: string;
     workflow_type: 'WF1' | 'WF2';
     repo_path: string;
-  }) => call<{ project: any }>('POST', '/api/projects', body),
-  listTasks: (search?: string) =>
-    call<{ tasks: any[] }>(
+  }) => call<{ project: Project }>('POST', '/api/projects', body),
+  listTasks: (search?: string, opts?: { signal?: AbortSignal }) =>
+    call<{ tasks: Task[] }>(
       'GET',
       search ? `${taskBase()}?search=${encodeURIComponent(search)}` : taskBase(),
+      undefined,
+      opts,
     ),
   createTask: (body: { title: string; description?: string; assignee_role?: string | null }) =>
-    call<{ task: any }>('POST', taskBase(), body),
-  getTask: (code: string) =>
-    call<{ task: any; project: any; comments: any[]; file_paths: any[]; agent_runs: any[] }>(
+    call<{ task: Task }>('POST', taskBase(), body),
+  getTask: (code: string, opts?: { signal?: AbortSignal }) =>
+    call<{ task: Task; project: Project; comments: Comment[]; file_paths: any[]; agent_runs: AgentRun[] }>(
       'GET',
       `${taskBase()}/${encodeURIComponent(code)}`,
+      undefined,
+      opts,
     ),
   addFilePath: (code: string, file_path: string, label?: string) =>
     call<{ file_path: any }>('POST', `${taskBase()}/${encodeURIComponent(code)}/file-paths`, {
@@ -118,75 +184,11 @@ export const api = {
     code: string,
     payload: { to_status: string; to_assignee: string; by_role: string; reject_comment?: string },
   ) => call<any>('POST', `${taskBase()}/${encodeURIComponent(code)}/transition`, payload),
-  sessions: () =>
-    call<{
-      dir: string;
-      dbs: {
-        hash: string;
-        size: string;
-        sizeBytes: number;
-        sessions: {
-          id: string;
-          projectDir: string | null;
-          startedAt: string;
-          lastEventAt: string;
-          eventCount: number;
-          compactCount: number;
-          firstPrompt?: string | null;
-          intent?: string | null;
-          role?: string | null;
-          topFiles?: { path: string; count: number }[];
-          planFiles?: string[];
-          source?: 'agentboard' | 'cli';
-          taskCode?: string | null;
-          projectCode?: string | null;
-          repoPath?: string | null;
-          provider?: 'claude' | 'github_copilot' | 'codex' | null;
-        }[];
-      }[];
-      error?: string;
-    }>('GET', '/api/sessions'),
   prompt: (kind: 'role' | 'skill', id: string) =>
     call<{ kind: string; id: string; path?: string; content?: string; error?: string }>(
       'GET',
       `/api/prompts/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,
     ),
-  sessionEvents: (hash: string, sessionId: string) =>
-    call<{
-      hash: string;
-      sessionId: string;
-      provider?: 'claude' | 'github_copilot' | 'codex' | null;
-      meta: {
-        session_id: string;
-        project_dir: string | null;
-        started_at: string;
-        last_event_at: string;
-        event_count: number;
-        compact_count: number;
-      } | null;
-      events: {
-        id: number;
-        type: string;
-        category: string | null;
-        priority: number | null;
-        data: string | null;
-        source_hook: string | null;
-        created_at: string;
-      }[];
-      resume: {
-        snapshot: string | null;
-        event_count: number | null;
-        consumed: number | null;
-      } | null;
-      enrich?: {
-        firstPrompt: string | null;
-        intent: string | null;
-        role: string | null;
-        topFiles: { path: string; count: number }[];
-        planFiles: string[];
-      } | null;
-      error?: string;
-    }>('GET', `/api/sessions/${encodeURIComponent(hash)}/events/${encodeURIComponent(sessionId)}`),
   deleteTask: (code: string) =>
     call<{ ok: boolean }>('DELETE', `${taskBase()}/${encodeURIComponent(code)}`),
   runAgent: (
@@ -355,6 +357,64 @@ export interface TrackerStatus {
   rate_limited: boolean;
 }
 
+export interface Project {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  workflow_type: 'WF1' | 'WF2';
+  repo_path: string;
+  auto_dispatch_pm: number;
+  max_parallel: number;
+  agent_provider: AgentProvider;
+  agent_config_json?: unknown;
+  /** JSON string of AuthConfig, or null for all-'auto'. */
+  auth_config_json?: string | null;
+  scan_ignore_json?: unknown;
+  version: number;
+}
+
+export interface Task {
+  id: string;
+  code: string;
+  title: string;
+  description?: string | null;
+  status: string;
+  assignee_role: string | null;
+  rework_count: number;
+  acceptance_criteria_json?: string;
+  updated_at?: string;
+  has_active_run?: number | boolean;
+  agent_provider_override?: AgentProvider | null;
+}
+
+export interface Comment {
+  id: string;
+  author_role: string;
+  body: string;
+  created_at?: string;
+}
+
+export interface AgentRun {
+  id: string;
+  role: string;
+  status: string;
+  queued_at: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  model?: string | null;
+  cost_usd?: number | null;
+  summary?: string | null;
+  error?: string | null;
+  session_id?: string | null;
+  claude_session_id?: string | null;
+  session_provider?: AgentProvider | null;
+  /** How the provider authenticated, e.g. 'oauth' (subscription) or 'user' (API key). */
+  auth_source?: string | null;
+  /** True when cost_usd is an API-equivalent estimate (subscription runs). */
+  cost_is_estimate?: boolean;
+}
+
 export interface DoctorCheck {
   id: string;
   label: string;
@@ -394,6 +454,19 @@ export interface AgentConfig {
   pm?: RoleConfig;
   worker?: RoleConfig;
   reviewer?: RoleConfig;
+}
+
+export type AuthMode = 'subscription' | 'api_key' | 'auto';
+export type AuthConfig = Partial<Record<AgentProvider, AuthMode>>;
+
+export function parseAuthConfig(raw: string | null | undefined): AuthConfig {
+  if (!raw) return {};
+  try {
+    const v: unknown = JSON.parse(raw);
+    return v !== null && typeof v === 'object' ? (v as AuthConfig) : {};
+  } catch {
+    return {};
+  }
 }
 
 export const COUNCIL_MIN = 2;

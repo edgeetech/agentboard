@@ -104,6 +104,18 @@ function lookupPrice(key: string): Rate | undefined {
   return undefined;
 }
 
+/**
+ * Auth sources that indicate a subscription/OAuth login rather than a
+ * metered API key. Costs computed for these runs are notional — the user
+ * isn't actually billed per-token by the API, so the UI should label them
+ * "est. API-equivalent" rather than a real charge.
+ */
+const SUBSCRIPTION_AUTH_SOURCES = new Set(['oauth']);
+
+export function isEstimatedCost(authSource: string | null | undefined): boolean {
+  return authSource !== null && authSource !== undefined && SUBSCRIPTION_AUTH_SOURCES.has(authSource);
+}
+
 function normalizeModel(m: string): string {
   return m.replace(/-\d{8}$/, '').replace(/\[.*\]$/u, '');
 }

@@ -30,6 +30,13 @@ const DEFAULT_TURN_TIMEOUT_MS = parseInt(
   10,
 );
 
+/** Env vars stripped in 'subscription' auth mode (mirrors child-env.ts CLAUDE/CODEX lists). */
+const CODEX_SUBSCRIPTION_STRIP_VARS = [
+  "OPENAI_API_KEY",
+  "CODEX_API_KEY",
+  "OPENAI_BASE_URL",
+] as const;
+
 interface McpServerEntry {
   command?: string;
   url?: string;
@@ -47,7 +54,8 @@ export interface CodexRunnerOptions {
   abortController: AbortController;
   onEvent?: (eventName: string, detail: Record<string, unknown>) => void;
   sessionLog?: ProviderSessionLog | null;
-  serverToken: string;
+  /** Per-run MCP bearer (the run_token). Never the server token. */
+  mcpBearerToken: string;
   serverPort: number;
   mcpServers?: Record<string, unknown>;
   sandbox?: ProviderSandboxPolicy;
@@ -60,6 +68,8 @@ export interface CodexRunnerOptions {
    * kills the child and fails the run.
    */
   toolGate?: ProviderToolGate;
+  /** Per-provider auth mode resolved from project.auth_config_json (default 'auto'). */
+  authMode?: "subscription" | "api_key" | "auto";
 }
 
 interface PartialState {
@@ -78,6 +88,7 @@ interface ExtractedUsage {
 export class CodexRunner {
   private readonly opts: CodexRunnerOptions;
   private sessionId: string | null = null;
+  private pendingRateLimit: CodexRateLimitSignal | null = null;
   private partial: PartialState = {
     model: null,
     totalCostUsd: null,
@@ -144,7 +155,7 @@ export class CodexRunner {
       runId,
       onEvent,
       sessionLog,
-      serverToken,
+      mcpBearerToken,
       serverPort,
       mcpServers,
       sandbox,
@@ -170,7 +181,7 @@ export class CodexRunner {
     const childEnvExtras: Record<string, string> = {};
     const configArgs: string[] = [];
     const extraEnvKeys = new Set<string>(codexReferencedEnvKeys(cwd));
-    childEnvExtras.AGENTBOARD_RUN_BEARER = serverToken;
+    childEnvExtras.AGENTBOARD_RUN_BEARER = mcpBearerToken;
     configArgs.push(
       "-c",
       `mcp_servers.${quoteTomlPathKey("abrun")}.url=${quoteTomlString(`http://127.0.0.1:${serverPort}/mcp`)}`,
@@ -215,11 +226,19 @@ export class CodexRunner {
         }
       }
     }
-    const env: Record<string, string> = {
+    let env: Record<string, string> = {
       ...buildCodexChildEnv(process.env, [...extraEnvKeys]),
       ...childEnvExtras,
     };
     delete env.CLAUDECODE;
+    // Subscription mode: strip explicit API-key vars so a stray key can't
+    // silently override the interactive `codex login` session.
+    if (this.opts.authMode === "subscription") {
+      const excluded = new Set<string>(CODEX_SUBSCRIPTION_STRIP_VARS);
+      env = Object.fromEntries(
+        Object.entries(env).filter(([key]) => !excluded.has(key)),
+      );
+    }
     const args = buildCodexExecArgs({
       lastMessagePath,
       cwd,
@@ -307,6 +326,16 @@ export class CodexRunner {
     child.stderr.on("data", (chunk: string) => {
       stderrBuf += chunk;
       sessionLog?.error({ runId, stderr: chunk.slice(0, 500) }, "Codex stderr");
+      const signal = classifyCodexRateLimit(chunk);
+      if (signal !== null && this.pendingRateLimit === null) {
+        this.pendingRateLimit = signal;
+        this.opts.rateLimiter?.recordLimit("codex-api", signal.retryAfterMs ?? undefined);
+        onEvent?.("run.rate-limited", {
+          runId,
+          retryAfterMs: signal.retryAfterMs,
+          resetsAt: signal.resetsAt,
+        });
+      }
     });
     child.stdin.write(fullPrompt);
     child.stdin.end();
@@ -332,11 +361,20 @@ export class CodexRunner {
       );
     await Promise.allSettled(gateChecks);
     if (denial !== null) throw denial;
-    if (exitCode === 0) result.status = "completed";
-    else
+    if (exitCode === 0) {
+      result.status = "completed";
+    } else if (this.pendingRateLimit !== null) {
+      // Usage-limit failures must not burn the executor's retry budget —
+      // surface as errorKind='rate_limit' instead of throwing a generic error.
+      result.status = "failed";
+      result.errorKind = "rate_limit";
+      result.resetsAt = this.pendingRateLimit.resetsAt;
+      result.error = stderrBuf.trim() || "codex usage limit reached";
+    } else {
       throw new Error(
         stderrBuf.trim() || `codex exited with code ${String(exitCode)}`,
       );
+    }
     if (existsSync(lastMessagePath)) {
       try {
         const text = readFileSync(lastMessagePath, "utf8").trim();
@@ -381,6 +419,18 @@ export class CodexRunner {
     if (enforceToolAttempt !== undefined) {
       const attempt = extractCodexToolAttempt(obj);
       if (attempt !== null) enforceToolAttempt(attempt);
+    }
+    if (this.pendingRateLimit === null) {
+      const signal = classifyCodexRateLimit(obj);
+      if (signal !== null) {
+        this.pendingRateLimit = signal;
+        this.opts.rateLimiter?.recordLimit("codex-api", signal.retryAfterMs ?? undefined);
+        onEvent?.("run.rate-limited", {
+          runId,
+          retryAfterMs: signal.retryAfterMs,
+          resetsAt: signal.resetsAt,
+        });
+      }
     }
     const sessionIdCandidate =
       typeof obj.session_id === "string" && obj.session_id.length > 0
@@ -474,6 +524,32 @@ export function extractCodexToolAttempt(
   return null;
 }
 
+export interface CodexRateLimitSignal {
+  resetsAt: string | null;
+  retryAfterMs: number | null;
+}
+
+/**
+ * Classify a Codex JSON stream event (or raw stderr chunk) as a usage-limit
+ * failure ("You've hit your usage limit… try again in X"). Accepts either a
+ * parsed event object or a plain string so both the stdout JSON stream and
+ * stderr text are covered — Codex has changed which channel carries this
+ * message across versions.
+ */
+export function classifyCodexRateLimit(
+  input: Record<string, unknown> | string,
+): CodexRateLimitSignal | null {
+  const text =
+    typeof input === "string"
+      ? input
+      : (pickString(input, ["message", "error", "msg"]) ?? "");
+  if (!/usage limit|rate limit|rate.?limited|429/i.test(text)) return null;
+  const match = /try again(?: at| after)?\s+([^.,;]+)/i.exec(text);
+  const parsed = match?.[1] !== undefined ? Date.parse(match[1].trim()) : NaN;
+  const resetsAt = Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+  return { resetsAt, retryAfterMs: resetsAt === null ? 60_000 : null };
+}
+
 export function buildCodexExecArgs(args: {
   lastMessagePath: string;
   cwd: string;
@@ -485,6 +561,9 @@ export function buildCodexExecArgs(args: {
     "--json",
     "--output-last-message",
     args.lastMessagePath,
+    // agentboard always passes an explicit -C <cwd>; skip codex's own git-repo
+    // discovery/confirmation prompt so headless runs never stall on it.
+    "--skip-git-repo-check",
     ...codexSandboxArgs(args.sandbox),
     "-C",
     args.cwd,
@@ -508,11 +587,22 @@ function defaultRunConfigDir(): string {
   return join(dataDir, "run-configs");
 }
 
-function resolveCodexLaunch(
+/**
+ * Resolve the concrete codex launch command on Windows. `child_process.spawn`
+ * does not consult PATHEXT for extensionless names without `shell: true`, so
+ * spawning the bare string "codex" ENOENTs even when an npm shim is on PATH.
+ * Exported so doctor.ts's CLI probe can reuse the exact same resolution the
+ * executor uses (previously the probe spawned "codex" directly and always
+ * failed on Windows).
+ */
+export function resolveCodexLaunch(
   env: Record<string, string>,
   args: string[],
 ): { command: string; args: string[] } {
   if (process.platform !== "win32") return { command: "codex", args };
+
+  // 1. %APPDATA%\npm\codex.cmd — common global npm install; skip the .cmd
+  //    shim and invoke node directly when the bundled JS entrypoint is found.
   const appData = env.APPDATA ?? join(homedir(), "AppData", "Roaming");
   const npmDir = join(appData, "npm");
   const cmdShim = join(npmDir, "codex.cmd");
@@ -533,9 +623,33 @@ function resolveCodexLaunch(
       };
     }
   }
-  const exeShim = join(appData, "npm", "codex.exe");
+  const exeShim = join(npmDir, "codex.exe");
   if (existsSync(exeShim)) return { command: exeShim, args };
+
+  // 2. Search PATH×PATHEXT — covers nvm-windows, volta, pnpm, or any install
+  //    that doesn't live under %APPDATA%\npm.
+  const found = findExecutableOnPath(env, "codex");
+  if (found !== null) return { command: found, args };
+
   return { command: "codex", args };
+}
+
+function findExecutableOnPath(
+  env: Record<string, string>,
+  name: string,
+): string | null {
+  const pathVar = env.PATH ?? env.Path ?? "";
+  const dirs = pathVar.split(";").filter((dir) => dir.length > 0);
+  const pathext = (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
+    .split(";")
+    .filter((ext) => ext.length > 0);
+  for (const dir of dirs) {
+    for (const ext of pathext) {
+      const candidate = join(dir, `${name}${ext}`);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
 }
 
 function looksFinalEvent(obj: Record<string, unknown>): boolean {

@@ -76,17 +76,50 @@ export async function getDbForRunId(runId: string): Promise<ProjectDb | null> {
   return null;
 }
 
+// In-memory run_token → project code cache, populated at claim time
+// (registerRunToken) and invalidated at finish (invalidateRunToken). This is
+// a routing shortcut only — every hit is still re-verified against the DB
+// (status='running') before being trusted, so a stale/unevicted entry can at
+// worst cost an extra lookup, never grant access. Without it, every /mcp call
+// would open+query every project DB on the install (see AGENTS.md item 12).
+const runTokenCache = new Map<string, string>();
+
+/** Record which project a freshly-claimed run_token belongs to. */
+export function registerRunToken(runToken: string, projectCode: string): void {
+  if (runToken === '') return;
+  runTokenCache.set(runToken, projectCode.toLowerCase());
+}
+
+/** Drop a run_token from the routing cache (call on finish_run / reap). */
+export function invalidateRunToken(runToken: string): void {
+  runTokenCache.delete(runToken);
+}
+
 // Find the project DB containing a given run_token. Tokens are 24-byte hex,
 // effectively unique across the install. Scoped lookup so post-claim MCP
 // calls (get_task, update_task, finish_run, …) always resolve to the run's
 // own DB regardless of which project the user has focused in the UI.
 export async function getDbForRunToken(runToken: string): Promise<ProjectDb | null> {
   if (runToken === '') return null;
+  const cachedCode = runTokenCache.get(runToken);
+  if (cachedCode !== undefined) {
+    try {
+      const db = await getDb(cachedCode);
+      const row = db.prepare('SELECT 1 FROM agent_run WHERE token=?').get(runToken);
+      if (row !== null && row !== undefined) return { code: cachedCode, db };
+    } catch {
+      /* fall through to full scan below */
+    }
+    runTokenCache.delete(runToken); // stale — re-resolve and (maybe) re-cache
+  }
   for (const code of listProjectDbs()) {
     try {
       const db = await getDb(code);
       const row = db.prepare('SELECT 1 FROM agent_run WHERE token=?').get(runToken);
-      if (row !== null && row !== undefined) return { code, db };
+      if (row !== null && row !== undefined) {
+        runTokenCache.set(runToken, code);
+        return { code, db };
+      }
     } catch { /* skip unreadable db */ }
   }
   return null;

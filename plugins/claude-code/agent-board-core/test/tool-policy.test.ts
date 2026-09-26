@@ -1,3 +1,6 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { allowlistFor, allowlistForRole } from '../src/tool-allowlist.ts';
@@ -5,7 +8,10 @@ import {
   DESTRUCTIVE_BASH_PREFIXES,
   destructiveCategoryOf,
   evaluateToolPolicy,
+  isGitWriteCommand,
+  isInlineEvalCommand,
   projectDestructiveFlag,
+  referencesAgentboardDataDir,
 } from '../src/tool-policy.ts';
 
 describe('tool-allowlist deny-first defaults', () => {
@@ -70,6 +76,72 @@ describe('destructiveCategoryOf', () => {
     '',
   ])('does not flag %s', (cmd) => {
     expect(destructiveCategoryOf(cmd)).toBeNull();
+  });
+
+  // Compound-command / flag-tolerant evasions the old anchored regex missed.
+  it.each([
+    ['git -C . push', 'git push'],
+    ['ls && git commit', null], // commit isn't a destructive category (git-write only)
+    ['echo hi | xargs rm', 'rm'],
+    ['find . -name "*.log" -delete', 'find -delete'],
+    ['find . -exec rm {} \\;', 'find -delete'],
+    ['npm test\ngit push', 'git push'],
+    ['sudo rm -rf /', 'rm'],
+  ] as const)('flags %s as %s', (cmd, expected) => {
+    expect(destructiveCategoryOf(cmd)).toBe(expected);
+  });
+});
+
+describe('isGitWriteCommand (compound-command aware)', () => {
+  it.each(['git -C . push', 'ls && git commit', 'find . -delete; git push', 'git\tpush'])(
+    'flags %s',
+    (cmd) => {
+      expect(isGitWriteCommand(cmd)).toBe(true);
+    },
+  );
+
+  it.each(['git status', 'npm test', 'git switch -c x'])('does not flag %s', (cmd) => {
+    expect(isGitWriteCommand(cmd)).toBe(false);
+  });
+});
+
+describe('isInlineEvalCommand', () => {
+  it.each([
+    'node -e "require(\'fs\').readFileSync(process.env.HOME)"',
+    'node --eval "1+1"',
+    'node -p "1+1"',
+    'python -c "import os"',
+    'python3 -c "print(1)"',
+    'echo hi && node -e "evil()"',
+  ])('flags %s', (cmd) => {
+    expect(isInlineEvalCommand(cmd)).toBe(true);
+  });
+
+  it.each(['node script.js', 'npm test', 'npx vitest run', 'node --test', 'python script.py'])(
+    'does not flag %s',
+    (cmd) => {
+      expect(isInlineEvalCommand(cmd)).toBe(false);
+    },
+  );
+});
+
+describe('referencesAgentboardDataDir', () => {
+  it.each([
+    '~/.agentboard/config.json',
+    '%USERPROFILE%\\.agentboard\\config.json',
+    '$HOME/.agentboard/config.json',
+    '$env:USERPROFILE\\.agentboard\\projects\\foo.db',
+  ])('flags %s', (target) => {
+    expect(referencesAgentboardDataDir(target)).toBe(true);
+  });
+
+  it('flags the resolved absolute data dir', () => {
+    const abs = join(homedir(), '.agentboard', 'config.json');
+    expect(referencesAgentboardDataDir(abs)).toBe(true);
+  });
+
+  it.each(['src/index.ts', 'README.md', ''])('does not flag %s', (target) => {
+    expect(referencesAgentboardDataDir(target)).toBe(false);
   });
 });
 

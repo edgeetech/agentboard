@@ -4,8 +4,17 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
-import { parseAgentConfig, resolveRoleConfig } from './agent-config.ts';
+import {
+  hasApiKeyEnvVar,
+  parseAgentConfig,
+  parseAuthConfig,
+  providerLabel,
+  resolveAuthMode,
+  resolveRoleConfig,
+  stripApiKeyEnvVars,
+} from './agent-config.ts';
 import { emitActivity } from './api-activity.ts';
+import { buildChildEnv } from './child-env.ts';
 import { executeCouncilRun } from './council-runner.ts';
 import type { DbHandle } from './db.ts';
 import { agentboardBus } from './event-bus.ts';
@@ -22,10 +31,10 @@ import {
   type RunOutcome,
 } from './observability.ts';
 import { logPath } from './paths.ts';
-import { recordActivity, setRunPhase } from './phase-repo.ts';
-import { checkPostflight } from './postflight.ts';
+import { getRunPhaseState, recordActivity, setRunPhase } from './phase-repo.ts';
+import { evaluateRunCompletion } from './postflight.ts';
 import { computeCost } from './pricing.ts';
-import { getDb, listProjectDbs } from './project-registry.ts';
+import { getDb, listProjectDbs, registerRunToken } from './project-registry.ts';
 import type { SkillContext } from './prompt-builder.ts';
 import { buildRolePrompt, renderSystemPrompt } from './prompt-builder.ts';
 import { maybeRegisterInteractiveHistory, providerFor } from './provider-registry.ts';
@@ -49,10 +58,11 @@ import {
   listQueuedRunsForProject,
   reapOrphans,
   runningCount,
+  setRunAuthSource,
   setRunCost,
   setRunSessionRef,
 } from './repo.ts';
-import { scheduleRetry } from './retry-manager.ts';
+import { scheduleRateLimitRetry, scheduleRetry } from './retry-manager.ts';
 import { buildSdkHooks, buildToolGate } from './run-hooks.ts';
 import { sessionLogger } from './session-logger.ts';
 import { listSkills } from './skill-repo.ts';
@@ -168,7 +178,7 @@ async function tryClaimAndRun(
   db: DbHandle,
   project: ProjectRow,
   run: AgentRunRow,
-  { port, serverToken }: ExecutorParams,
+  { port }: ExecutorParams,
 ): Promise<void> {
   // Pre-check repo_path exists
   try {
@@ -203,17 +213,39 @@ async function tryClaimAndRun(
     roleCfg.type === 'single' ? roleCfg.provider : lastCouncilProvider(roleCfg.members);
   const isCouncil = roleCfg.type === 'council';
 
+  // Per-provider auth mode (subscription/api_key/auto). 'auto' preserves
+  // current behaviour: whatever the CLI resolves with the whitelisted env.
+  const authConfig = parseAuthConfig(project.auth_config_json);
+  const authMode = resolveAuthMode(effectiveProvider, authConfig);
+  if (authMode === 'api_key' && !hasApiKeyEnvVar(process.env, effectiveProvider)) {
+    finishRun(
+      db,
+      run.id,
+      'failed',
+      null,
+      `auth_mode=api_key for ${providerLabel(effectiveProvider)} but no API key env var is set`,
+    );
+    return;
+  }
+  const childEnv = buildChildEnv(process.env);
+  const runEnv =
+    authMode === 'subscription' ? stripApiKeyEnvVars(childEnv, effectiveProvider) : childEnv;
+
   const run_token = randomBytes(24).toString('hex');
   const stdoutPath = logPath(run.id);
 
-  // Build SDK-style MCP servers object (abrun HTTP MCP + any user MCPs)
+  // Build SDK-style MCP servers object (abrun HTTP MCP + any user MCPs).
+  // Security: the agent gets ONLY this run's rotating run_token, never the
+  // server's own Bearer token — the server token can approve/PATCH/delete
+  // anything, run_token is scoped to this single running run (see
+  // src/api-mcp.ts handleMcp for the auth contract).
   const userMcps = inheritedUserMcpServers();
   const mcpServers: Record<string, SdkMcpServer> = {
     ...buildSdkMcpServers(userMcps),
     abrun: {
       type: 'http',
       url: `http://127.0.0.1:${port}/mcp`,
-      headers: { Authorization: `Bearer ${serverToken}` },
+      headers: { Authorization: `Bearer ${run_token}` },
     },
   };
 
@@ -254,11 +286,17 @@ async function tryClaimAndRun(
     skillsForPrompt,
   );
 
+  // Captured just before the claim write so we have an accurate "this run's
+  // own comments start here" floor for evaluateRunCompletion()'s natural-end
+  // postflight check below (comments has no run_id column to join on).
+  const claimedAt = isoNow();
   const ok = claimRunRow(db, run.id, run_token, null, stdoutPath);
   if (!ok) {
     console.warn('[executor] claim lost for', run.id);
     return;
   }
+  // Fast-path routing for /mcp: avoids scanning every project DB on each call.
+  registerRunToken(run_token, project.code);
   if (run.role === 'reviewer') {
     setRunPhase(db, run.id, {
       phase: 'VERIFICATION',
@@ -343,7 +381,6 @@ async function tryClaimAndRun(
   const hookParams = {
     runToken: run_token,
     mcpUrl: `http://127.0.0.1:${port}/mcp`,
-    serverToken,
   };
   const sdkHooks =
     !isCouncil && effectiveProvider === 'claude' ? buildSdkHooks(hookParams) : undefined;
@@ -424,9 +461,11 @@ async function tryClaimAndRun(
     abortController,
     rateLimiter,
     sessionLog,
-    serverToken,
+    mcpBearerToken: run_token,
     serverPort: port,
     onEvent,
+    env: runEnv,
+    authMode,
   };
 
   try {
@@ -456,6 +495,14 @@ async function tryClaimAndRun(
           provider: result.sessionRef.provider,
           sessionId: result.sessionRef.sessionId,
         });
+      } catch (e) {
+        logErr(e);
+      }
+    }
+
+    if (result.authSource !== null && result.authSource !== undefined) {
+      try {
+        setRunAuthSource(db, run.id, result.authSource);
       } catch (e) {
         logErr(e);
       }
@@ -502,7 +549,16 @@ async function tryClaimAndRun(
       // gets credit for a clean run without producing required comments.
       const freshTask: TaskRow = getTask(db, task.id) ?? task;
       const freshComments = listComments(db, task.id);
-      const pfErr = checkPostflight(run.role, freshTask, freshComments);
+      const freshPhase = getRunPhaseState(db, run.id);
+      // Same evaluateRunCompletion() the MCP finish_run path uses — this is
+      // the fix for the phase gate previously only running on the MCP path.
+      const pfErr = evaluateRunCompletion(
+        run,
+        freshTask,
+        freshComments,
+        freshPhase?.phase ?? null,
+        claimedAt,
+      );
       if (pfErr !== null) {
         // Postflight failure on natural end_turn (agent forgot to call finish_run
         // and skipped required outputs). Retry once with a hint comment so the
@@ -557,7 +613,38 @@ async function tryClaimAndRun(
       const err = result.error ?? 'unknown error';
       finishRun(db, run.id, 'failed', null, err);
       const isTimeout = result.errorKind === 'timeout' || /Turn timed out after \d+ms/.test(err);
-      if (isTimeout) {
+      const isRateLimit = result.errorKind === 'rate_limit';
+      if (isRateLimit) {
+        // Usage-limit failures must not burn the normal retry budget — post a
+        // clear system comment and reschedule no earlier than resetsAt.
+        const resetsLabel = result.resetsAt ?? 'an unknown time';
+        try {
+          addComment(
+            db,
+            task.id,
+            'system',
+            `RATE_LIMITED: ${providerLabel(effectiveProvider)} usage limit, resets at ${resetsLabel}`,
+          );
+        } catch (e) {
+          logErr(e);
+        }
+        const retry = scheduleRateLimitRetry(db as unknown as DatabaseSync, {
+          runId: run.id,
+          taskId: task.id,
+          role: run.role,
+          attempt: run.attempt,
+          resetsAt: result.resetsAt ?? null,
+          error: err,
+        });
+        recordOutcome('failed');
+        recordRunRetry(retry.scheduled);
+        agentboardBus.emit('run.failed', {
+          runId: run.id,
+          error: err,
+          reason: 'rate_limit',
+          ...(retry.scheduled ? { retryAt: retry.delayMs } : { permanent: true }),
+        });
+      } else if (isTimeout) {
         recordOutcome('timeout');
         agentboardBus.emit('run.failed', {
           runId: run.id,

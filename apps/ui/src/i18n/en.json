@@ -26,9 +26,34 @@
     "clear": "Clear",
     "copied": "Copied ✓",
     "remove": "Remove",
-    "view": "View detail"
+    "view": "View detail",
+    "retry": "Retry",
+    "yes": "yes",
+    "no": "no",
+    "optional": "optional",
+    "loading": "Loading…",
+    "breadcrumb": "Breadcrumb"
   },
-  "catalog": { "local_note": "Stored locally in this browser until the server adds a catalog API." },
+  "health": {
+    "health": "Health",
+    "unavailable": "unavailable",
+    "queue": "Queue",
+    "queue_value": "{{queued}} queued / {{running}} running",
+    "awaiting": "Awaiting",
+    "tracker": "Tracker",
+    "skills": "Skills",
+    "not_scanned": "not scanned",
+    "cost": "Cost",
+    "uncosted": "Uncosted",
+    "tracker_disabled": "disabled",
+    "tracker_missing_env": "missing env",
+    "tracker_rate_limited": "rate limited",
+    "tracker_error": "error",
+    "tracker_issue_count": "{{count}} issue(s)"
+  },
+  "catalog": {
+    "local_note": "Stored locally in this browser until the server adds a catalog API."
+  },
   "prompt": {
     "copy": "Copy",
     "missing": "No prompt file for this {{kind}} yet.",
@@ -53,15 +78,15 @@
   },
   "sessions": {
     "title": "Sessions",
-    "subtitle": "All recorded AI coding sessions.",
-    "search": "Search project or session id…",
-    "empty_title": "No sessions recorded",
-    "empty_body": "context-mode has not written any session databases yet. Expected dir:",
+    "subtitle": "Every recorded AI coding session, newest first.",
+    "search": "Search prompt, project, task or id…",
+    "empty_title": "No sessions recorded yet",
+    "empty_body": "Sessions appear here once the AgentBoard session hooks record a Claude Code, Codex or Copilot session. Looked in:",
     "unavail_title": "SQLite adapter unavailable",
     "error_title": "Could not read sessions",
     "filter_source": "Filter by source",
     "source_all": "All",
-    "source_agentboard": "Agentboard",
+    "source_agentboard": "AgentBoard",
     "source_cli": "CLI / Other",
     "total_sessions": "Sessions",
     "total_events": "Events",
@@ -102,7 +127,6 @@
       "Compact": "Compaction just happened. Older messages were summarized; conversation continues on the summary.",
       "hook_started": "A hook process started executing. context-mode records this to measure hook latency.",
       "hook_response": "Hook finished and returned output (stdin-injected context or stdout) to the session.",
-
       "file_read": "Claude read a file (Read tool). The path joins the session's read-file set.",
       "file_write": "Claude created a new file (Write tool).",
       "file_edit": "Claude modified an existing file (Edit or NotebookEdit tool).",
@@ -133,7 +157,18 @@
       "role": "User set a persona (`act as senior engineer`, `you are…`). Stable role for the session.",
       "intent": "Session-level intent classified from the prompt: investigate | implement | discuss | review.",
       "data": "Prompt longer than ~1 KB captured as raw data (pasted logs, dumps)."
-    }
+    },
+    "search_label": "Search sessions",
+    "dur_m": "{{m}}m",
+    "dur_hm": "{{h}}h {{m}}m",
+    "dur_s": "{{s}}s",
+    "load_more": "Load more",
+    "end_of_list": "All {{n}} sessions shown",
+    "indexing": "Indexing session databases in the background…",
+    "task": "Task",
+    "no_events": "No events",
+    "consumed": "consumed",
+    "n_events": "{{n}} events"
   },
   "theme": {
     "title": "Theme",
@@ -146,15 +181,9 @@
     "click_apply": "Click to apply",
     "dark_only": "Dark mode only",
     "dark_only_hint": "This palette only applies when the Dark colour scheme is selected.",
-    "palette_default_tagline": "Warm neutrals, amber + clay — the home palette.",
-    "palette_edgeetech_tagline": "Magenta → indigo → sapphire gradient from the brand mark.",
-    "palette_primer_tagline": "GitHub Primer tokens — accessibility-first, works in light and dark.",
-    "palette_mono_tagline": "Shades of gray, charcoal, and black — minimal, editorial.",
-    "palette_neon_tagline": "Pitch-black canvas with neon green, electric blue, vivid pink.",
-    "palette_warm_tagline": "Soft black with coral, gold, and burnt orange — cosy, inviting.",
-    "palette_pastel_tagline": "Slate grey with light cyan, soft pink, lavender — calm, playful.",
-    "palette_jewel_tagline": "Rich black with teal, ruby, forest green — premium, sleek.",
-    "palette_vibrant_tagline": "Dark stage with vivid orange, deep purple, bright yellow."
+    "palette_default_tagline": "Warm neutrals, amber + clay — the original home palette.",
+    "palette_edgeetech_tagline": "Azure blue + signal pink, straight from the brand mark.",
+    "palette_mono_tagline": "Shades of gray, charcoal, and black — minimal, editorial."
   },
   "foot": {
     "connected": "Connected",
@@ -173,15 +202,17 @@
     "repo_path": "Repository path",
     "repo_hint": "Absolute path. Worker edits files under this directory.",
     "agent_provider": "Choose which agent engine to use for spawning agents",
-  "agent_provider_claude": "Claude (Anthropic SDK)",
-  "agent_provider_github_copilot": "GitHub CoPilot",
-  "agent_provider_codex": "Codex CLI",
+    "agent_provider_claude": "Claude (Anthropic SDK)",
+    "agent_provider_github_copilot": "GitHub CoPilot",
+    "agent_provider_codex": "Codex CLI",
     "auto_dispatch_pm": "Auto-dispatch PM on new task",
     "max_parallel": "Max parallel runs",
     "max_parallel_hint": "1–3. Concurrent agent runs for this project.",
     "version_mismatch": "Project was modified elsewhere — reload and retry.",
     "scan_ignore": "Skip these folders",
-    "scan_ignore_hint": "One per line. Either a folder name (e.g. `legacy`) or a path under the repo (e.g. `Tax/__archived_maintenance`). Defaults like `node_modules`, `bin`, `vendor` are always skipped."
+    "scan_ignore_hint": "One per line. Either a folder name (e.g. `legacy`) or a path under the repo (e.g. `Tax/__archived_maintenance`). Defaults like `node_modules`, `bin`, `vendor` are always skipped.",
+    "agent_config": "Agent configuration",
+    "agent_config_help": "Pick a single provider or build a Council of 2–5 ordered members. Council runs round-robin: each member sees prior outputs; the last member synthesises the canonical result."
   },
   "wizard": {
     "header": "Create your first project",
@@ -217,7 +248,13 @@
     "col_status": "Status",
     "col_assignee": "Assignee",
     "col_cost": "Cost",
-    "col_actions": "Actions"
+    "col_actions": "Actions",
+    "view_board": "Board view",
+    "view_list": "List view",
+    "load_failed_title": "Could not load tasks",
+    "empty_title": "No tasks yet",
+    "empty_body": "Create your first task to get an agent working.",
+    "transition_failed": "Failed to transition task"
   },
   "skills": {
     "title": "Skills",
@@ -245,9 +282,14 @@
     "body": "Body",
     "body_hint": "Markdown body of SKILL.md. Edits are written back to disk.",
     "allowed_tools": "Allowed tools",
+    "allowed_tools_hint": "Comma-separated tool names from the SKILL.md frontmatter.",
     "file_path": "File",
     "builtin": "Built-in",
-    "builtin_readonly": "Built-in skill — read-only."
+    "builtin_readonly": "Built-in skill — read-only.",
+    "expand_all": "Expand all",
+    "collapse_all": "Collapse all",
+    "not_found_body": "No skill with id {{id}}.",
+    "view_diagram": "Diagram"
   },
   "personas": {
     "title": "Personas",
@@ -261,7 +303,8 @@
     "emblem": "Emblem",
     "description": "Description",
     "skills": "Skills",
-    "skills_hint": "Tap to toggle. These appear on the persona card and influence dispatch."
+    "skills_hint": "Tap to toggle. These appear on the persona card and influence dispatch.",
+    "not_found_body": "No persona with id {{id}}."
   },
   "project": {
     "title": "Project",
@@ -269,7 +312,36 @@
     "none_title": "No active project",
     "none_body": "Create a project from the Board page first.",
     "not_found_title": "Project not found",
-    "not_found_body": "The project <c>{{code}}</c> doesn't exist. Pick one below or create a new project."
+    "not_found_body": "The project <c>{{code}}</c> doesn't exist. Pick one below or create a new project.",
+    "delete_title": "Delete Project",
+    "delete_warning": "Remove this project and its AgentBoard tasks and sessions. The repository directory and its contents will not be changed.",
+    "delete_action": "Delete Project",
+    "delete_confirm": "Type “{{name}}” to confirm deletion.",
+    "delete_confirm_action": "Permanently delete project",
+    "deleting": "Deleting…",
+    "tracker_no_status": "No tracker status yet.",
+    "doctor_checking": "Checking setup…",
+    "doctor_title": "Doctor",
+    "tracker_kind": "Tracker",
+    "tracker_slug": "Project slug",
+    "tracker_env": "API key env var",
+    "tracker_endpoint": "Endpoint",
+    "tracker_interval": "Poll interval ms",
+    "tracker_assignee": "Assignee",
+    "tracker_active_states": "Active states",
+    "tracker_terminal_states": "Terminal states",
+    "tracker_save": "Save tracker",
+    "tracker_enable": "Enable",
+    "tracker_disable": "Disable",
+    "tracker_sync": "Sync now",
+    "tracker_enabled": "Enabled",
+    "tracker_env_present": "Env present",
+    "tracker_issues": "Issues",
+    "tracker_last_poll": "Last poll",
+    "tracker_last_success": "Last success",
+    "tracker_next_poll": "Next poll",
+    "tracker_rate_limited": "Rate limited",
+    "tracker_last_error": "Last error"
   },
   "task": {
     "title": "Title",
@@ -307,7 +379,25 @@
     "run_agent": "Run Agent",
     "run_agent_role": "Agent role",
     "run_agent_busy": "Run already queued/active",
-    "resume_copied": "Copied — paste in terminal"
+    "resume_copied": "Copied — paste in terminal",
+    "run_agent_provider": "Provider",
+    "run_agent_provider_default": "Role default",
+    "run_agent_provider_council": "Council",
+    "export_json": "Export audit JSON",
+    "export_markdown": "Export audit Markdown",
+    "phase_section": "Phase & debt",
+    "run_error": "Error",
+    "run_agent_failed": "Run agent failed",
+    "cancel_run_failed": "Cancel failed",
+    "add_comment_failed": "Add comment failed",
+    "export_failed": "Audit export failed",
+    "load_failed_title": "Could not load task",
+    "load_failed_body": "Something went wrong.",
+    "confirm_cancel_run": "Cancel active agent run?",
+    "cost_calculating": "calculating…",
+    "cost_na": "cost n/a",
+    "cost_estimate_hint": "Covered by your subscription — this is the API-equivalent estimate, not a charge.",
+    "no_runs": "No agent runs yet"
   },
   "files": {
     "label": "File paths",
@@ -337,5 +427,19 @@
     "replay": "○ replay",
     "no_activity": "No activity yet.",
     "debt": "Debt"
+  },
+  "auth": {
+    "title": "Sign-in & billing",
+    "mode_subscription": "My subscription",
+    "mode_api_key": "API key",
+    "mode_auto": "Auto",
+    "mode_for": "Sign-in for {{provider}}",
+    "help": "Choose how each agent signs in. \"My subscription\" uses your Claude Pro/Max, ChatGPT or Copilot login and ignores API keys in the environment. \"API key\" requires the key variable. \"Auto\" lets the CLI decide — an API key in the environment wins over your login.",
+    "hint_subscription": "Login once with: {{cmd}}",
+    "hint_api_key": "Needs {{vars}} in the server environment",
+    "hint_auto": "Uses {{vars}} if set, otherwise your login",
+    "source_title": "How this run signed in",
+    "source_subscription": "subscription",
+    "source_api_key": "API key"
   }
 }

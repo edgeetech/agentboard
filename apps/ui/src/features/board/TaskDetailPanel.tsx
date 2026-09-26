@@ -3,6 +3,12 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api, getProjectCode } from '../../api';
+import type { AgentRun } from '../../api';
+import { Dialog } from '../../components/Dialog';
+import { Icon } from '../../components/Icon';
+import { Skeleton } from '../../components/Skeleton';
+import { toast } from '../../components/toastStore';
+import { resumeCommand } from '../sessions/resumeCommand';
 
 import { DebtList } from './DebtList';
 import { FileDropZone } from './FileDropZone';
@@ -49,8 +55,14 @@ export function TaskDetailPanel({
   const projectCode = getProjectCode();
   const q = useQuery({
     queryKey: ['task', projectCode, taskCode],
-    queryFn: () => api.getTask(taskCode),
-    refetchInterval: 3000,
+    queryFn: ({ signal }) => api.getTask(taskCode, { signal }),
+    // Poll only while an agent run is actually active — otherwise this is a
+    // static task view and 3s polling just burns the backend for nothing.
+    refetchInterval: (query) => {
+      const runs = query.state.data?.agent_runs ?? [];
+      const active = runs.some((r: any) => r.status === 'queued' || r.status === 'running');
+      return active ? 3000 : false;
+    },
   });
 
   const invalidate = () => {
@@ -97,17 +109,17 @@ export function TaskDetailPanel({
       return api.runAgent(taskCode, input.role, opts);
     },
     onSuccess: invalidate,
-    onError: (err: any) => { alert(err?.message || 'Run agent failed'); },
+    onError: (err: any) => { toast.danger(err?.message || t('task.run_agent_failed', 'Run agent failed')); },
   });
   const cancelRun = useMutation({
     mutationFn: () => api.cancelRun(taskCode),
     onSuccess: invalidate,
-    onError: (err: any) => { alert(err?.message || 'Cancel failed'); },
+    onError: (err: any) => { toast.danger(err?.message || t('task.cancel_run_failed', 'Cancel failed')); },
   });
   const addComment = useMutation({
     mutationFn: (body: string) => api.addComment(taskCode, body),
     onSuccess: () => { invalidate(); setCommentDraft(''); },
-    onError: (err: any) => { alert(err?.message || 'Add comment failed'); },
+    onError: (err: any) => { toast.danger(err?.message || t('task.add_comment_failed', 'Add comment failed')); },
   });
 
   async function downloadAudit(format: 'json' | 'md') {
@@ -123,14 +135,17 @@ export function TaskDetailPanel({
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Audit export failed');
+      toast.danger(err instanceof Error ? err.message : t('task.export_failed', 'Audit export failed'));
     } finally {
       setExporting(null);
     }
   }
 
-  // Update elapsed times for running agents
+  // Tick elapsed time for running agents — only while one is actually
+  // running, instead of an always-on 1s interval regardless of task state.
+  const hasRunningRun = (q.data?.agent_runs ?? []).some((r: any) => r.status === 'running');
   useEffect(() => {
+    if (!hasRunningRun) return;
     const timer = setInterval(() => {
       setElapsedTimes((prev) => {
         const updated = { ...prev };
@@ -150,13 +165,34 @@ export function TaskDetailPanel({
       });
     }, 1000);
     return () => { clearInterval(timer); };
-  }, [q.data?.agent_runs]);
+  }, [hasRunningRun, q.data?.agent_runs]);
 
   const Wrapper = variant === 'drawer' ? 'aside' : 'div';
   const wrapperClass = variant === 'drawer' ? 'detail-panel' : 'detail-inline';
 
-  if (q.isLoading || !q.data) {
-    return <Wrapper className={wrapperClass}><div className="center"><div className="spinner" /></div></Wrapper>;
+  if (q.isLoading) {
+    return (
+      <Wrapper className={wrapperClass}>
+        <div className="detail-body" style={{ display: 'grid', gap: 'var(--space-3)' }}>
+          <Skeleton width="60%" height={20} />
+          <Skeleton height={80} radius="var(--radius-md)" />
+          <Skeleton height={120} radius="var(--radius-md)" />
+        </div>
+      </Wrapper>
+    );
+  }
+  if (q.isError || !q.data) {
+    return (
+      <Wrapper className={wrapperClass}>
+        <div className="empty-state">
+          <h3>{t('task.load_failed_title', 'Could not load task')}</h3>
+          <p>{q.error instanceof Error ? q.error.message : t('task.load_failed_body', 'Something went wrong.')}</p>
+          <button type="button" className="ghost" onClick={() => { void q.refetch(); }}>
+            {t('common.retry', 'Retry')}
+          </button>
+        </div>
+      </Wrapper>
+    );
   }
   const { task, project, comments, file_paths, agent_runs } = q.data;
   const ac = safeParseAc(task.acceptance_criteria_json);
@@ -254,7 +290,7 @@ export function TaskDetailPanel({
               <ul className="file-path-list saved">
                 {(file_paths ?? []).map((fp: any) => (
                   <li key={fp.id} className="file-path-entry saved">
-                    <span className="file-path-icon">📄</span>
+                    <span className="file-path-icon"><Icon name="file" size={14} /></span>
                     <span className="file-path-text" title={fp.file_path}>{fp.file_path}</span>
                     <button
                       type="button"
@@ -263,7 +299,7 @@ export function TaskDetailPanel({
                       title={t('common.remove', 'Remove')}
                       aria-label={t('common.remove', 'Remove')}
                     >
-                      ×
+                      <Icon name="x" size={12} />
                     </button>
                   </li>
                 ))}
@@ -335,7 +371,9 @@ export function TaskDetailPanel({
                     <span className="role-badge">{run.role}</span>
                     <span className={`status-badge status-${run.status}`}>{run.status}</span>
                     {run.status === 'running' && run.started_at && (
-                      <span className="elapsed-time">⏱ {formatElapsed(elapsedTimes[run.id] ?? 0)}</span>
+                      <span className="elapsed-time">
+                        <Icon name="clock" size={11} /> {formatElapsed(elapsedTimes[run.id] ?? 0)}
+                      </span>
                     )}
                     {(run.session_id ?? run.claude_session_id) && (
                       <ResumeRunButton
@@ -350,12 +388,27 @@ export function TaskDetailPanel({
                     {run.started_at && !run.ended_at && <span className="started">{new Date(run.started_at).toLocaleString()}</span>}
                     {run.ended_at && <span className="ended">{new Date(run.ended_at).toLocaleString()}</span>}
                   </div>
-                  {run.model && <div className="run-model">{run.model} · {run.cost_usd ? `$${run.cost_usd.toFixed(4)}` : 'calculating...'}</div>}
+                  {run.model && (
+                    <div className="run-model">
+                      {run.model} · <RunCost run={run} />
+                      {run.auth_source && (
+                        <span className="run-auth" title={t('auth.source_title', 'How this run signed in')}>
+                          {run.auth_source === 'oauth'
+                            ? t('auth.source_subscription', 'subscription')
+                            : t('auth.source_api_key', 'API key')}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {run.summary && <div className="run-summary">{run.summary}</div>}
-                  {run.error && <div className="run-error">❌ Error: {run.error}</div>}
+                  {run.error && (
+                    <div className="run-error">
+                      <Icon name="alert-circle" size={12} /> {t('task.run_error', 'Error')}: {run.error}
+                    </div>
+                  )}
                 </li>
               ))}
-              {(agent_runs ?? []).length === 0 && <li className="muted">(no agent runs yet)</li>}
+              {(agent_runs ?? []).length === 0 && <li className="muted">{t('task.no_runs', 'No agent runs yet')}</li>}
             </ul>
           </section>
         )}
@@ -540,34 +593,31 @@ export function TaskDetailPanel({
       })()}
 
       {rejectOpen && (
-        <div className="modal-overlay" onClick={() => { setRejectOpen(false); }}>
-          <div className="modal" onClick={e => { e.stopPropagation(); }}>
-            <h2>{t('task.reject_title')}</h2>
-            <textarea
-              value={rejectMsg}
-              onChange={e => { setRejectMsg(e.target.value); }}
-              placeholder={t('task.reject_prompt')}
-              rows={4}
-              autoFocus
-            />
-            <label style={{ marginTop: '0.75rem', display: 'block' }}>
-              {t('files.label', 'File paths')}
-            </label>
-            <FileDropZone paths={rejectFilePaths} onChange={setRejectFilePaths} />
-            <div className="actions">
-              <button className="ghost" onClick={() => { setRejectOpen(false); }}>
-                {t('common.cancel')}
-              </button>
-              <button
-                className="danger"
-                disabled={rejectMsg.trim().length < 10 || reject.isPending}
-                onClick={() => { reject.mutate(); }}
-              >
-                {t('task.reject')}
-              </button>
-            </div>
+        <Dialog onClose={() => { setRejectOpen(false); }} titleId="reject-task-title">
+          <h2 id="reject-task-title">{t('task.reject_title')}</h2>
+          <textarea
+            value={rejectMsg}
+            onChange={e => { setRejectMsg(e.target.value); }}
+            placeholder={t('task.reject_prompt')}
+            rows={4}
+          />
+          <label style={{ marginTop: '0.75rem', display: 'block' }}>
+            {t('files.label', 'File paths')}
+          </label>
+          <FileDropZone paths={rejectFilePaths} onChange={setRejectFilePaths} />
+          <div className="actions">
+            <button className="ghost" onClick={() => { setRejectOpen(false); }}>
+              {t('common.cancel')}
+            </button>
+            <button
+              className="danger"
+              disabled={rejectMsg.trim().length < 10 || reject.isPending}
+              onClick={() => { reject.mutate(); }}
+            >
+              {t('task.reject')}
+            </button>
           </div>
-        </div>
+        </Dialog>
       )}
     </Wrapper>
   );
@@ -595,7 +645,7 @@ function AddFilePathRow({ onAdd }: { onAdd: (fp: string) => void }) {
   );
 }
 
-function safeParseAc(s: string): any[] {
+function safeParseAc(s: string | undefined): any[] {
   try { return JSON.parse(s || '[]'); } catch { return []; }
 }
 
@@ -623,6 +673,26 @@ function RoleAvatar({ role, label }: { role: string; label: string }) {
   );
 }
 
+/** Subscription runs report an API-equivalent estimate, not a bill. */
+function RunCost({ run }: { run: AgentRun }) {
+  const { t } = useTranslation();
+  if (run.cost_usd === null || run.cost_usd === undefined || run.cost_usd === 0) {
+    return run.status === 'running' || run.status === 'queued' ? (
+      <>{t('task.cost_calculating', 'calculating…')}</>
+    ) : (
+      <>{t('task.cost_na', 'cost n/a')}</>
+    );
+  }
+  const amount = `${run.cost_usd.toFixed(4)}`;
+  return run.cost_is_estimate ? (
+    <span title={t('task.cost_estimate_hint', 'Covered by your subscription — this is the API-equivalent estimate, not a charge.')}>
+      ≈ {amount}
+    </span>
+  ) : (
+    <>{amount}</>
+  );
+}
+
 function ResumeRunButton({
   sessionId, repoPath, provider = 'claude',
 }: {
@@ -632,15 +702,7 @@ function ResumeRunButton({
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
-  const bin =
-    provider === 'codex'
-      ? 'codex resume'
-      : provider === 'github_copilot'
-        ? 'gh copilot -- --resume='
-        : 'claude --resume';
-  const cmd = repoPath
-    ? `cd "${repoPath}"; ${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`
-    : `${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`;
+  const cmd = resumeCommand(sessionId, repoPath, provider ?? 'claude');
   async function copy() {
     try {
       await navigator.clipboard.writeText(cmd);

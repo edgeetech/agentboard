@@ -1,10 +1,20 @@
 // HTTP MCP endpoint for spawned headless Claude runs (streamable-http / JSON-RPC 2.0).
-// Tools: list_queue, claim_run, get_task, update_task, add_comment,
-//        finish_run, add_heartbeat, get_project, next, advance,
-//        record_debt, resolve_debt, record_tool.
-// Auth: server Bearer (outer) + run_token (per-call for mutations).
+// Tools: get_task, update_task, add_comment, finish_run, add_heartbeat,
+//        get_project, next, advance, record_debt, resolve_debt, use_skill,
+//        record_tool.
+//
+// Auth: every `tools/call` authenticates with `Authorization: Bearer <run_token>`
+// of a RUNNING run — NOT the server's own Bearer token. The server token is
+// never accepted here (see CLAUDE.md "Security model"); a run_token is minted
+// only by the executor's own claimRun() (src/repo.ts), rotates per run, and is
+// scoped to that run's single task. Any `run_token` field inside `arguments`
+// must match the header token exactly or the call is rejected — this stops an
+// agent from acting on a different run than the one it was spawned for.
+//
+// `list_queue` / `claim_run` are intentionally NOT exposed here: the executor
+// claims runs itself (src/executor.ts), so a worker never needs — and must
+// never be able — to list the queue or claim another run's token itself.
 
-import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve as pathResolve } from 'node:path';
@@ -12,6 +22,7 @@ import { resolve as pathResolve } from 'node:path';
 import { z } from 'zod';
 
 import { emitActivity } from './api-activity.ts';
+import { constantTimeEqual } from './auth.ts';
 import { sliceFor as concernSliceFor } from './concerns.ts';
 import type { DbHandle } from './db.ts';
 import { specFor as discoveryModeSpec } from './discovery-modes.ts';
@@ -26,20 +37,13 @@ import {
   resolveDebt,
   setRunPhase,
 } from './phase-repo.ts';
-import {
-  checkPhaseGate,
-  checkPostflight,
-  checkReassignAudit,
-  isNonFinalCouncilMember,
-} from './postflight.ts';
-import { getActiveDb, getDbForRunId, getDbForRunToken } from './project-registry.ts';
+import { checkReassignAudit, evaluateRunCompletion } from './postflight.ts';
+import { getDbForRunToken, invalidateRunToken } from './project-registry.ts';
 import {
   addComment,
   bumpHeartbeat,
-  claimRun,
   finishRun as finishRunRow,
   getProject,
-  getRun,
   getRunByToken,
   getTask,
   listComments,
@@ -74,20 +78,6 @@ interface RpcBody {
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
 const TOOL_DEFS: readonly unknown[] = [
-  {
-    name: 'list_queue',
-    description: 'List queued agent runs for the active project',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'claim_run',
-    description: 'Claim a queued run; returns run_token',
-    inputSchema: {
-      type: 'object',
-      properties: { run_id: { type: 'string' } },
-      required: ['run_id'],
-    },
-  },
   {
     name: 'get_task',
     description: 'Get task + comments + recent runs (uses run_token)',
@@ -208,8 +198,11 @@ const TOOL_DEFS: readonly unknown[] = [
       'Load a project-scoped skill (.claude/skills/<name>) by name. Returns the SKILL.md body when found; returns suggestions and auto-posts a comment on miss.',
     inputSchema: {
       type: 'object',
-      properties: { name: { type: 'string', minLength: 1, maxLength: 80 } },
-      required: ['name'],
+      properties: {
+        run_token: { type: 'string' },
+        name: { type: 'string', minLength: 1, maxLength: 80 },
+      },
+      required: ['run_token', 'name'],
     },
   },
   {
@@ -281,6 +274,42 @@ function validateAc(raw: unknown): void {
   }
 }
 
+/**
+ * Reviewer may only flip `checked` / `checked_by` / `checked_at` on EXISTING
+ * acceptance-criteria items — never add, remove, reorder, or edit `text` /
+ * `id` / `source` (that authorship is PM-only; see prompts/reviewer.md "AC
+ * preflight"). Worker gets no AC write access at all (checked in the caller).
+ */
+function assertReviewerAcMutation(curRaw: string | null | undefined, nextRaw: unknown): void {
+  let cur: unknown[];
+  let next: unknown[];
+  try {
+    cur = JSON.parse(curRaw ?? '[]') as unknown[];
+  } catch {
+    cur = [];
+  }
+  try {
+    next = (typeof nextRaw === 'string' ? JSON.parse(nextRaw) : nextRaw) as unknown[];
+  } catch {
+    throw new Error('acceptance_criteria_json must be valid JSON');
+  }
+  if (!Array.isArray(cur) || !Array.isArray(next)) throw new Error('AC must be array');
+  if (cur.length !== next.length) {
+    throw new Error('reviewer may not add or remove acceptance criteria items');
+  }
+  for (let i = 0; i < cur.length; i++) {
+    const curItem = cur[i];
+    const nextItem = next[i];
+    const a: Record<string, unknown> = isRecord(curItem) ? curItem : {};
+    const b: Record<string, unknown> = isRecord(nextItem) ? nextItem : {};
+    for (const field of ['id', 'text', 'source'] as const) {
+      if (a[field] !== b[field]) {
+        throw new Error(`reviewer may not edit acceptance criteria '${field}' (item ${i})`);
+      }
+    }
+  }
+}
+
 // ── callTool ──────────────────────────────────────────────────────────────────
 
 export function callTool(db: DbHandle, name: string, args: Record<string, unknown>): unknown {
@@ -294,55 +323,6 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
   };
 
   switch (name) {
-    case 'list_queue': {
-      const rows = db
-        .prepare(
-          `
-        SELECT r.*, t.code AS task_code, t.title AS task_title
-        FROM agent_run r JOIN task t ON t.id = r.task_id
-        WHERE r.status='queued'
-        ORDER BY r.queued_at ASC
-      `,
-        )
-        .all();
-      return { queue: rows };
-    }
-
-    case 'claim_run': {
-      const run_id = typeof args.run_id === 'string' ? args.run_id : '';
-      if (!run_id) throw new Error('run_id required');
-      const existing = getRun(db, run_id);
-      if (existing === undefined) throw new Error('run not found');
-      // Security: never return an existing run_token.
-      if (existing.status !== 'queued')
-        throw new Error(`run not in queued state (status=${existing.status})`);
-      const run_token = randomBytes(24).toString('hex');
-      const ok = claimRun(db, run_id, run_token, null, null);
-      if (!ok) throw new Error('claim CAS failed');
-      if (existing.role === 'reviewer') {
-        setRunPhase(db, run_id, {
-          phase: 'VERIFICATION',
-          appendHistoryEntry: {
-            from: 'DISCOVERY',
-            to: 'VERIFICATION',
-            by: 'reviewer',
-            at: isoNow(),
-          },
-        });
-      } else if (existing.role === 'pm') {
-        setRunPhase(db, run_id, {
-          phase: 'REFINEMENT',
-          appendHistoryEntry: {
-            from: 'DISCOVERY',
-            to: 'REFINEMENT',
-            by: 'pm',
-            at: isoNow(),
-          },
-        });
-      }
-      return { run_token, task_id: existing.task_id };
-    }
-
     case 'get_task': {
       const run = requireRunToken();
       const task = getTask(db, run.task_id);
@@ -360,9 +340,29 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
       const cur = getTask(db, run.task_id);
       if (cur === undefined) throw new Error('task not found');
       const expected = typeof patch.version === 'number' ? patch.version : cur.version;
+      if (expected !== cur.version) {
+        throw new Error(
+          `version mismatch: task is at version ${cur.version}, patch expected ${expected}`,
+        );
+      }
+
+      // Role permissions: description authorship is PM-only. Acceptance
+      // criteria authorship is PM-only too, except reviewer may flip
+      // checked/checked_by/checked_at on existing items (see
+      // assertReviewerAcMutation) — never add/remove/reorder/retext.
+      if ('description' in patch && run.role !== 'pm') {
+        throw new Error(`role '${run.role}' may not edit task description — PM-only`);
+      }
+      if ('acceptance_criteria_json' in patch && run.role !== 'pm') {
+        if (run.role === 'worker') {
+          throw new Error("role 'worker' may not edit acceptance criteria — PM-only");
+        }
+        assertReviewerAcMutation(cur.acceptance_criteria_json, patch.acceptance_criteria_json);
+      }
 
       const wantsStatus = 'status' in patch && patch.status !== cur.status;
       const wantsAssignee = 'assignee_role' in patch && patch.assignee_role !== cur.assignee_role;
+      let versionAfterTransition = expected;
       if (wantsStatus || wantsAssignee) {
         const recent = listComments(db, run.task_id).slice(-5);
         const assigneeRole =
@@ -383,6 +383,7 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
           workflow_type: (wfType ?? 'WF1') as 'WF1' | 'WF2',
         });
         if (!out.ok) throw new Error(out.reason);
+        versionAfterTransition = expected + 1;
       }
 
       const sets: string[] = [];
@@ -396,8 +397,13 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
       }
       if (sets.length > 0) {
         sets.push('version=version+1', 'updated_at=?');
-        vals.push(isoNow(), run.task_id);
-        db.prepare(`UPDATE task SET ${sets.join(', ')} WHERE id=?`).run(...vals);
+        vals.push(isoNow(), run.task_id, versionAfterTransition);
+        const info = db
+          .prepare(`UPDATE task SET ${sets.join(', ')} WHERE id=? AND version=?`)
+          .run(...vals) as { changes: number };
+        if (info.changes === 0) {
+          throw new Error('version mismatch: task was modified concurrently');
+        }
       }
 
       return { task: getTask(db, run.task_id) };
@@ -423,15 +429,17 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
         throw new Error('invalid finish status');
       }
       if (status === 'succeeded') {
-        if (!isNonFinalCouncilMember(run)) {
-          const task = getTask(db, run.task_id);
-          const comments = listComments(db, run.task_id);
-          const err = checkPostflight(run.role, task ?? {}, comments);
-          if (err !== null) throw new Error(`postflight: ${err}`);
-          const phaseState = getRunPhaseState(db, run.id);
-          const phaseErr = checkPhaseGate(run.role, phaseState?.phase ?? null);
-          if (phaseErr !== null) throw new Error(`postflight: ${phaseErr}`);
-        }
+        const task = getTask(db, run.task_id);
+        const comments = listComments(db, run.task_id);
+        const phaseState = getRunPhaseState(db, run.id);
+        const err = evaluateRunCompletion(
+          run,
+          task ?? {},
+          comments,
+          phaseState?.phase ?? null,
+          run.started_at,
+        );
+        if (err !== null) throw new Error(`postflight: ${err}`);
       }
       finishRunRow(
         db,
@@ -440,6 +448,9 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
         typeof args.summary === 'string' ? args.summary : null,
         typeof args.error === 'string' ? args.error : null,
       );
+      // Evict the routing cache — the token no longer resolves to a running
+      // run, so further calls with it should re-verify from the DB (and fail).
+      invalidateRunToken(String(args.run_token ?? ''));
       const evt = recordActivity(db, {
         run_id: run.id,
         task_id: run.task_id,
@@ -744,7 +755,11 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
     case 'record_tool': {
       const run = requireRunToken();
       const tool = String(args.tool ?? '');
-      const target = typeof args.target === 'string' ? args.target.slice(0, 500) : undefined;
+      // Evaluate the FULL, untruncated target against tool policy — truncating
+      // before the check would let a destructive/data-dir/inline-eval pattern
+      // past the gate simply by padding the command past 500 chars first.
+      // Only truncate the copy we persist to activity/logs afterwards.
+      const fullTarget = typeof args.target === 'string' ? args.target : undefined;
       if (!tool) throw new Error('tool required');
       const phaseRow = getRunPhaseState(db, run.id) ?? {
         phase: 'DISCOVERY' as Phase,
@@ -756,7 +771,7 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
       const projRec = project as unknown as Record<string, unknown> | undefined;
       const { decision, reason } = evaluateToolPolicy({
         tool,
-        target,
+        target: fullTarget,
         blockedTools: policy.blockedTools,
         phase: phaseRow.phase,
         allowGit: projRec?.allow_git === true || projRec?.allow_git === 1,
@@ -765,11 +780,12 @@ export function callTool(db: DbHandle, name: string, args: Record<string, unknow
           projectDestructiveFlag(projRec?.agent_config_json),
         ),
       });
+      const storedTarget = fullTarget !== undefined ? fullTarget.slice(0, 500) : undefined;
       const evt = recordActivity(db, {
         run_id: run.id,
         task_id: run.task_id,
         kind: decision === 'block' ? 'tool:blocked' : 'tool:invoked',
-        payload: { tool, target, phase: phaseRow.phase, reason },
+        payload: { tool, target: storedTarget, phase: phaseRow.phase, reason },
       });
       emitActivity(db, evt);
       return { decision, reason };
@@ -792,7 +808,7 @@ export async function handleMcp(
   const rawBody = await readJson(req);
   if (rawBody === null) {
     sendRpc(res, null, { code: -32700, message: 'parse error' });
-    return;
+    return true;
   }
 
   const body = rawBody as RpcBody;
@@ -810,7 +826,7 @@ export async function handleMcp(
   if (typeof method === 'string' && method.startsWith('notifications/')) {
     res.writeHead(202);
     res.end();
-    return;
+    return true;
   }
   if (method === 'ping') {
     sendRpc(res, id, null, {});
@@ -835,26 +851,40 @@ export async function handleMcp(
       }
     })();
 
+    // Auth: the caller's own run_token, sent as the Bearer header — never the
+    // server token (see module header comment / CLAUDE.md "Security model").
+    // Every remaining tool requires run_token, so this single check covers
+    // the whole surface; there is no unauthenticated / active-project-fallback
+    // path left to resolve a db without one.
+    const authHeader = req.headers.authorization ?? '';
+    const headerToken = /^Bearer\s+(.+)$/.exec(authHeader)?.[1] ?? '';
+    if (!headerToken) {
+      sendRpc(res, id, null, {
+        content: [{ type: 'text', text: 'Error: unauthorized (missing run_token Bearer header)' }],
+        isError: true,
+      });
+      return true;
+    }
+
+    // If the call also carries a `run_token` argument, it must match the
+    // header exactly — an agent may not act on behalf of a different run by
+    // quoting another run's token in `arguments` while authenticating with
+    // its own header (or vice versa).
+    const argToken = typeof args.run_token === 'string' ? args.run_token : undefined;
+    if (argToken !== undefined && !constantTimeEqual(argToken, headerToken)) {
+      sendRpc(res, id, null, {
+        content: [{ type: 'text', text: 'Error: run_token argument does not match Bearer header' }],
+        isError: true,
+      });
+      return true;
+    }
+    args.run_token = headerToken;
+
     let db: DbHandle | null = null;
     try {
-      if (name === 'claim_run') {
-        const run_id = typeof args.run_id === 'string' ? args.run_id : '';
-        const r = await getDbForRunId(run_id);
-        if (r === null) throw new Error('run not found');
-        db = r.db;
-      } else if (typeof args.run_token === 'string' && args.run_token.length > 0) {
-        const r = await getDbForRunToken(args.run_token);
-        if (r === null) {
-          const active = await getActiveDb();
-          db = active?.db ?? null;
-        } else {
-          db = r.db;
-        }
-      } else {
-        const active = await getActiveDb();
-        db = active?.db ?? null;
-      }
-      if (db === null) throw new Error('no active project');
+      const r = await getDbForRunToken(headerToken);
+      if (r === null) throw new Error('invalid run_token or run not running');
+      db = r.db;
     } catch (e) {
       console.error(
         `[mcp] ${name} FAIL args=${argSummary} err="${(e as Error).message}" (db-resolve)`,
@@ -863,7 +893,7 @@ export async function handleMcp(
         content: [{ type: 'text', text: `Error: ${(e as Error).message}` }],
         isError: true,
       });
-      return;
+      return true;
     }
 
     try {
@@ -881,10 +911,10 @@ export async function handleMcp(
         content: [{ type: 'text', text: `Error: ${(e as Error).message}` }],
         isError: true,
       });
-      return;
+      return true;
     }
   }
 
   sendRpc(res, id, { code: -32601, message: `method not found: ${String(method)}` });
-  return;
+  return true;
 }

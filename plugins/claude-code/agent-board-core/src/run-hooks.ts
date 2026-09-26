@@ -4,17 +4,22 @@
 // spawned:
 //
 //   1. Claude Agent SDK inline hooks (preferred for spawned `query()` calls):
-//      buildSdkHooks({ runToken, mcpUrl, serverToken })
+//      buildSdkHooks({ runToken, mcpUrl })
 //      → returns a HookInput object suitable for SDK queryOptions.hooks
 //
 //   2. Settings.json file (for `claude -p` subprocess runs):
-//      writeRunSettings(runDir, { runToken, mcpUrl, serverToken })
+//      writeRunSettings(runDir, { runToken, mcpUrl })
 //      → writes <runDir>/settings.json + <runDir>/pretooluse.mjs
 //      → returns the settings path to pass via --settings
 //
 // Both shapes call back to the abrun MCP `record_tool` to (a) check phase
 // policy and (b) report the tool attempt to the live activity feed. Server
 // returns {decision:'allow'|'block', reason}; hook converts to SDK contract.
+//
+// Security: the ONLY credential these hooks ever hold is the per-run
+// run_token (rotated on claim, scoped to this one running run). The server's
+// own Bearer token is never handed to a spawned agent process — see
+// src/api-mcp.ts handleMcp for the auth contract.
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -30,7 +35,6 @@ export interface HookResult {
 export interface SdkHookParams {
   runToken: string;
   mcpUrl: string;
-  serverToken: string;
 }
 
 // ─── Inline node hook script (verbatim) ──────────────────────────────────────
@@ -40,27 +44,26 @@ const HOOK_NODE_SCRIPT = `#!/usr/bin/env node
 // Reads stdin JSON from Claude Code, calls abrun.record_tool, prints decision.
 import { argv } from 'node:process';
 
-let raw = '';
-process.stdin.setEncoding('utf8');
-for await (const chunk of process.stdin) raw += chunk;
-let evt;
-try { evt = JSON.parse(raw); } catch { process.exit(0); }
-
-const tool = evt?.tool_name || evt?.tool || '';
-const target = evt?.tool_input?.file_path || evt?.tool_input?.command || '';
-
-const runToken   = process.env.AGENTBOARD_RUN_TOKEN;
-const mcpUrl     = process.env.AGENTBOARD_MCP_URL;
-const serverTok  = process.env.AGENTBOARD_SERVER_TOKEN;
-
 function deny(reason) {
   // Fail closed: if the policy cannot be evaluated we must not let the tool run.
   process.stderr.write('agentboard: tool denied — ' + reason);
   process.exit(2);
 }
 
-if (!runToken || !mcpUrl || !serverTok) {
-  deny('hook misconfigured (missing AGENTBOARD_RUN_TOKEN / AGENTBOARD_MCP_URL / AGENTBOARD_SERVER_TOKEN)');
+let raw = '';
+process.stdin.setEncoding('utf8');
+for await (const chunk of process.stdin) raw += chunk;
+let evt;
+try { evt = JSON.parse(raw); } catch (err) { deny('malformed hook input JSON: ' + (err && err.message ? err.message : String(err))); }
+
+const tool = evt?.tool_name || evt?.tool || '';
+const target = evt?.tool_input?.file_path || evt?.tool_input?.command || '';
+
+const runToken = process.env.AGENTBOARD_RUN_TOKEN;
+const mcpUrl    = process.env.AGENTBOARD_MCP_URL;
+
+if (!runToken || !mcpUrl) {
+  deny('hook misconfigured (missing AGENTBOARD_RUN_TOKEN / AGENTBOARD_MCP_URL)');
 }
 
 const body = {
@@ -72,7 +75,7 @@ let decision, reason = null;
 try {
   const r = await fetch(mcpUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + serverTok },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + runToken },
     body: JSON.stringify(body),
   });
   if (!r.ok) deny('policy server returned HTTP ' + r.status);
@@ -105,7 +108,7 @@ export function writeRunSettings(runDir: string, params: SdkHookParams): string 
     hooks: {
       PreToolUse: [
         {
-          matcher: 'Edit|Write|MultiEdit|NotebookEdit|Bash',
+          matcher: 'Edit|Write|MultiEdit|NotebookEdit|Bash|Read',
           hooks: [{ type: 'command', command: `node "${hookPath.replace(/\\/g, '/')}"` }],
         },
       ],
@@ -113,7 +116,6 @@ export function writeRunSettings(runDir: string, params: SdkHookParams): string 
     env: {
       AGENTBOARD_RUN_TOKEN: params.runToken,
       AGENTBOARD_MCP_URL: params.mcpUrl,
-      AGENTBOARD_SERVER_TOKEN: params.serverToken,
     },
   };
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
@@ -157,7 +159,7 @@ export function buildSdkHooks(params: SdkHookParams): {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + params.serverToken,
+          Authorization: 'Bearer ' + params.runToken,
         },
         body: JSON.stringify(body),
       });
@@ -186,7 +188,10 @@ export function buildSdkHooks(params: SdkHookParams): {
   return {
     PreToolUse: [
       {
-        matchers: ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash'],
+        // 'Read' included so a spawned agent can't bypass tool-policy's
+        // AgentBoard-data-dir deny rule by reading ~/.agentboard/config.json
+        // (which holds the server token) via the Read tool specifically.
+        matchers: ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash', 'Read'],
         hooks: [callback],
       },
     ],
@@ -237,7 +242,7 @@ export function buildToolGate(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + params.serverToken,
+          Authorization: 'Bearer ' + params.runToken,
         },
         body: JSON.stringify(body),
       });

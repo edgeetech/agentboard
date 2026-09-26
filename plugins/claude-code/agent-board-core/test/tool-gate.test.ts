@@ -5,7 +5,6 @@ import { buildToolGate } from '../src/run-hooks.ts';
 const PARAMS = {
   runToken: 'run-token',
   mcpUrl: 'http://127.0.0.1:9999/mcp',
-  serverToken: 'server-token',
 };
 const ATTEMPT = { tool: 'Bash', target: 'npm test' };
 

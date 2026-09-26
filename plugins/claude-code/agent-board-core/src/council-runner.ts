@@ -141,7 +141,6 @@ export async function executeCouncilRun(
     const memberHookParams = {
       runToken: childToken,
       mcpUrl: `http://127.0.0.1:${baseOpts.serverPort}/mcp`,
-      serverToken: baseOpts.serverToken,
     };
     const memberHooks = memberProvider === 'claude' ? buildSdkHooks(memberHookParams) : undefined;
     // Non-Claude members have no PreToolUse hook; they get the same policy via
@@ -153,11 +152,25 @@ export async function executeCouncilRun(
       delete (rest as { hooks?: unknown }).hooks;
       return rest;
     })();
+    // Security: each member must authenticate its OWN direct MCP calls
+    // (get_task/add_comment/finish_run) with its OWN childToken — reusing the
+    // parent's abrun header here would make /mcp reject every tool call whose
+    // `run_token` argument (childToken, per the member's prompt) doesn't match
+    // the header token (see src/api-mcp.ts handleMcp auth contract).
+    const memberMcpServers: ProviderRuntimeContext['mcpServers'] = {
+      ...baseOpts.mcpServers,
+      abrun: {
+        ...baseOpts.mcpServers.abrun,
+        headers: { Authorization: `Bearer ${childToken}` },
+      },
+    };
     const memberCtx: ProviderRuntimeContext = {
       ...baseOptsNoHooks,
       runId: childId,
       prompt: augmentedPrompt,
+      mcpServers: memberMcpServers,
       toolGate: memberToolGate,
+      mcpBearerToken: childToken,
       ...(memberHooks !== undefined ? { hooks: memberHooks } : {}),
     };
 

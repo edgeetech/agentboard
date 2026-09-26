@@ -39,7 +39,13 @@
 - **3-reject ceiling** — after three rejections a task is forced to human hands instead of
   looping the agent forever. Also server-enforced.
 - **Per-run cost accounting** — token usage and USD cost are recorded per run and rolled up
-  per task/project from a local pricing table.
+  per task/project from a local pricing table. Runs covered by your subscription are marked
+  `≈` (API-equivalent estimate, not a charge).
+- **Use your own subscription** — each provider can sign in with your Claude Pro/Max, ChatGPT
+  or Copilot login instead of an API key (Project → *Sign-in & billing*). A stray API key in
+  the environment can no longer silently switch a run to pay-as-you-go billing.
+- **Usage-limit aware** — when a provider reports a usage/rate limit, the run is marked
+  `RATE_LIMITED` with the reset time and retried after it, without using a retry attempt.
 - **Local-only data** — everything lives in `~/.agentboard` (SQLite). Nothing is uploaded.
 
 ### 🚧 Experimental / incomplete
@@ -92,7 +98,7 @@ Install the plugin inside any Claude Code session:
 /agentboard:open      # boots local server + opens UI in your browser
 ```
 
-**Requires:** Node ≥ 22 *or* Bun ≥ 1.x · `npm` (or `bun`) on `PATH` · `claude` CLI ≥ 2.0.0 · `ANTHROPIC_API_KEY` env or active OAuth (`claude /login`) · Windows / macOS / Linux.
+**Requires:** Node ≥ 22 *or* Bun ≥ 1.x · `npm` (or `bun`) on `PATH` · `claude` CLI ≥ 2.0.0 · a Claude subscription login (`claude /login`) or `ANTHROPIC_API_KEY` · Windows / macOS / Linux.
 
 > **First run installs core deps automatically.** The plugin marketplace ships only source — on the first `/agentboard:open` (or session-start hook) after install/upgrade, AgentBoard runs `npm install` (prefers `bun install` if present) inside the cached `agent-board-core/` directory. Expect a one-time ~20 s pause. If install fails (no `npm`/`bun` on `PATH`, no network), the server exits with code 4 and prints the manual command to run.
 
@@ -142,7 +148,9 @@ Multi-agent AI is powerful, but the day-to-day is messy:
 | 🟦🟧🟪🟩 **Four roles, one flow** | PM enriches → Worker codes → Reviewer verifies → Human approves. Pick **WF1** (full loop) or **WF2** (skip Reviewer). |
 | 🕹️ **Auto *or* semi-auto mode** | **Auto** — agents drive transitions end-to-end. **Semi** — you drive status changes, agents only annotate (comments + ACs). Switch per project, any time. |
 | 🧾 **Acceptance Criteria, enforced** | PM writes 3–7 testable ACs. Reviewer must check them. Server rejects finishes that skip the audit. |
-| 💰 **Real-time cost per run** | Every run parses SDK usage events and stamps `cost_usd` from latest Opus / Sonnet / Haiku pricing. Project header shows all-time, 7d, 30d totals. |
+| 💰 **Real-time cost per run** | Every run parses SDK usage events and stamps `cost_usd` from the local pricing table. Subscription runs show `≈` — an API-equivalent estimate, not a bill. Project header shows all-time, 7d, 30d totals. |
+| 🔑 **Subscription or API key, per provider** | Project → *Sign-in & billing*: **My subscription** (uses `claude /login`, `codex login`, Copilot login and strips API-key env vars from the run), **API key** (fails fast if the key is missing), or **Auto** (CLI decides). Each run records how it actually signed in. Doctor warns when an API key would override your login. |
+| ⏳ **Usage-limit handling** | Claude, Codex and Copilot usage-limit signals are detected. The run is marked `RATE_LIMITED: <provider> usage limit, resets at <time>` and re-queued for after the reset — it does not burn one of the 3 retry attempts. |
 | 🤖 **Multi-agent execution** | Run tasks with **Claude agents** (default), **Codex CLI**, or **Copilot CLI** (for capability mix). Per-role config: PM with Claude, Worker with Copilot, Reviewer with Codex — set per-project or override per-task. Manual dispatch can also one-shot a specific provider for a single run. |
 | 🏛️ **Council persona** | Configure any role as a **council** of 2–5 ordered members across mixed providers. Members run round-robin — each one sees prior outputs; the **last member synthesises** the canonical result. Fail-fast on any member error. Council parents count as **one** running run against `max_parallel`, so a 3-member council does not starve the queue. |
 | 🧭 **Inner phase machine** | Each run drives an FSM: `DISCOVERY → REFINEMENT → PLANNING → EXECUTING → VERIFICATION → DONE` (plus `cancel|wontfix|revisit` exits). Discovery modes — `full | validate | technical-depth | ship-fast | explore` — tune the loop per task. Live phase + tool activity streamed over SSE. |
@@ -154,9 +162,10 @@ Multi-agent AI is powerful, but the day-to-day is messy:
 | 🧪 **Setup + runtime health** | Project doctor checks and the board health strip surface provider CLI, DB schema, tracker, skill scan, queue, cost, and uncosted-run state without reading logs first. |
 | 📦 **Task audit export** | Export a task audit as JSON or Markdown, including comments, history, runs, costs, activity, debt, attachments, and tracker links with credential redaction. |
 | 🛡️ **Workspace path safety** | Per-task workspaces validated against path traversal (`../`) and symlink attacks before creation. Artifact caches (`.cache`, `node_modules/.cache`, `.vite`, `.turbo`, etc.) cleaned between runs. Shell lifecycle hooks (`afterCreate`, `beforeRun`, `afterRun`, `beforeRemove`) with 30s timeout. |
-| 🔒 **Local-only by design** | Binds `127.0.0.1`, DNS-rebind guard, Bearer + per-run rotated tokens, whitelisted child env. AWS / GitHub / SSH secrets in your shell are **not** passed to spawned agents. |
+| 🔒 **Local-only by design** | Binds `127.0.0.1`, DNS-rebind guard, whitelisted child env. Spawned agents only ever get a per-run token scoped to their own task — never the server token. AWS / SSH / cloud secrets in your shell are **not** passed to spawned agents. |
 | 🪝 **Step into any run** | Each run gets `--session-id`. One click copies `claude --resume <id>` so you can jump into the live transcript from your terminal. |
-| 🎨 **9 themes, light + dark** | AgentBoard, EdgeeTech, Primer, Monochrome, Neon, Warm Tones, Muted Pastels, Deep Jewel, Vibrant. |
+| 🎨 **3 palettes, light + dark** | EdgeeTech (default), AgentBoard, Monochrome (dark only). |
+| 🗂️ **Sessions browser** | Every recorded Claude Code session — prompt, intent, role, touched files, plan files, event timeline — with search, source filter, and one-click *Copy context* / *Open in CLI*. |
 
 **Server:** Node ≥ 22, vanilla `node:http`, `node:sqlite` (built-in). The HTTP server uses only Node.js standard library; the overall plugin package includes a small set of production dependencies (Claude SDK, Commander, LiquidJS, Pino) for agent execution and background services.
 
@@ -164,11 +173,11 @@ Multi-agent AI is powerful, but the day-to-day is messy:
 
 ## 🖼️ Product tour
 
-Nine screens in one image — board, task creation, run detail with cost + ACs, comment audit trail, roles, skills, themes, sessions index, session timeline.
+Nine screens in one image — board, run history with cost estimates and a usage-limit retry, comment audit trail, sign-in & billing per provider, personas, skills, themes, sessions index, session timeline.
 
 <div align="center">
 
-[![Product tour: board, tasks, runs, comments, roles, skills, themes, sessions](./docs/images/collage-tour.png)](./docs/images/collage-tour.png)
+[![Product tour: board, runs, comments, sign-in & billing, personas, skills, themes, sessions](./docs/images/collage-tour.png)](./docs/images/collage-tour.png)
 
 <sub><a href="./docs/images/collage-tour.png">Click to enlarge</a> — or browse individual screenshots in <a href="./docs/images/">docs/images/</a>.</sub>
 
@@ -189,7 +198,7 @@ AgentBoard routes tasks to the right **executor** — Claude SDK, Codex CLI, Cop
    ┌──────────────────────────────────────────────────────────────┐
    │  AgentBoard core server  (Node, 127.0.0.1)                   │
     │  • REST + JSON-RPC HTTP MCP (abrun — for agents)             │
-   │  • Per-project SQLite (WAL, schema v5)                       │
+   │  • Per-project SQLite (WAL, schema v9)                       │
     │  • Multi-executor routing: Claude SDK + Codex + Copilot     │
    │  • Inner phase machine (DISCOVERY→…→DONE) per run            │
    │  • Skill scanner: <repo>/**/.claude/skills/* + 6 built-ins   │
@@ -243,8 +252,10 @@ AgentBoard routes tasks to the right **executor** — Claude SDK, Codex CLI, Cop
 ## 🔒 Security & privacy
 
 - **127.0.0.1 only.** Server refuses any `Host` header that isn't `127.0.0.1:<port>` or `localhost:<port>` (DNS-rebind guard, returns 421).
-- **Bearer + per-run tokens.** 32-byte hex token in `~/.agentboard/config.json` (0600 on Unix, ACL'd on Windows). Each run gets a `run_token` issued exactly once at `claim_run`.
-- **Whitelisted child env.** Spawned agents receive only `PATH`, `HOME`, `USER`, `LANG`, `TZ`, Claude auth vars, and Windows OS basics. AWS, GitHub, SSH, GCP, cloud-SDK secrets dropped.
+- **Server token stays with you.** 32-byte hex token in `~/.agentboard/config.json` (0600 on Unix, ACL'd on Windows), compared in constant time. Only the browser UI and your own Claude Code session use it — the agent MCP endpoint (`/mcp`) rejects it.
+- **Per-run tokens for agents.** The executor claims each run itself and hands the agent a `run_token` that works only for that one running run and its task. Agents cannot list the queue, claim other runs, or approve their own work.
+- **Tool policy checks the whole command.** Compound shell (`a && b`, pipes, `;`) is split and every part is checked. Inline code (`node -e`, `python -c`) and any access to the AgentBoard data dir are always blocked.
+- **Whitelisted child env.** Spawned agents receive only `PATH`, `HOME`, `USER`, `LANG`, `TZ`, proxy/CA vars, the provider's own auth vars, and Windows OS basics. AWS, SSH, GCP and cloud-SDK secrets are dropped. In *My subscription* mode the provider's API-key vars are dropped too.
 - **CSP nonce + HttpOnly cookie** on the UI. No inline scripts without nonce.
 - **No telemetry.** Nothing leaves your machine. Logs at `~/.agentboard/logs/<run_id>.ndjson` are full Claude transcripts — treat data dir as sensitive.
 
@@ -256,7 +267,7 @@ Outside the repo, untouched by plugin upgrades:
 
 ```
 ~/.agentboard/                  (%USERPROFILE%\.agentboard on Windows)
-  projects/<code>.db            one SQLite per project (WAL, schema v5)
+  projects/<code>.db            one SQLite per project (WAL, schema v9)
   logs/<run_id>.ndjson           Claude SDK structured events
   logs/<run_id>.err.log         captured stderr
   run-configs/<id>.json         tmp MCP config per run (deleted on exit)
@@ -265,7 +276,7 @@ Outside the repo, untouched by plugin upgrades:
   server.lock                   single-instance lock
 ```
 
-**Per-project DB tables (schema v5):**
+**Per-project DB tables (schema v9):**
 
 | Table | Purpose |
 |---|---|
@@ -351,7 +362,7 @@ Doctor checks are timeout-bounded and return `ok`, `warning`, `error`, or `unkno
 
 ## 🔄 Automatic retry with backoff
 
-Failed agent runs (non-`completed` status or unhandled exception) are automatically retried with exponential backoff:
+Failed agent runs (non-`completed` status or unhandled exception) are automatically retried with exponential backoff. Usage-limit failures are different: they wait for the provider's reset time and do not count as an attempt.
 
 | Attempt | Delay |
 |---|---|
@@ -369,7 +380,7 @@ Each retry creates a new `agent_run` row with an incremented `attempt` counter, 
 
 ---
 
-
+## 🔌 MCP servers for spawned agents
 
 Spawned agents run with `--strict-mcp-config`, so only the per-run `abrun` HTTP MCP is loaded by default. Two opt-in knobs:
 

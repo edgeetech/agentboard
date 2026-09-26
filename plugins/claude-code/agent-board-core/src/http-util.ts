@@ -25,6 +25,14 @@ export function text(
   res.end(buf);
 }
 
+/**
+ * Read and parse a JSON body. Resolves `null` for both an empty body AND a
+ * malformed one — callers already treat `null` as "no usable body" (REST
+ * handlers fall back to `{}` and 400 on missing fields; the /mcp handler
+ * turns it into a JSON-RPC -32700 parse error). This keeps a bad body a
+ * well-formed 400/-32700 response instead of an uncaught rejection that
+ * bubbles up to a generic 500.
+ */
 export async function readJson(req: IncomingMessage, maxBytes = 1_000_000): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -46,8 +54,8 @@ export async function readJson(req: IncomingMessage, maxBytes = 1_000_000): Prom
       }
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown);
-      } catch (e) {
-        reject(e instanceof Error ? e : new Error(String(e)));
+      } catch {
+        resolve(null);
       }
     });
     req.on('error', reject);

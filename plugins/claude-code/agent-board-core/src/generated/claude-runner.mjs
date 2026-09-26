@@ -54,6 +54,45 @@ var DEFAULT_TURN_TIMEOUT_MS = parseInt(
   globalThis.process?.env?.AGENTBOARD_TURN_TIMEOUT_MS ?? '900000',
   10,
 );
+function classifyClaudeRateLimitEvent(msg) {
+  if (msg === null || typeof msg !== 'object') return null;
+  const obj = msg;
+  if (obj.type === 'rate_limit_event') {
+    const info = obj.rate_limit_info;
+    if (info === null || typeof info !== 'object') return null;
+    const infoObj = info;
+    if (infoObj.status !== 'rejected') return null;
+    const resetsAtMs = typeof infoObj.resetsAt === 'number' ? infoObj.resetsAt : null;
+    return {
+      resetsAt: resetsAtMs !== null ? new Date(resetsAtMs).toISOString() : null,
+      retryAfterMs: resetsAtMs !== null ? Math.max(0, resetsAtMs - Date.now()) : null,
+    };
+  }
+  if (obj.type === 'system' && obj.subtype === 'api_retry') {
+    const retryMs = typeof obj.retry_delay_ms === 'number' ? obj.retry_delay_ms : null;
+    const status = typeof obj.error_status === 'number' ? obj.error_status : null;
+    if (status !== 429 && retryMs === null) return null;
+    return { resetsAt: null, retryAfterMs: retryMs ?? 6e4 };
+  }
+  return null;
+}
+function classifyClaudeResultError(msg) {
+  if (msg === null || typeof msg !== 'object') return null;
+  const obj = msg;
+  if (obj.type !== 'result' || obj.is_error !== true) return null;
+  const text = [obj.result, ...(Array.isArray(obj.errors) ? obj.errors : [])]
+    .filter((part) => typeof part === 'string')
+    .join(' ');
+  const status = typeof obj.api_error_status === 'number' ? obj.api_error_status : null;
+  if (!/usage limit|rate limit|try again/i.test(text) && status !== 429) return null;
+  const match = /try again(?: at| after)?\s+([^.,;]+)/i.exec(text);
+  const resetsAt = match?.[1] !== void 0 ? tryParseFutureDate(match[1]) : null;
+  return { resetsAt, retryAfterMs: resetsAt === null ? 6e4 : null };
+}
+function tryParseFutureDate(text) {
+  const parsed = Date.parse(text.trim());
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
 var AgentRunner = class {
   opts;
   sessionId = null;
@@ -147,15 +186,22 @@ var AgentRunner = class {
       onEvent,
       sessionLog,
     } = this.opts;
-    const cleanEnv = { ...process.env };
+    const cleanEnv = { ...this.opts.env };
     delete cleanEnv.CLAUDECODE;
+    const claudeExecutablePath =
+      this.opts.claudeExecutablePath ?? globalThis.process?.env?.AGENTBOARD_CLAUDE_PATH;
     const queryOptions = {
       cwd,
       maxTurns,
       abortController: queryAbortController,
       permissionMode: 'acceptEdits',
       env: cleanEnv,
-      pathToClaudeCodeExecutable: 'claude',
+      // Left unset unless explicitly configured — hardcoding "claude" here broke
+      // npm `claude.cmd` installs on Windows and skipped the SDK's own bundled
+      // binary resolution.
+      ...(claudeExecutablePath !== void 0 && claudeExecutablePath !== ''
+        ? { pathToClaudeCodeExecutable: claudeExecutablePath }
+        : {}),
       ...(systemPrompt && { systemPrompt }),
       ...(allowedTools && {
         allowedTools: allowedTools.split(',').map((tool) => tool.trim()),
@@ -172,6 +218,7 @@ var AgentRunner = class {
       totalCostUsd: null,
     };
     const usage = this.partial.usage;
+    let pendingRateLimit = null;
     let q;
     try {
       q = query({ prompt, options: queryOptions });
@@ -225,6 +272,7 @@ var AgentRunner = class {
           result.sessionId = msg.session_id;
           result.model = msg.model;
           this.partial.model = msg.model;
+          result.authSource = msg.apiKeySource ?? null;
         }
         if (msg.type === 'assistant') {
           const messageUsage = msg.message.usage;
@@ -246,11 +294,40 @@ var AgentRunner = class {
         if (raw.type === 'error' && raw.status === 429) {
           const retryAfterMs = raw.retry_after_ms ?? 6e4;
           this.opts.rateLimiter?.recordLimit('claude-api', retryAfterMs);
+          pendingRateLimit = { resetsAt: null, retryAfterMs };
           sessionLog?.info({ retryAfterMs }, 'Rate limit detected');
           onEvent?.('run.rate-limited', { runId, retryAfterMs });
         }
+        const rateLimitEvent = classifyClaudeRateLimitEvent(msg);
+        if (rateLimitEvent !== null) {
+          this.opts.rateLimiter?.recordLimit('claude-api', rateLimitEvent.retryAfterMs ?? void 0);
+          pendingRateLimit = rateLimitEvent;
+          sessionLog?.info({ rateLimitEvent }, 'Rate limit signal detected');
+          onEvent?.('run.rate-limited', {
+            runId,
+            retryAfterMs: rateLimitEvent.retryAfterMs,
+            resetsAt: rateLimitEvent.resetsAt,
+          });
+        }
         if (msg.type === 'result') {
-          result.status = 'completed';
+          if (msg.is_error) {
+            const resultRateLimit = classifyClaudeResultError(msg) ?? pendingRateLimit;
+            if (resultRateLimit !== null) {
+              result.errorKind = 'rate_limit';
+              result.resetsAt = resultRateLimit.resetsAt;
+              this.opts.rateLimiter?.recordLimit(
+                'claude-api',
+                resultRateLimit.retryAfterMs ?? void 0,
+              );
+            } else {
+              result.errorKind = 'error';
+            }
+            result.status = 'failed';
+            result.error =
+              typeof msg.result === 'string' ? msg.result : 'claude result reported is_error=true';
+          } else {
+            result.status = 'completed';
+          }
           if (msg.total_cost_usd > 0) {
             result.totalCostUsd = msg.total_cost_usd;
             this.partial.totalCostUsd = msg.total_cost_usd;

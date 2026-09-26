@@ -155,13 +155,23 @@ function normalizeClaudeServer(s: unknown): unknown {
   return out;
 }
 
+/**
+ * Base directory for Claude Code's own config files. Respects
+ * CLAUDE_CONFIG_DIR when set — `.claude.json` then lives at
+ * `$CLAUDE_CONFIG_DIR/.claude.json` instead of `~/.claude.json`.
+ */
+export function claudeConfigBaseDir(): string {
+  const configDir = process.env.CLAUDE_CONFIG_DIR;
+  return configDir !== undefined && configDir !== "" ? configDir : homedir();
+}
+
 export function readClaudeUserMcpServers(): Record<
   string,
   CodexMcpServerEntry
 > {
   try {
     const raw: unknown = JSON.parse(
-      readFileSync(join(homedir(), ".claude.json"), "utf8"),
+      readFileSync(join(claudeConfigBaseDir(), ".claude.json"), "utf8"),
     );
     const cfg =
       raw !== null && typeof raw === "object" ? (raw as AppConfig) : {};

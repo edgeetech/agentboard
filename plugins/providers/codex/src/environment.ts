@@ -1,6 +1,19 @@
 import { platform } from "node:os";
 
-const UNIVERSAL = ["PATH", "LANG", "LC_ALL", "TZ"] as const;
+const UNIVERSAL = [
+  "PATH",
+  "LANG",
+  "LC_ALL",
+  "TZ",
+  "HTTPS_PROXY",
+  "HTTP_PROXY",
+  "NO_PROXY",
+  "https_proxy",
+  "http_proxy",
+  "no_proxy",
+  "NODE_EXTRA_CA_CERTS",
+  "SSL_CERT_FILE",
+] as const;
 const POSIX = ["HOME", "USER", "SHELL", "TMPDIR"] as const;
 const WINDOWS = [
   "USERPROFILE",
@@ -16,6 +29,13 @@ const WINDOWS = [
   "ProgramFiles(x86)",
   "PATHEXT",
   "COMSPEC",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "windir",
+  "PROCESSOR_ARCHITECTURE",
+  "NUMBER_OF_PROCESSORS",
+  "OS",
+  "PSModulePath",
 ] as const;
 const CLAUDE = [
   "ANTHROPIC_API_KEY",
@@ -29,10 +49,12 @@ const COPILOT = [
   "GITHUB_TOKEN",
   "GH_TOKEN",
   "COPILOT_TOKEN",
+  "COPILOT_GITHUB_TOKEN",
   "COPILOT_CLI",
   "COPILOT_CLI_BINARY_VERSION",
   "COPILOT_RUN_APP",
   "COPILOT_AGENT_SESSION_ID",
+  "COPILOT_HOME",
 ] as const;
 const CODEX = [
   "OPENAI_API_KEY",
@@ -40,6 +62,7 @@ const CODEX = [
   "OPENAI_ORG_ID",
   "OPENAI_PROJECT",
   "CODEX_HOME",
+  "CODEX_API_KEY",
 ] as const;
 
 export interface CodexChildProcessEnvironmentPolicy {

@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { api } from '../api';
 import { CopyIcon } from '../components/CopyIcon';
+import { Icon } from '../components/Icon';
 
 export function SkillDetailPage() {
   const { t } = useTranslation();
@@ -62,7 +63,7 @@ export function SkillDetailPage() {
     return (
       <div className="empty-state">
         <h3>{t('common.not_found', 'Not found')}</h3>
-        <p>No skill with id <code>{id}</code>.</p>
+        <p>{t('skills.not_found_body', 'No skill with id {{id}}.', { id })}</p>
         <p><Link to="/skills">{t('common.back', '← Back')}</Link></p>
       </div>
     );
@@ -109,9 +110,7 @@ export function SkillDetailPage() {
               {t('prompt.show', 'Show prompt')}
             </button>
           )}
-          <Link to="/skills">
-            <button className="ghost" type="button">← {t('skills.title', 'Skills')}</button>
-          </Link>
+          <Link to="/skills" className="button ghost">← {t('skills.title', 'Skills')}</Link>
         </div>
       </div>
 
@@ -176,7 +175,7 @@ export function SkillDetailPage() {
                 title={bodyEditing ? t('common.close', 'Close') : t('common.save', 'Edit')}
                 aria-label="toggle edit"
               >
-                {bodyEditing ? '👁' : '✎'}
+                <Icon name={bodyEditing ? 'eye' : 'pencil'} size={15} />
               </button>
             )}
             <button
@@ -197,26 +196,11 @@ export function SkillDetailPage() {
               onClick={() => { setBodyOpen(false); }}
               title={t('common.close', 'Close')}
               aria-label={t('common.close', 'Close')}
-            >×</button>
+            ><Icon name="x" size={14} /></button>
           </div>
           <div className="prompt-body">
             {bodyEditing && !isBuiltin ? (
-              <textarea
-                value={body}
-                onChange={(e) => { setBody(e.target.value); }}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  border: 0,
-                  outline: 0,
-                  resize: 'none',
-                  padding: '0.75rem',
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-                  fontSize: 12,
-                  background: 'transparent',
-                  color: 'inherit',
-                }}
-              />
+              <textarea className="prompt-edit-textarea" value={body} onChange={(e) => { setBody(e.target.value); }} />
             ) : (
               body ? (
                 <pre className="prompt-md">{body}</pre>

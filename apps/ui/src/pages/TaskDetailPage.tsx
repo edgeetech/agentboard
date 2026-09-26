@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { api } from '../api';
 import { ProjectNotFound } from '../components/ProjectNotFound';
+import { Skeleton } from '../components/Skeleton';
 import { TaskDetailPanel } from '../features/board/TaskDetailPanel';
 import { useDetailView } from '../hooks/useDetailView';
 
@@ -15,7 +16,14 @@ export function TaskDetailPage() {
   const [, setDetailView] = useDetailView();
   const list = useQuery({ queryKey: ['projects-list'], queryFn: api.listProjects });
 
-  if (list.isLoading) return <div className="center"><div className="spinner" /></div>;
+  if (list.isLoading) {
+    return (
+      <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
+        <Skeleton width={220} height={28} />
+        <Skeleton height={320} radius="var(--radius-lg)" />
+      </div>
+    );
+  }
   const project = list.data?.projects.find((p: any) => p.code === projUpper) || null;
   if (!project) return <ProjectNotFound code={projUpper} />;
   const boardPath = `/projects/${projUpper}`;
@@ -31,7 +39,7 @@ export function TaskDetailPage() {
           </span>
         </div>
         <div className="actions">
-          <Link to={boardPath}><button className="ghost" type="button">← {t('nav.board', 'Board')}</button></Link>
+          <Link to={boardPath} className="button ghost">← {t('nav.board', 'Board')}</Link>
         </div>
       </div>
 

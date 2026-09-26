@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { api, type ApiSkill } from '../../api';
+import { Dialog } from '../../components/Dialog';
 import { loadRoles } from '../../data/catalog';
 
 import { FileDropZone } from './FileDropZone';
@@ -197,10 +198,9 @@ export function CreateTaskModal({ onClose }: { onClose: () => void }) {
   const skillOffset = personaItems.length;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => { e.stopPropagation(); }}>
-        <h2>{t('board.new_task')}</h2>
-        <form onSubmit={e => { e.preventDefault(); m.mutate(); }}>
+    <Dialog onClose={onClose} titleId="create-task-title">
+      <h2 id="create-task-title">{t('board.new_task')}</h2>
+      <form onSubmit={e => { e.preventDefault(); m.mutate(); }}>
           <label>{t('task.title')}
             <input value={title} onChange={e => { setTitle(e.target.value); }} required autoFocus />
           </label>
@@ -273,14 +273,13 @@ export function CreateTaskModal({ onClose }: { onClose: () => void }) {
           <label>{t('files.label', 'File paths')}</label>
           <FileDropZone paths={filePaths} onChange={setFilePaths} />
           <div className="actions">
-            <button type="button" onClick={onClose}>{t('common.cancel', 'Cancel')}</button>
+            <button type="button" className="ghost" onClick={onClose}>{t('common.cancel', 'Cancel')}</button>
             <button type="submit" disabled={!title.trim() || m.isPending}>
               {t('board.new_task')}
             </button>
           </div>
           {m.isError && <div className="err">{(m.error).message}</div>}
-        </form>
-      </div>
-    </div>
+      </form>
+    </Dialog>
   );
 }

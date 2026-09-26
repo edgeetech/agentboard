@@ -30,4 +30,38 @@ describe('child process environment policy', () => {
     });
     expect(env).not.toHaveProperty('AWS_SECRET_ACCESS_KEY');
   });
+
+  it('passes through proxy/CA config on every platform', () => {
+    const env = buildChildEnv({
+      PATH: '/bin',
+      HTTPS_PROXY: 'https://proxy:8443',
+      HTTP_PROXY: 'http://proxy:8080',
+      NO_PROXY: 'localhost',
+      NODE_EXTRA_CA_CERTS: '/etc/ca.pem',
+      SSL_CERT_FILE: '/etc/ssl.pem',
+    });
+
+    expect(env).toMatchObject({
+      HTTPS_PROXY: 'https://proxy:8443',
+      HTTP_PROXY: 'http://proxy:8080',
+      NO_PROXY: 'localhost',
+      NODE_EXTRA_CA_CERTS: '/etc/ca.pem',
+      SSL_CERT_FILE: '/etc/ssl.pem',
+    });
+  });
+
+  it('passes through the new Copilot/Codex auth-adjacent vars', () => {
+    const env = buildChildEnv({
+      PATH: '/bin',
+      COPILOT_GITHUB_TOKEN: 'gh-token',
+      COPILOT_HOME: '/home/.copilot',
+      CODEX_API_KEY: 'codex-key',
+    });
+
+    expect(env).toMatchObject({
+      COPILOT_GITHUB_TOKEN: 'gh-token',
+      COPILOT_HOME: '/home/.copilot',
+      CODEX_API_KEY: 'codex-key',
+    });
+  });
 });

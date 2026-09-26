@@ -4,7 +4,12 @@ import { isAbsolute, resolve as pathResolve, sep } from 'node:path';
 
 import { z } from 'zod';
 
-import { validateAgentConfigInput, stringifyAgentConfig } from './agent-config.ts';
+import {
+  validateAgentConfigInput,
+  stringifyAgentConfig,
+  validateAuthConfigInput,
+  stringifyAuthConfig,
+} from './agent-config.ts';
 import { deleteAgentboardSessions } from './api-sessions.ts';
 import { readConfig, writeConfig } from './config.ts';
 import type { DbHandle } from './db.ts';
@@ -398,6 +403,15 @@ export async function handleProjects(
         return;
       }
       patch.agent_config_json = stringifyAgentConfig(v.value);
+    }
+    if ('auth_config_json' in patch) {
+      const rawCfg = patch.auth_config_json;
+      const v = validateAuthConfigInput(rawCfg);
+      if (!v.ok) {
+        json(res, 400, { error: `auth_config_json invalid: ${v.error}` });
+        return;
+      }
+      patch.auth_config_json = stringifyAuthConfig(v.value);
     }
     if ('auto_dispatch_pm' in patch) {
       delete patch.auto_dispatch_pm;

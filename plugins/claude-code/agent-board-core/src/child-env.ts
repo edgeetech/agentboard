@@ -6,7 +6,22 @@
 
 import { platform } from 'node:os';
 
-const UNIVERSAL: readonly string[] = ['PATH', 'LANG', 'LC_ALL', 'TZ'];
+const UNIVERSAL: readonly string[] = [
+  'PATH',
+  'LANG',
+  'LC_ALL',
+  'TZ',
+  // Corporate/proxy network config — needed by any CLI making outbound HTTPS
+  // calls (Claude, Codex, Copilot) from behind a proxy or custom CA bundle.
+  'HTTPS_PROXY',
+  'HTTP_PROXY',
+  'NO_PROXY',
+  'https_proxy',
+  'http_proxy',
+  'no_proxy',
+  'NODE_EXTRA_CA_CERTS',
+  'SSL_CERT_FILE',
+];
 const POSIX: readonly string[] = ['HOME', 'USER', 'SHELL', 'TMPDIR'];
 const WINDOWS: readonly string[] = [
   'USERPROFILE',
@@ -22,6 +37,13 @@ const WINDOWS: readonly string[] = [
   'ProgramFiles(x86)',
   'PATHEXT',
   'COMSPEC',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'windir',
+  'PROCESSOR_ARCHITECTURE',
+  'NUMBER_OF_PROCESSORS',
+  'OS',
+  'PSModulePath',
 ];
 // Anthropic CLI auth — only what `claude` actually reads:
 const CLAUDE: readonly string[] = [
@@ -37,10 +59,12 @@ const COPILOT: readonly string[] = [
   'GITHUB_TOKEN',
   'GH_TOKEN',
   'COPILOT_TOKEN',
+  'COPILOT_GITHUB_TOKEN',
   'COPILOT_CLI',
   'COPILOT_CLI_BINARY_VERSION',
   'COPILOT_RUN_APP',
   'COPILOT_AGENT_SESSION_ID',
+  'COPILOT_HOME',
 ];
 const CODEX: readonly string[] = [
   'OPENAI_API_KEY',
@@ -48,6 +72,7 @@ const CODEX: readonly string[] = [
   'OPENAI_ORG_ID',
   'OPENAI_PROJECT',
   'CODEX_HOME',
+  'CODEX_API_KEY',
 ];
 
 export interface ChildProcessEnvironmentPolicy {

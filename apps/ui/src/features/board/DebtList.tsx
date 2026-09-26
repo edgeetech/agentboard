@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { ActivityEvent } from '../../api';
+import { Icon } from '../../components/Icon';
 import { useRunActivity } from '../../hooks/useRunActivity';
 
 interface DebtRow {
@@ -53,25 +54,14 @@ export function DebtList({ runId }: { runId: string | null }) {
   if (open.length === 0) return null;
 
   return (
-    <div style={{ marginTop: 12 }}>
-      <strong style={{ fontSize: 12, textTransform: 'uppercase', color: '#b91c1c' }}>
+    <div className="debt-list">
+      <strong className="debt-list-title">
         {t('phase.debt', 'Debt')} ({open.length})
       </strong>
-      <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0' }}>
+      <ul className="debt-list-items">
         {open.map((d) => (
-          <li
-            key={d.id}
-            style={{
-              padding: '6px 10px',
-              fontSize: 12,
-              border: '1px solid #fecaca',
-              background: '#fef2f2',
-              borderRadius: 4,
-              marginBottom: 4,
-              color: '#7f1d1d',
-            }}
-          >
-            ⚠ {d.description}
+          <li key={d.id} className="debt-list-item">
+            <Icon name="alert-triangle" size={12} /> {d.description}
           </li>
         ))}
       </ul>

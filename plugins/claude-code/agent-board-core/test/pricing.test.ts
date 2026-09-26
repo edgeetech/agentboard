@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { computeCost, PRICING, PRICING_TABLE_DATE, PRICING_VERSION } from '../src/pricing.ts';
+import {
+  computeCost,
+  isEstimatedCost,
+  PRICING,
+  PRICING_TABLE_DATE,
+  PRICING_VERSION,
+} from '../src/pricing.ts';
 
 // Model ids observed in real ~/.agentboard run rows. A silent $0 for any of
 // these means the table (or its family fallbacks) regressed — which shows up as
@@ -52,5 +58,22 @@ describe('pricing table', () => {
       expect(rate.input, model).toBeGreaterThan(0);
       expect(rate.output, model).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('isEstimatedCost', () => {
+  it('flags oauth (subscription login) auth source as a notional cost', () => {
+    expect(isEstimatedCost('oauth')).toBe(true);
+  });
+
+  it('does not flag API-key auth sources', () => {
+    expect(isEstimatedCost('user')).toBe(false);
+    expect(isEstimatedCost('project')).toBe(false);
+    expect(isEstimatedCost('org')).toBe(false);
+  });
+
+  it('treats null/undefined auth source as a real (non-estimated) cost', () => {
+    expect(isEstimatedCost(null)).toBe(false);
+    expect(isEstimatedCost(undefined)).toBe(false);
   });
 });

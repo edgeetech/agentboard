@@ -36,6 +36,14 @@ export interface RunResult {
   model?: string | null;
   totalCostUsd?: number | null;
   error?: string;
-  /** Present when status='failed'; 'timeout' marks TurnTimeout aborts so executor can skip auto-retry. */
-  errorKind?: 'timeout' | 'error';
+  /**
+   * Present when status='failed'. 'timeout' marks TurnTimeout aborts so executor
+   * can skip auto-retry; 'rate_limit' marks provider usage-limit errors so the
+   * executor reschedules no earlier than `resetsAt` without burning retry budget.
+   */
+  errorKind?: 'timeout' | 'error' | 'rate_limit';
+  /** ISO timestamp the provider's usage limit resets, when known (errorKind='rate_limit'). */
+  resetsAt?: string | null;
+  /** Provider-reported auth source for this run (e.g. Claude SDK `apiKeySource`). */
+  authSource?: string | null;
 }

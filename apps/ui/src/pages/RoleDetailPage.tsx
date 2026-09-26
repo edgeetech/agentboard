@@ -34,8 +34,8 @@ export function RoleDetailPage() {
     return (
       <div className="empty-state">
         <h3>{t('common.not_found', 'Not found')}</h3>
-        <p>No role with id <code>{id}</code>.</p>
-        <p><Link to="/roles">{t('common.back', '← Back')}</Link></p>
+        <p>{t('personas.not_found_body', 'No persona with id {{id}}.', { id })}</p>
+        <p><Link to="/personas">{t('common.back', '← Back')}</Link></p>
       </div>
     );
   }
@@ -81,7 +81,7 @@ export function RoleDetailPage() {
               {t('prompt.show', 'Show prompt')}
             </button>
           )}
-          <Link to="/roles"><button className="ghost" type="button">← {t('roles.title', 'Roles')}</button></Link>
+          <Link to="/personas" className="button ghost">← {t('personas.title', 'Personas')}</Link>
         </div>
       </div>
 

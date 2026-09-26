@@ -35,6 +35,7 @@ async function makeDb(repo: string): Promise<DbHandle> {
       description TEXT, workflow_type TEXT NOT NULL DEFAULT 'WF1',
       repo_path TEXT NOT NULL, max_parallel INTEGER NOT NULL DEFAULT 1,
       agent_provider TEXT NOT NULL DEFAULT 'claude',
+      auth_config_json TEXT,
       concerns_json TEXT NOT NULL DEFAULT '[]',
       allow_git INTEGER NOT NULL DEFAULT 0,
       scan_ignore_json TEXT NOT NULL DEFAULT '[]',

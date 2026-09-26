@@ -38,7 +38,11 @@ export interface ProviderRunResult {
   model?: string | null;
   totalCostUsd?: number | null;
   error?: string;
-  errorKind?: "timeout" | "error";
+  errorKind?: "timeout" | "error" | "rate_limit";
+  /** ISO timestamp the provider's usage limit resets, when known (errorKind='rate_limit'). */
+  resetsAt?: string | null;
+  /** Provider-reported auth source for this run (e.g. Claude SDK `apiKeySource`). */
+  authSource?: string | null;
 }
 
 export class ProviderTimeoutError extends Error {
@@ -132,9 +136,11 @@ export function toProviderRuntimeResponse(
             kind:
               result.errorKind === "timeout"
                 ? "timeout"
-                : result.status === "cancelled"
-                  ? "cancelled"
-                  : "provider",
+                : result.errorKind === "rate_limit"
+                  ? "rate_limit"
+                  : result.status === "cancelled"
+                    ? "cancelled"
+                    : "provider",
             message: result.error,
           },
         }

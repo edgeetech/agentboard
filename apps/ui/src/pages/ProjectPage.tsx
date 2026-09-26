@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { api, setProjectCode } from '../api';
-import type { AgentConfig, AgentProvider } from '../api';
+import { api, parseAuthConfig, setProjectCode } from '../api';
+import type { AgentConfig, AgentProvider, AuthConfig } from '../api';
 import { AgentConfigEditor } from '../components/AgentConfigEditor';
+import { AuthModeEditor } from '../components/AuthModeEditor';
 import { rememberLastProject } from '../hooks/useCurrentProjectCode';
 
 function parseProjectAgentConfig(raw: unknown): AgentConfig {
@@ -45,6 +46,7 @@ export function ProjectPage() {
   const [maxPar, setMaxPar] = useState<number>(2);
   const [agentProvider, setAgentProvider] = useState<AgentProvider>('claude');
   const [agentConfig, setAgentConfig] = useState<AgentConfig>({});
+  const [authConfig, setAuthConfig] = useState<AuthConfig>({});
   const [scanIgnore, setScanIgnore] = useState<string[]>([]);
   const [scanIgnoreText, setScanIgnoreText] = useState('');
   const [trackerKind, setTrackerKind] = useState<'linear' | 'github' | 'gitlab'>('github');
@@ -63,13 +65,14 @@ export function ProjectPage() {
 
   const trackerQ = useQuery({
     queryKey: ['tracker', project?.code],
-    queryFn: () => api.projectTracker(project.code),
+    // Guarded by `enabled: !!project` — queryFn only ever runs once project exists.
+    queryFn: () => api.projectTracker(project!.code),
     enabled: !!project,
     refetchInterval: 15_000,
   });
   const doctorQ = useQuery({
     queryKey: ['doctor', project?.code],
-    queryFn: () => api.projectDoctor(project.code),
+    queryFn: () => api.projectDoctor(project!.code),
     enabled: !!project,
     refetchInterval: 30_000,
   });
@@ -82,6 +85,7 @@ export function ProjectPage() {
     setMaxPar(project.max_parallel);
     setAgentProvider(project.agent_provider || 'claude');
     setAgentConfig(parseProjectAgentConfig(project.agent_config_json));
+    setAuthConfig(parseAuthConfig(project.auth_config_json));
     const ig: string[] = Array.isArray(project.scan_ignore_json) ? project.scan_ignore_json : [];
     setScanIgnore(ig);
     setScanIgnoreText(ig.join('\n'));
@@ -123,6 +127,7 @@ export function ProjectPage() {
           max_parallel: Number(maxPar),
           agent_provider: agentProvider,
           agent_config_json: Object.keys(agentConfig).length > 0 ? agentConfig : null,
+          auth_config_json: Object.keys(authConfig).length > 0 ? authConfig : null,
           scan_ignore_json: scanIgnore,
         })
       : Promise.reject(new Error('no project')),
@@ -221,6 +226,7 @@ export function ProjectPage() {
     Number(maxPar) !== project.max_parallel ||
     agentProvider !== (project.agent_provider || 'claude') ||
     JSON.stringify(agentConfig) !== JSON.stringify(projectAgentConfig) ||
+    JSON.stringify(authConfig) !== JSON.stringify(parseAuthConfig(project.auth_config_json)) ||
     scanIgnore.join('\n') !== projectScanIgnore.join('\n');
 
   return (
@@ -283,6 +289,10 @@ export function ProjectPage() {
                 fallbackProvider={agentProvider}
               />
             </fieldset>
+            <fieldset className="project-field-wide">
+              <legend>{t('auth.title', 'Sign-in & billing')}</legend>
+              <AuthModeEditor value={authConfig} onChange={setAuthConfig} />
+            </fieldset>
             <label className="project-field-wide">
               {t('settings.scan_ignore', 'Skip these folders')}
               <textarea
@@ -324,7 +334,7 @@ export function ProjectPage() {
                 {t('project.delete_action', 'Delete Project')}
               </button>
             ) : (
-              <div className="project-delete-confirm" role="dialog" aria-modal="false">
+              <div className="project-delete-confirm" role="group" aria-labelledby="delete-project-title">
                 <label htmlFor="project-delete-confirmation">
                   {t('project.delete_confirm', 'Type “{{name}}” to confirm deletion.', {
                     name: project.name,
@@ -384,7 +394,7 @@ export function ProjectPage() {
         <div className="project-form-scroll">
           <div className="form-grid project-form-grid">
             <label>
-              Tracker
+              {t('project.tracker_kind', 'Tracker')}
               <select
                 value={trackerKind}
                 onChange={(e) => {
@@ -397,7 +407,7 @@ export function ProjectPage() {
               </select>
             </label>
             <label>
-              Project slug
+              {t('project.tracker_slug', 'Project slug')}
               <input
                 value={trackerSlug}
                 onChange={(e) => { setTrackerSlug(e.target.value); }}
@@ -405,7 +415,7 @@ export function ProjectPage() {
               />
             </label>
             <label>
-              API key env var
+              {t('project.tracker_env', 'API key env var')}
               <input
                 value={trackerEnv}
                 onChange={(e) => { setTrackerEnv(e.target.value); }}
@@ -413,15 +423,15 @@ export function ProjectPage() {
               />
             </label>
             <label>
-              Endpoint
+              {t('project.tracker_endpoint', 'Endpoint')}
               <input
                 value={trackerEndpoint}
                 onChange={(e) => { setTrackerEndpoint(e.target.value); }}
-                placeholder="optional"
+                placeholder={t('common.optional', 'optional')}
               />
             </label>
             <label>
-              Poll interval ms
+              {t('project.tracker_interval', 'Poll interval ms')}
               <input
                 type="number"
                 min={5000}
@@ -431,15 +441,15 @@ export function ProjectPage() {
               />
             </label>
             <label>
-              Assignee
+              {t('project.tracker_assignee', 'Assignee')}
               <input
                 value={trackerAssignee}
                 onChange={(e) => { setTrackerAssignee(e.target.value); }}
-                placeholder="optional"
+                placeholder={t('common.optional', 'optional')}
               />
             </label>
             <label>
-              Active states
+              {t('project.tracker_active_states', 'Active states')}
               <textarea
                 value={trackerActiveStates}
                 onChange={(e) => { setTrackerActiveStates(e.target.value); }}
@@ -447,7 +457,7 @@ export function ProjectPage() {
               />
             </label>
             <label>
-              Terminal states
+              {t('project.tracker_terminal_states', 'Terminal states')}
               <textarea
                 value={trackerTerminalStates}
                 onChange={(e) => { setTrackerTerminalStates(e.target.value); }}
@@ -457,14 +467,14 @@ export function ProjectPage() {
           </div>
           <TrackerStatusPanel data={trackerQ.data} />
         </div>
-        <div className="form-actions project-form-actions">
+        <div className="form-actions project-section-actions">
           <button
             className="primary"
             type="button"
             disabled={saveTracker.isPending || !trackerEnv.trim() || !trackerSlug.trim()}
             onClick={() => { saveTracker.mutate(); }}
           >
-            Save tracker
+            {t('project.tracker_save', 'Save tracker')}
           </button>
           <button
             className="ghost"
@@ -472,7 +482,7 @@ export function ProjectPage() {
             disabled={enableTracker.isPending || !trackerQ.data?.tracker}
             onClick={() => { enableTracker.mutate(); }}
           >
-            Enable
+            {t('project.tracker_enable', 'Enable')}
           </button>
           <button
             className="ghost"
@@ -480,7 +490,7 @@ export function ProjectPage() {
             disabled={disableTracker.isPending || !trackerQ.data?.tracker}
             onClick={() => { disableTracker.mutate(); }}
           >
-            Disable
+            {t('project.tracker_disable', 'Disable')}
           </button>
           <button
             className="ghost"
@@ -488,7 +498,7 @@ export function ProjectPage() {
             disabled={syncTracker.isPending || !trackerQ.data?.tracker}
             onClick={() => { syncTracker.mutate(); }}
           >
-            Sync now
+            {t('project.tracker_sync', 'Sync now')}
           </button>
           {(saveTracker.isError ||
             enableTracker.isError ||
@@ -508,7 +518,7 @@ export function ProjectPage() {
 
       <section className="form-card project-form">
         <div className="project-form-scroll">
-          <h2>Doctor</h2>
+          <h2>{t('project.doctor_title', 'Doctor')}</h2>
           <div className="doctor-list">
             {(doctorQ.data?.checks ?? []).map((check) => (
               <div key={check.id} className={`doctor-check doctor-${check.status}`}>
@@ -518,7 +528,7 @@ export function ProjectPage() {
                 {check.action && <small>{check.action}</small>}
               </div>
             ))}
-            {doctorQ.isLoading && <div className="muted">Checking setup...</div>}
+            {doctorQ.isLoading && <div className="muted">{t('project.doctor_checking', 'Checking setup…')}</div>}
             {doctorQ.isError && <div className="err">{doctorQ.error.message}</div>}
           </div>
         </div>
@@ -535,27 +545,30 @@ function lines(value: string): string[] {
 }
 
 function TrackerStatusPanel({ data }: { data?: Awaited<ReturnType<typeof api.projectTracker>> }) {
+  const { t } = useTranslation();
   const status = data?.status;
-  if (!status) return <div className="muted">No tracker status yet.</div>;
+  if (!status) return <div className="muted">{t('project.tracker_no_status', 'No tracker status yet.')}</div>;
+  const yes = t('common.yes', 'yes');
+  const no = t('common.no', 'no');
   return (
     <div className="tracker-status-grid">
-      <StatusCell label="Enabled" value={status.enabled ? 'yes' : 'no'} />
+      <StatusCell label={t('project.tracker_enabled', 'Enabled')} value={status.enabled ? yes : no} />
       <StatusCell
-        label="Env present"
-        value={status.env_present ? 'yes' : 'no'}
+        label={t('project.tracker_env_present', 'Env present')}
+        value={status.env_present ? yes : no}
         tone={status.env_present ? 'ok' : 'bad'}
       />
-      <StatusCell label="Issues" value={String(status.issues_count)} />
-      <StatusCell label="Last poll" value={status.last_poll_at ?? '-'} />
-      <StatusCell label="Last success" value={status.last_success_at ?? '-'} />
-      <StatusCell label="Next poll" value={status.next_poll_at ?? '-'} />
+      <StatusCell label={t('project.tracker_issues', 'Issues')} value={String(status.issues_count)} />
+      <StatusCell label={t('project.tracker_last_poll', 'Last poll')} value={status.last_poll_at ?? '-'} />
+      <StatusCell label={t('project.tracker_last_success', 'Last success')} value={status.last_success_at ?? '-'} />
+      <StatusCell label={t('project.tracker_next_poll', 'Next poll')} value={status.next_poll_at ?? '-'} />
       <StatusCell
-        label="Rate limited"
-        value={status.rate_limited ? 'yes' : 'no'}
+        label={t('project.tracker_rate_limited', 'Rate limited')}
+        value={status.rate_limited ? yes : no}
         tone={status.rate_limited ? 'warn' : 'ok'}
       />
       <StatusCell
-        label="Last error"
+        label={t('project.tracker_last_error', 'Last error')}
         value={status.last_error ?? '-'}
         tone={status.last_error ? 'bad' : 'ok'}
       />

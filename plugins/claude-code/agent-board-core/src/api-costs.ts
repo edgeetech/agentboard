@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { json, matchRoute } from './http-util.ts';
+import { isEstimatedCost } from './pricing.ts';
 import { getDb } from './project-registry.ts';
 
 interface CostRow {
@@ -11,6 +12,7 @@ interface CostRow {
   cost_usd: number;
   ended_at: string | null;
   task_code: string;
+  auth_source: string | null;
 }
 
 interface TotalRow {
@@ -36,7 +38,7 @@ export async function handleCosts(
           `
         SELECT
           ar.id, ar.role, ar.status, ar.model, ar.cost_usd, ar.ended_at,
-          t.code AS task_code
+          ar.auth_source, t.code AS task_code
         FROM agent_run ar
         JOIN task t ON ar.task_id = t.id
         WHERE t.deleted_at IS NULL
@@ -45,7 +47,9 @@ export async function handleCosts(
       `,
         )
         .all() as CostRow[];
-      json(res, 200, { rows });
+      json(res, 200, {
+        rows: rows.map((row) => ({ ...row, cost_is_estimate: isEstimatedCost(row.auth_source) })),
+      });
       return true;
     } catch {
       json(res, 400, { error: 'project not found' });

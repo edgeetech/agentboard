@@ -64,6 +64,9 @@ function toLegacyProject(project: ProjectRecordCompat): ProjectRow {
     max_parallel: project.maxParallel,
     agent_provider: project.agentProvider,
     agent_config_json: project.agentConfigJson,
+    // Not modelled in the persistence adapter yet — repo.ts::getProject() reads
+    // the real value directly and overwrites this placeholder on every call.
+    auth_config_json: null,
     concerns_json: project.concernsJson,
     allow_git: project.allowGit ? 1 : 0,
     scan_ignore_json: project.scanIgnoreJson,

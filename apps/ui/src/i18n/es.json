@@ -26,7 +26,30 @@
     "clear": "Limpiar",
     "copied": "Copiado ✓",
     "remove": "Eliminar",
-    "view": "Ver detalle"
+    "view": "Ver detalle",
+    "retry": "Reintentar",
+    "yes": "sí",
+    "no": "no",
+    "optional": "opcional",
+    "loading": "Cargando…",
+    "breadcrumb": "Ruta de navegación"
+  },
+  "health": {
+    "health": "Salud",
+    "unavailable": "no disponible",
+    "queue": "Cola",
+    "queue_value": "{{queued}} en cola / {{running}} en ejecución",
+    "awaiting": "Pendiente",
+    "tracker": "Tracker",
+    "skills": "Habilidades",
+    "not_scanned": "sin escanear",
+    "cost": "Coste",
+    "uncosted": "Sin coste",
+    "tracker_disabled": "desactivado",
+    "tracker_missing_env": "falta env",
+    "tracker_rate_limited": "límite de tasa",
+    "tracker_error": "error",
+    "tracker_issue_count": "{{count}} incidencia(s)"
   },
   "prompt": {
     "copy": "Copiar",
@@ -67,15 +90,17 @@
     "repo_path": "Ruta del repositorio",
     "repo_hint": "Ruta absoluta. Worker edita archivos bajo este directorio.",
     "agent_provider": "Elige qué motor usar para ejecutar agentes",
-  "agent_provider_claude": "Claude (SDK de Anthropic)",
-  "agent_provider_github_copilot": "GitHub CoPilot",
-  "agent_provider_codex": "Codex CLI",
+    "agent_provider_claude": "Claude (SDK de Anthropic)",
+    "agent_provider_github_copilot": "GitHub CoPilot",
+    "agent_provider_codex": "Codex CLI",
     "auto_dispatch_pm": "Despachar PM automáticamente al crear tarea",
     "max_parallel": "Ejecuciones paralelas máx.",
     "max_parallel_hint": "1–3. Ejecuciones concurrentes de agentes para este proyecto.",
     "version_mismatch": "El proyecto se modificó en otro lugar — recarga y reintenta.",
     "scan_ignore": "Omitir estas carpetas",
-    "scan_ignore_hint": "Una por línea. Un nombre de carpeta (p. ej. `legacy`) o una ruta dentro del repo (p. ej. `Tax/__archived_maintenance`). Los predeterminados como `node_modules`, `bin`, `vendor` siempre se omiten."
+    "scan_ignore_hint": "Una por línea. Un nombre de carpeta (p. ej. `legacy`) o una ruta dentro del repo (p. ej. `Tax/__archived_maintenance`). Los predeterminados como `node_modules`, `bin`, `vendor` siempre se omiten.",
+    "agent_config": "Configuración del agente",
+    "agent_config_help": "Elige un único proveedor o crea un Consejo de 2 a 5 miembros ordenados. El Consejo funciona en round-robin: cada miembro ve las salidas anteriores; el último sintetiza el resultado final."
   },
   "wizard": {
     "header": "Crea tu primer proyecto",
@@ -111,7 +136,13 @@
     "col_status": "Estado",
     "col_assignee": "Asignado",
     "col_cost": "Coste",
-    "col_actions": "Acciones"
+    "col_actions": "Acciones",
+    "view_board": "Vista de tablero",
+    "view_list": "Vista de lista",
+    "load_failed_title": "No se pudieron cargar las tareas",
+    "empty_title": "Aún no hay tareas",
+    "empty_body": "Crea tu primera tarea para poner a trabajar a un agente.",
+    "transition_failed": "No se pudo cambiar el estado de la tarea"
   },
   "task": {
     "title": "Título",
@@ -151,7 +182,25 @@
     "run_agent": "Ejecutar Agente",
     "run_agent_role": "Rol del agente",
     "run_agent_busy": "Ejecución ya encolada/activa",
-    "resume_copied": "Copiado — pega en terminal"
+    "resume_copied": "Copiado — pega en terminal",
+    "run_agent_provider": "Proveedor",
+    "run_agent_provider_default": "Rol por defecto",
+    "run_agent_provider_council": "Consejo",
+    "export_json": "Exportar auditoría JSON",
+    "export_markdown": "Exportar auditoría Markdown",
+    "phase_section": "Fase y deuda",
+    "run_error": "Error",
+    "run_agent_failed": "No se pudo ejecutar el agente",
+    "cancel_run_failed": "No se pudo cancelar",
+    "add_comment_failed": "No se pudo añadir el comentario",
+    "export_failed": "Falló la exportación de auditoría",
+    "load_failed_title": "No se pudo cargar la tarea",
+    "load_failed_body": "Algo salió mal.",
+    "confirm_cancel_run": "¿Cancelar la ejecución activa del agente?",
+    "cost_calculating": "calculando…",
+    "cost_na": "coste n/d",
+    "cost_estimate_hint": "Incluido en tu suscripción: es una estimación equivalente a la API, no un cargo.",
+    "no_runs": "Aún no hay ejecuciones de agentes"
   },
   "files": {
     "label": "Rutas de archivo",
@@ -194,9 +243,14 @@
     "body": "Cuerpo",
     "body_hint": "Cuerpo markdown de SKILL.md. Las ediciones se escriben en disco.",
     "allowed_tools": "Herramientas permitidas",
+    "allowed_tools_hint": "Nombres de herramientas separados por comas, según el frontmatter de SKILL.md.",
     "file_path": "Archivo",
     "builtin": "Integrada",
-    "builtin_readonly": "Habilidad integrada — solo lectura."
+    "builtin_readonly": "Habilidad integrada — solo lectura.",
+    "expand_all": "Expandir todo",
+    "collapse_all": "Colapsar todo",
+    "not_found_body": "No hay habilidad con id {{id}}.",
+    "view_diagram": "Diagrama"
   },
   "personas": {
     "title": "Personas",
@@ -210,7 +264,8 @@
     "emblem": "Emblema",
     "description": "Descripción",
     "skills": "Habilidades",
-    "skills_hint": "Haz clic para añadir/eliminar. Aparece en la tarjeta de personas e impacta en el envío."
+    "skills_hint": "Haz clic para añadir/eliminar. Aparece en la tarjeta de personas e impacta en el envío.",
+    "not_found_body": "No hay persona con id {{id}}."
   },
   "roles": {
     "title": "Roles",
@@ -228,15 +283,15 @@
   },
   "sessions": {
     "title": "Sesiones",
-    "subtitle": "Todas las sesiones de codificación con IA registradas.",
-    "search": "Buscar proyecto o id de sesión…",
-    "empty_title": "No hay sesiones registradas",
-    "empty_body": "context-mode aún no ha escrito ninguna base de datos de sesiones. Dir esperado:",
+    "subtitle": "Todas las sesiones de programación con IA registradas, las más recientes primero.",
+    "search": "Buscar instrucción, proyecto, tarea o id…",
+    "empty_title": "Aún no hay sesiones registradas",
+    "empty_body": "Las sesiones aparecen aquí cuando los hooks de sesión de AgentBoard registran una sesión de Claude Code, Codex o Copilot. Se buscó en:",
     "unavail_title": "Adaptador SQLite no disponible",
     "error_title": "No se pueden leer las sesiones",
     "filter_source": "Filtrar por origen",
     "source_all": "Todas",
-    "source_agentboard": "Agentboard",
+    "source_agentboard": "AgentBoard",
     "source_cli": "CLI / Otro",
     "total_sessions": "Sesiones",
     "total_events": "Eventos",
@@ -277,7 +332,6 @@
       "Compact": "Compactación ocurrida. Los mensajes antiguos se resumieron; la conversación sigue sobre el resumen.",
       "hook_started": "Un proceso hook comenzó a ejecutarse. context-mode registra esto para medir la latencia del hook.",
       "hook_response": "El hook terminó y devolvió su salida (contexto inyectado por stdin o stdout) a la sesión.",
-
       "file_read": "Claude leyó un archivo (herramienta Read). La ruta se añade al conjunto de archivos leídos de la sesión.",
       "file_write": "Claude creó un archivo nuevo (herramienta Write).",
       "file_edit": "Claude modificó un archivo existente (herramienta Edit o NotebookEdit).",
@@ -308,7 +362,18 @@
       "role": "El usuario asignó una persona (`act as senior engineer`, `you are…`). Rol estable durante la sesión.",
       "intent": "Intención de sesión clasificada desde el prompt: investigate | implement | discuss | review.",
       "data": "Prompt de más de ~1 KB capturado como datos crudos (logs pegados, volcados)."
-    }
+    },
+    "search_label": "Buscar sesiones",
+    "dur_m": "{{m}} min",
+    "dur_hm": "{{h}} h {{m}} min",
+    "dur_s": "{{s}} s",
+    "load_more": "Cargar más",
+    "end_of_list": "Se muestran las {{n}} sesiones",
+    "indexing": "Indexando las bases de datos de sesiones en segundo plano…",
+    "task": "Tarea",
+    "no_events": "Sin eventos",
+    "consumed": "consumida",
+    "n_events": "{{n}} eventos"
   },
   "theme": {
     "title": "Tema",
@@ -321,15 +386,9 @@
     "click_apply": "Haz clic para aplicar",
     "dark_only": "Sólo modo oscuro",
     "dark_only_hint": "Esta paleta sólo se aplica cuando está seleccionado el modo oscuro.",
-    "palette_default_tagline": "Neutros cálidos, ámbar + arcilla — la paleta base.",
-    "palette_edgeetech_tagline": "Degradado magenta → índigo → zafiro de la marca.",
-    "palette_primer_tagline": "Tokens GitHub Primer — accesibles, en modo claro y oscuro.",
-    "palette_mono_tagline": "Tonos de gris, carbón y negro — minimalista, editorial.",
-    "palette_neon_tagline": "Lienzo negro con verde neón, azul eléctrico y rosa intenso.",
-    "palette_warm_tagline": "Negro suave con coral, oro y naranja quemado — cálido, acogedor.",
-    "palette_pastel_tagline": "Gris pizarra con cian claro, rosa suave y lavanda — tranquilo y juguetón.",
-    "palette_jewel_tagline": "Negro profundo con turquesa, rubí y verde bosque — premium.",
-    "palette_vibrant_tagline": "Fondo oscuro con naranja vivo, morado intenso y amarillo brillante."
+    "palette_default_tagline": "Neutros cálidos, ámbar + arcilla — la paleta original.",
+    "palette_edgeetech_tagline": "Azul cielo y rosa señal, directo de la marca.",
+    "palette_mono_tagline": "Tonos de gris, carbón y negro — minimalista, editorial."
   },
   "project": {
     "title": "Proyecto",
@@ -337,9 +396,52 @@
     "none_title": "Sin proyecto activo",
     "none_body": "Crea un proyecto desde el Tablero primero.",
     "not_found_title": "Proyecto no encontrado",
-    "not_found_body": "El proyecto <c>{{code}}</c> no existe. Elige uno a continuación o crea uno nuevo."
+    "not_found_body": "El proyecto <c>{{code}}</c> no existe. Elige uno a continuación o crea uno nuevo.",
+    "delete_title": "Eliminar Proyecto",
+    "delete_warning": "Elimina este proyecto y sus tareas y sesiones de AgentBoard. El directorio del repositorio y su contenido no se modificarán.",
+    "delete_action": "Eliminar Proyecto",
+    "delete_confirm": "Escribe “{{name}}” para confirmar la eliminación.",
+    "delete_confirm_action": "Eliminar proyecto permanentemente",
+    "deleting": "Eliminando…",
+    "tracker_no_status": "Aún no hay estado del tracker.",
+    "doctor_checking": "Verificando configuración…",
+    "doctor_title": "Doctor",
+    "tracker_kind": "Tracker",
+    "tracker_slug": "Slug del proyecto",
+    "tracker_env": "Variable de entorno de la clave API",
+    "tracker_endpoint": "Endpoint",
+    "tracker_interval": "Intervalo de sondeo (ms)",
+    "tracker_assignee": "Asignado",
+    "tracker_active_states": "Estados activos",
+    "tracker_terminal_states": "Estados finales",
+    "tracker_save": "Guardar tracker",
+    "tracker_enable": "Activar",
+    "tracker_disable": "Desactivar",
+    "tracker_sync": "Sincronizar ahora",
+    "tracker_enabled": "Activado",
+    "tracker_env_present": "Env presente",
+    "tracker_issues": "Incidencias",
+    "tracker_last_poll": "Último sondeo",
+    "tracker_last_success": "Último éxito",
+    "tracker_next_poll": "Próximo sondeo",
+    "tracker_rate_limited": "Límite de tasa",
+    "tracker_last_error": "Último error"
   },
   "catalog": {
     "local_note": "Almacenado localmente en este navegador hasta que el servidor añada una API de catálogo."
+  },
+  "auth": {
+    "title": "Inicio de sesión y facturación",
+    "mode_subscription": "Mi suscripción",
+    "mode_api_key": "Clave de API",
+    "mode_auto": "Automático",
+    "mode_for": "Inicio de sesión para {{provider}}",
+    "help": "Elige cómo inicia sesión cada agente. \"Mi suscripción\" usa tu cuenta de Claude Pro/Max, ChatGPT o Copilot e ignora las claves de API del entorno. \"Clave de API\" requiere la variable de la clave. \"Automático\" deja decidir a la CLI: una clave de API en el entorno tiene prioridad sobre tu sesión.",
+    "hint_subscription": "Inicia sesión una vez con: {{cmd}}",
+    "hint_api_key": "Requiere {{vars}} en el entorno del servidor",
+    "hint_auto": "Usa {{vars}} si existe; si no, tu sesión",
+    "source_title": "Cómo inició sesión esta ejecución",
+    "source_subscription": "suscripción",
+    "source_api_key": "clave de API"
   }
 }

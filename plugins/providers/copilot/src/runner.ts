@@ -93,8 +93,20 @@ export interface CopilotSessionConfig {
   mcpServers?: Record<string, CopilotMcpServerConfig>;
 }
 
+/**
+ * Subset of @github/copilot-sdk's CopilotClientOptions this runner cares
+ * about. `env` scopes the spawned CLI server's environment (never inherits
+ * process.env implicitly); `gitHubToken`/`useLoggedInUser` select between
+ * explicit API-key auth and the logged-in subscription user.
+ */
+export interface CopilotClientOptions {
+  env?: Record<string, string | undefined>;
+  gitHubToken?: string;
+  useLoggedInUser?: boolean;
+}
+
 export interface CopilotSdkModule {
-  CopilotClient: new () => CopilotClient;
+  CopilotClient: new (options?: CopilotClientOptions) => CopilotClient;
   approveAll: unknown;
 }
 
@@ -121,6 +133,15 @@ export interface CopilotRunnerOptions {
   toolGate?: ProviderToolGate;
   /** Native Copilot tool exclusions applied at session creation. */
   excludedTools?: readonly string[];
+  /**
+   * Whitelisted child-process environment for the spawned CLI server (see
+   * child-env.ts on the host side). Never fall back to implicit inheritance —
+   * that would let a stray COPILOT_GITHUB_TOKEN/GH_TOKEN/GITHUB_TOKEN (e.g. a
+   * tracker PAT without Copilot access) silently override the logged-in user.
+   */
+  env?: Record<string, string>;
+  /** Per-provider auth mode resolved from project.auth_config_json (default 'auto'). */
+  authMode?: 'subscription' | 'api_key' | 'auto';
 }
 
 interface PartialState {
@@ -247,8 +268,10 @@ export class CopilotRunner {
     };
 
     const copilotMcpServers = normalizeMcpServers(mcpServers);
-    const client = new CopilotClient();
+    const clientOptions = buildCopilotClientOptions(this.opts.env, this.opts.authMode);
+    const client = new CopilotClient(clientOptions);
     let session: CopilotSession | undefined;
+    let rateLimitHit: CopilotRateLimitSignal | null = null;
 
     const onAbort = (): void => {
       session?.abort().catch(() => {
@@ -341,6 +364,20 @@ export class CopilotRunner {
               { msg: event.data.message, errorType: event.data.errorType },
               "Copilot session.error",
             );
+            const signal = classifyCopilotRateLimit(event);
+            if (signal !== null && rateLimitHit === null) {
+              rateLimitHit = signal;
+              this.opts.rateLimiter?.recordLimit(
+                "copilot-api",
+                signal.retryAfterMs ?? undefined,
+              );
+              onEvent?.("run.rate-limited", {
+                runId,
+                retryAfterMs: signal.retryAfterMs,
+                resetsAt: signal.resetsAt,
+              });
+              onAbort();
+            }
           }
         },
       };
@@ -368,10 +405,24 @@ export class CopilotRunner {
       this.sessionId = session.sessionId;
       result.sessionId = session.sessionId;
 
-      await session.sendAndWait({ prompt }, turnTimeoutMs);
+      try {
+        await session.sendAndWait({ prompt }, turnTimeoutMs);
+      } catch (err) {
+        // A rate-limit abort rejects sendAndWait — report it as errorKind
+        // 'rate_limit' below rather than an opaque abort failure.
+        if (rateLimitHit === null) throw err;
+      }
       await Promise.allSettled(gateChecks);
       if (denial !== null) throw denial;
-      result.status = "completed";
+      if (rateLimitHit !== null) {
+        const signal: CopilotRateLimitSignal = rateLimitHit;
+        result.status = "failed";
+        result.errorKind = "rate_limit";
+        result.resetsAt = signal.resetsAt;
+        result.error = "copilot usage limit reached";
+      } else {
+        result.status = "completed";
+      }
     } finally {
       abortController.signal.removeEventListener("abort", onAbort);
       turnSignal.removeEventListener("abort", onAbort);
@@ -396,6 +447,61 @@ export class CopilotRunner {
     result.usage = usage;
     return result;
   }
+}
+
+/**
+ * Build the CopilotClient constructor options for the resolved auth mode.
+ * - 'subscription': caller already stripped API-key env vars; force the
+ *   logged-in user so a stray token in a shared shell can't override it.
+ * - 'api_key': require an explicit token (fail fast — this mirrors the
+ *   executor's own pre-dispatch check, but a runner-level guard keeps this
+ *   function safe to call directly, e.g. from tests).
+ * - 'auto' / unset: pass the whitelisted env through unchanged and let the
+ *   CLI resolve auth however it normally would.
+ */
+export function buildCopilotClientOptions(
+  env: Record<string, string> | undefined,
+  authMode: CopilotRunnerOptions["authMode"],
+): CopilotClientOptions {
+  const options: CopilotClientOptions = {
+    ...(env !== undefined ? { env } : {}),
+  };
+  if (authMode === "subscription") {
+    options.useLoggedInUser = true;
+    return options;
+  }
+  if (authMode === "api_key") {
+    const token = env?.COPILOT_GITHUB_TOKEN ?? env?.GH_TOKEN ?? env?.GITHUB_TOKEN;
+    if (token === undefined || token === "") {
+      throw new Error(
+        "copilot auth_mode=api_key requires COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN to be set",
+      );
+    }
+    options.gitHubToken = token;
+    options.useLoggedInUser = false;
+  }
+  return options;
+}
+
+export interface CopilotRateLimitSignal {
+  resetsAt: string | null;
+  retryAfterMs: number | null;
+}
+
+/**
+ * Classify a Copilot `session.error` event as a usage-limit failure. Returns
+ * null when the error isn't rate-limit shaped.
+ */
+export function classifyCopilotRateLimit(
+  event: CopilotErrorEvent,
+): CopilotRateLimitSignal | null {
+  const { message, errorType } = event.data;
+  const text = `${message ?? ""} ${errorType ?? ""}`;
+  if (!/usage limit|rate limit|rate.?limited|429/i.test(text)) return null;
+  const match = /try again(?: at| after)?\s+([^.,;]+)/i.exec(text);
+  const parsed = match?.[1] !== undefined ? Date.parse(match[1].trim()) : NaN;
+  const resetsAt = Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+  return { resetsAt, retryAfterMs: resetsAt === null ? 60_000 : null };
 }
 
 /**

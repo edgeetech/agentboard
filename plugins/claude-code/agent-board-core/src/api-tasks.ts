@@ -4,6 +4,7 @@ import { parseAgentConfig, resolveRoleConfig } from './agent-config.ts';
 import type { DbHandle } from './db.ts';
 import { cancelRun } from './executor.ts';
 import { json, readJson, matchRoute } from './http-util.ts';
+import { isEstimatedCost } from './pricing.ts';
 import type { ProjectDb } from './project-registry.ts';
 import { getActiveDb, getDb } from './project-registry.ts';
 import {
@@ -62,7 +63,10 @@ function handleGetTask(
     project: getProject(db),
     comments: listComments(db, task.id),
     file_paths: listFilePaths(db, task.id),
-    agent_runs: listRunsForTask(db, task.id),
+    agent_runs: listRunsForTask(db, task.id).map((run) => ({
+      ...run,
+      cost_is_estimate: isEstimatedCost(run.auth_source),
+    })),
   });
 }
 
@@ -77,14 +81,11 @@ async function handleTransition(
   const body = await readJson(req);
   const { to_status, to_assignee, reject_comment } = isRecord(body) ? body : {};
   const by_role = 'human' as const;
-  if (to_assignee === 'worker' && task.status !== 'todo') {
-    if (typeof reject_comment !== 'string' || reject_comment.trim().length < MIN_REJECT_COMMENT) {
-      json(res, 400, { error: `reject_comment must be ≥ ${MIN_REJECT_COMMENT} chars` });
-      return;
-    }
-    addComment(db, task.id, 'human', reject_comment.trim());
-  } else if (typeof reject_comment === 'string' && reject_comment.trim()) {
-    addComment(db, task.id, 'human', reject_comment.trim());
+  const trimmedRejectComment = typeof reject_comment === 'string' ? reject_comment.trim() : '';
+  const isReject = to_assignee === 'worker' && task.status !== 'todo';
+  if (isReject && trimmedRejectComment.length < MIN_REJECT_COMMENT) {
+    json(res, 400, { error: `reject_comment must be ≥ ${MIN_REJECT_COMMENT} chars` });
+    return;
   }
   const project = active.db
     .prepare(`SELECT workflow_type, version FROM project WHERE id=?`)
@@ -100,6 +101,14 @@ async function handleTransition(
   if (!out.ok) {
     json(res, out.status, { error: out.reason });
     return;
+  }
+  // Only persist the reject/informational comment once the transition itself
+  // has actually succeeded — previously this was written BEFORE calling
+  // transitionTask and kept even when the transition failed (CAS conflict,
+  // disallowed transition, …), leaving an orphaned comment with no matching
+  // status change.
+  if (isReject || trimmedRejectComment) {
+    addComment(db, task.id, 'human', trimmedRejectComment);
   }
   json(res, 200, out);
   return true;
@@ -131,16 +140,12 @@ async function handleRunAgent(
     return;
   }
   const project = getProject(db);
-  const executor_override =
-    typeof rawBody.executor_override === 'string' ? rawBody.executor_override : null;
-
-  if (project !== undefined && executor_override !== null) {
-    db.prepare(`UPDATE project SET executor_override=?, updated_at=? WHERE id=?`).run(
-      executor_override,
-      isoNow(),
-      (project as unknown as { id: string }).id,
-    );
-  }
+  // NOTE: a legacy `executor_override` request field used to write straight
+  // to `project.executor_override` — a column that has never existed in
+  // db/schema.sql, so any caller sending it got a 500 ("no such column").
+  // Provider selection is `provider` (one-shot, below) / `use_council` /
+  // task.agent_config_json / project.agent_provider — this dead field is
+  // removed rather than backed by a new column.
 
   // One-shot per-run provider override (forces single-provider for this run).
   let providerOverride: AgentProvider | null = null;
@@ -178,34 +183,47 @@ async function handleRunAgent(
     }
   }
 
-  // Manual dispatch reflects assignee/status immediately so the board
-  // doesn't lag behind the run. Skip state-machine to avoid double auto-dispatch.
-  const desiredStatus =
-    role === 'reviewer' ? 'agent_review' : role === 'worker' ? 'agent_working' : task.status;
-  const statusChanged = desiredStatus !== task.status;
-  const assigneeChanged = task.assignee_role !== role;
-  if (statusChanged || assigneeChanged) {
-    db.prepare(
-      `UPDATE task SET status=?, assignee_role=?, version=version+1, updated_at=? WHERE id=?`,
-    ).run(desiredStatus, role, isoNow(), task.id);
-    if (statusChanged) {
-      db.prepare(
-        `INSERT INTO task_history(id, task_id, from_status, to_status, by_role, at) VALUES (?, ?, ?, ?, 'human', ?)`,
-      ).run(`th_${runIdSafe()}`, task.id, task.status, desiredStatus, isoNow());
-    }
+  // Guard against double-enqueue: a task with any queued/running run already
+  // in flight must not get a second one stacked on top of it.
+  const hasInFlightRun = listRunsForTask(db, task.id).some(
+    (r) => r.status === 'queued' || r.status === 'running',
+  );
+  if (hasInFlightRun) {
+    json(res, 409, { error: 'a run is already queued or running for this task' });
+    return;
   }
 
-  const runId = enqueueRun(db, task.id, role as RunRole, {
-    session_provider_override: providerOverride,
-  });
+  // Manual dispatch reflects assignee/status immediately so the board
+  // doesn't lag behind the run. Skip state-machine to avoid double auto-dispatch.
+  // Task update + history + enqueue + comment are one transaction so a crash
+  // mid-sequence can't leave the task flipped to agent_working/agent_review
+  // with no agent_run behind it (or vice versa).
   const tag = providerOverride
     ? ` [provider: ${providerOverride}]`
     : useCouncil
       ? ' [council]'
-      : executor_override !== null
-        ? ` [executor: ${executor_override}]`
-        : '';
-  addComment(db, task.id, 'human', `RUN_AGENT: manually dispatched ${role} (run ${runId})${tag}`);
+      : '';
+  const runId = db.transaction(() => {
+    const desiredStatus =
+      role === 'reviewer' ? 'agent_review' : role === 'worker' ? 'agent_working' : task.status;
+    const statusChanged = desiredStatus !== task.status;
+    const assigneeChanged = task.assignee_role !== role;
+    if (statusChanged || assigneeChanged) {
+      db.prepare(
+        `UPDATE task SET status=?, assignee_role=?, version=version+1, updated_at=? WHERE id=?`,
+      ).run(desiredStatus, role, isoNow(), task.id);
+      if (statusChanged) {
+        db.prepare(
+          `INSERT INTO task_history(id, task_id, from_status, to_status, by_role, at) VALUES (?, ?, ?, ?, 'human', ?)`,
+        ).run(`th_${runIdSafe()}`, task.id, task.status, desiredStatus, isoNow());
+      }
+    }
+    const id = enqueueRun(db, task.id, role as RunRole, {
+      session_provider_override: providerOverride,
+    });
+    addComment(db, task.id, 'human', `RUN_AGENT: manually dispatched ${role} (run ${id})${tag}`);
+    return id;
+  })();
   json(res, 201, { run_id: runId, role });
   return true;
 }

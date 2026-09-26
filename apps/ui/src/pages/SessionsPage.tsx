@@ -1,118 +1,56 @@
-import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
+import { memo, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import { api } from '../api';
 import { SearchIcon } from '../components/SearchIcon';
+import { Skeleton } from '../components/Skeleton';
+import { CopyButton } from '../features/sessions/CopyButton';
+import { useDebouncedValue, useSentinel } from '../features/sessions/hooks';
+import { resumeCommand } from '../features/sessions/resumeCommand';
+import {
+  listSessions,
+  type SessionListItem,
+  type SessionPage,
+  type SessionSourceFilter,
+} from '../features/sessions/sessionsApi';
+import { durationMinutes, timeAgo } from '../features/sessions/time';
+import '../features/sessions/sessions.css';
 
-interface Session {
-  id: string;
-  projectDir: string | null;
-  startedAt: string;
-  lastEventAt: string;
-  eventCount: number;
-  compactCount: number;
-  firstPrompt?: string | null;
-  intent?: string | null;
-  role?: string | null;
-  topFiles?: { path: string; count: number }[];
-  planFiles?: string[];
-  source?: 'agentboard' | 'cli';
-  taskCode?: string | null;
-  projectCode?: string | null;
-  repoPath?: string | null;
-  provider?: 'claude' | 'github_copilot' | 'codex' | null;
-  dbHash: string;      // full hash (filename without .db)
-  dbHashShort: string; // first 8 chars for display
-}
-
-type SourceFilter = 'all' | 'agentboard' | 'cli';
-
-const INTENT_ICON: Record<string, string> = {
-  investigate: '🔎',
-  implement: '⚙',
-  discuss: '💬',
-  review: '✓',
-};
-
-
-function timeAgo(iso: string) {
-  if (!iso) return '—';
-  const ms = Date.now() - Date.parse(iso);
-  if (isNaN(ms) || ms < 0) return iso;
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 30) return `${d}d ago`;
-  const mo = Math.floor(d / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  return `${Math.floor(mo / 12)}y ago`;
-}
-
-function durationMin(a: string, b: string) {
-  const ma = Date.parse(a), mb = Date.parse(b);
-  if (isNaN(ma) || isNaN(mb)) return null;
-  return Math.max(0, Math.round((mb - ma) / 60_000));
-}
+const SOURCES: SessionSourceFilter[] = ['all', 'agentboard', 'cli'];
+const INDEXING_POLL_MS = 1500;
 
 export function SessionsPage() {
   const { t } = useTranslation();
-  const [q, setQ] = useState('');
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
-  const data = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
+  const [search, setSearch] = useState('');
+  const [source, setSource] = useState<SessionSourceFilter>('all');
+  const q = useDebouncedValue(search.trim(), 250);
 
-  const flat: Session[] = useMemo(() => {
-    const out: Session[] = [];
-    for (const db of data.data?.dbs ?? []) {
-      for (const s of db.sessions) {
-        out.push({ ...s, dbHash: db.hash, dbHashShort: db.hash.slice(0, 8) });
-      }
-    }
-    out.sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''));
-    return out;
-  }, [data.data]);
+  const query = useInfiniteQuery({
+    queryKey: ['sessions', q, source],
+    queryFn: ({ pageParam, signal }) => listSessions({ q, source, offset: pageParam }, signal),
+    initialPageParam: 0,
+    getNextPageParam: (last: SessionPage) => last.nextOffset ?? undefined,
+    placeholderData: keepPreviousData,
+    // Only poll while the server is still indexing; afterwards the list is
+    // refreshed on focus/navigation, not on a timer.
+    refetchInterval: (qry) => (qry.state.data?.pages[0]?.indexing ? INDEXING_POLL_MS : false),
+    staleTime: 10_000,
+  });
 
-  const sourceCounts = useMemo(() => {
-    let agentboard = 0, cli = 0;
-    for (const s of flat) {
-      if (s.source === 'agentboard') agentboard++;
-      else cli++;
-    }
-    return { all: flat.length, agentboard, cli };
-  }, [flat]);
+  const pages = query.data?.pages;
+  const head = pages?.[0];
+  const items = useMemo(() => pages?.flatMap((p) => p.items) ?? [], [pages]);
+  const sentinel = useSentinel<HTMLDivElement>(() => {
+    if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
+  }, Boolean(query.hasNextPage));
 
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    return flat.filter(x => {
-      if (sourceFilter === 'agentboard' && x.source !== 'agentboard') return false;
-      if (sourceFilter === 'cli' && x.source === 'agentboard') return false;
-      if (!s) return true;
-      return (
-        x.id.toLowerCase().includes(s) ||
-        (x.projectDir ?? '').toLowerCase().includes(s) ||
-        (x.firstPrompt ?? '').toLowerCase().includes(s) ||
-        (x.intent ?? '').toLowerCase().includes(s) ||
-        (x.role ?? '').toLowerCase().includes(s) ||
-        (x.taskCode ?? '').toLowerCase().includes(s) ||
-        (x.topFiles ?? []).some(f => f.path.toLowerCase().includes(s)) ||
-        (x.planFiles ?? []).some(p => p.toLowerCase().includes(s)) ||
-        x.dbHash.includes(s)
-      );
-    });
-  }, [q, flat, sourceFilter]);
-
-  const totals = useMemo(() => {
-    const sessions = flat.length;
-    const events = flat.reduce((n, s) => n + (s.eventCount || 0), 0);
-    const durations = flat.map(s => durationMin(s.startedAt, s.lastEventAt)).filter((x): x is number => x != null);
-    const avg = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
-    return { sessions, events, avg };
-  }, [flat]);
+  const sourceLabel = (f: SessionSourceFilter) =>
+    f === 'all'
+      ? t('sessions.source_all', 'All')
+      : f === 'agentboard'
+        ? t('sessions.source_agentboard', 'AgentBoard')
+        : t('sessions.source_cli', 'CLI / Other');
 
   return (
     <>
@@ -120,159 +58,139 @@ export function SessionsPage() {
         <div className="title">
           <h1>{t('sessions.title', 'Sessions')}</h1>
           <span className="subtitle">
-            {t('sessions.subtitle', 'All recorded AI coding sessions.')}
+            {t('sessions.subtitle', 'Every recorded AI coding session, newest first.')}
           </span>
         </div>
         <div className="actions">
-          <div className="source-filter" role="tablist" aria-label={t('sessions.filter_source', 'Filter by source')}>
-            {(['all', 'agentboard', 'cli'] as SourceFilter[]).map(f => (
+          <div
+            className="segmented"
+            role="radiogroup"
+            aria-label={t('sessions.filter_source', 'Filter by source')}
+          >
+            {SOURCES.map((f) => (
               <button
                 key={f}
                 type="button"
-                role="tab"
-                aria-selected={sourceFilter === f}
-                className={`pill${sourceFilter === f ? ' active' : ''}`}
-                onClick={() => { setSourceFilter(f); }}
+                role="radio"
+                aria-checked={source === f}
+                className={source === f ? 'active' : undefined}
+                onClick={() => {
+                  setSource(f);
+                }}
               >
-                {f === 'all'
-                  ? t('sessions.source_all', 'All')
-                  : f === 'agentboard'
-                    ? t('sessions.source_agentboard', 'Agentboard')
-                    : t('sessions.source_cli', 'CLI / Other')}
-                <span className="count mono">{sourceCounts[f]}</span>
+                {sourceLabel(f)}
+                <span className="count tabular">{head ? head.counts[f] : '·'}</span>
               </button>
             ))}
           </div>
           <label className="search-bar wide">
             <SearchIcon />
             <input
-              value={q}
-              onChange={e => { setQ(e.target.value); }}
-              placeholder={t('sessions.search', 'Search project or session id…')}
-              aria-label="Search sessions"
+              type="search"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+              }}
+              placeholder={t('sessions.search', 'Search prompt, project, task or id…')}
+              aria-label={t('sessions.search_label', 'Search sessions')}
               autoComplete="off"
               spellCheck={false}
             />
-            {q && (
-              <button
-                type="button"
-                className="search-clear"
-                onClick={() => { setQ(''); }}
-                aria-label={t('common.clear', 'Clear')}
-                title={t('common.clear', 'Clear')}
-              >×</button>
+            {head && (
+              <span className="search-count tabular" aria-live="polite">
+                {head.total.toLocaleString()}
+              </span>
             )}
-            <span className="search-count mono">
-              {filtered.length}/{flat.length}
-            </span>
           </label>
         </div>
       </div>
 
-      {data.isLoading ? (
-        <div className="center"><div className="spinner" /></div>
-      ) : data.isError ? (
-        <div className="empty-state">
+      {head?.indexing && <IndexingBanner progress={head.progress} />}
+
+      {query.isError ? (
+        <div className="empty-state" role="alert">
           <h3>{t('sessions.error_title', 'Could not read sessions')}</h3>
-          <p className="muted">{String((data.error)?.message || '')}</p>
+          <p className="muted">{query.error.message}</p>
+          <button
+            type="button"
+            className="primary"
+            onClick={() => {
+              void query.refetch();
+            }}
+          >
+            {t('common.retry', 'Retry')}
+          </button>
         </div>
-      ) : data.data?.error ? (
+      ) : !head ? (
+        <SessionsSkeleton />
+      ) : head.stats.sessions === 0 && !head.indexing ? (
         <div className="empty-state">
-          <h3>{t('sessions.unavail_title', 'SQLite adapter unavailable')}</h3>
-          <p className="muted">Server reported: {data.data.error}</p>
-        </div>
-      ) : flat.length === 0 ? (
-        <div className="empty-state">
-          <h3>{t('sessions.empty_title', 'No sessions recorded')}</h3>
-          <p>
-            {t('sessions.empty_body', 'context-mode has not written any session databases yet. Expected dir:')}{' '}
-            <code>{data.data?.dir}</code>
+          <h3>{t('sessions.empty_title', 'No sessions recorded yet')}</h3>
+          <p className="muted">
+            {t(
+              'sessions.empty_body',
+              'Sessions appear here once the AgentBoard session hooks record a Claude Code, Codex or Copilot session. Looked in:',
+            )}
           </p>
+          <ul className="session-dirs mono">
+            {head.dirs.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
         </div>
       ) : (
         <>
           <div className="session-stats">
-            <Stat label={t('sessions.total_sessions', 'Sessions')} value={totals.sessions} />
-            <Stat label={t('sessions.total_events', 'Events')} value={totals.events.toLocaleString()} />
-            <Stat label={t('sessions.avg_duration', 'Avg duration')} value={`${totals.avg}m`} />
-            <Stat label={t('sessions.dbs', 'Databases')} value={data.data?.dbs.length ?? 0} />
+            <Stat label={t('sessions.total_sessions', 'Sessions')} value={head.stats.sessions} />
+            <Stat label={t('sessions.total_events', 'Events')} value={head.stats.events} />
+            <Stat
+              label={t('sessions.avg_duration', 'Avg duration')}
+              value={t('sessions.dur_m', '{{m}}m', { m: head.stats.avgDurationMin })}
+            />
+            <Stat label={t('sessions.dbs', 'Databases')} value={head.stats.dbs} />
           </div>
 
-          {q.trim() && filtered.length === 0 && (
+          {items.length === 0 ? (
             <div className="empty-state">
               <h3>{t('sessions.no_matches', 'No matches')}</h3>
               <p className="muted">
-                {t('sessions.no_matches_hint', 'No session matches')} <code>{q.trim()}</code>
+                {t('sessions.no_matches_hint', 'No session matches')} <code>{q}</code>
               </p>
             </div>
+          ) : (
+            <ol
+              className={`session-list${query.isPlaceholderData ? ' is-stale' : ''}`}
+              aria-busy={query.isFetching}
+            >
+              {items.map((s) => (
+                <SessionRow key={`${s.dbHash}:${s.id}`} s={s} />
+              ))}
+            </ol>
           )}
 
-          <div className="session-list">
-            {filtered.map(s => {
-              const dur = durationMin(s.startedAt, s.lastEventAt);
-              return (
-                <Link
-                  key={`${s.dbHash}:${s.id}`}
-                  to={`/sessions/${encodeURIComponent(s.dbHash)}/${encodeURIComponent(s.id)}`}
-                  className="session-row"
-                >
-                  <div className="session-main">
-                    <div className="session-title oneline" title={s.firstPrompt ?? undefined}>
-                      {s.source === 'agentboard' && (
-                        <span
-                          className="session-tag source agentboard"
-                          title={s.taskCode ? `${t('sessions.source_agentboard', 'Agentboard')} · ${s.taskCode}${s.role ? ' · ' + s.role : ''}` : t('sessions.source_agentboard', 'Agentboard')}
-                        >
-                          {s.taskCode ?? t('sessions.source_agentboard', 'Agentboard')}
-                          {s.role ? ` · ${s.role}` : ''}
-                        </span>
-                      )}
-                      {s.firstPrompt
-                        ? <span className="quoted">“{s.firstPrompt}”</span>
-                        : <span className="muted">{t('sessions.untitled', 'No prompt recorded')}</span>}
-                    </div>
-                    <div className="session-sub mono" title={s.projectDir ?? undefined}>
-                      {s.projectDir || '—'}
-                    </div>
-                    <div className="session-meta mono">
-                      {s.id.slice(0, 12)} · db:{s.dbHashShort}
-                      <ResumeInline
-                        sessionId={s.id}
-                        repoPath={s.repoPath ?? s.projectDir}
-                        provider={s.provider}
-                      />
-                    </div>
-                  </div>
-                  <div className="session-stat intent-col">
-                    <span className="label">{t('sessions.intent', 'Intent')}</span>
-                    <span className="value">
-                      {s.intent ? (
-                        <span className={`session-tag intent intent-${s.intent}`}>
-                          <span aria-hidden>{INTENT_ICON[s.intent] || '•'}</span>
-                          {s.intent}
-                        </span>
-                      ) : <span className="muted">—</span>}
-                    </span>
-                  </div>
-                  <div className="session-stat">
-                    <span className="label">{t('sessions.started', 'Started')}</span>
-                    <span className="value">{timeAgo(s.startedAt)}</span>
-                  </div>
-                  <div className="session-stat">
-                    <span className="label">{t('sessions.duration', 'Duration')}</span>
-                    <span className="value">{dur != null ? `${dur}m` : '—'}</span>
-                  </div>
-                  <div className="session-stat">
-                    <span className="label">{t('sessions.events', 'Events')}</span>
-                    <span className="value">{s.eventCount ?? 0}</span>
-                  </div>
-                  <div className="session-stat">
-                    <span className="label">{t('sessions.last', 'Last')}</span>
-                    <span className="value">{timeAgo(s.lastEventAt)}</span>
-                  </div>
-                </Link>
-              );
-            })}
+          <div ref={sentinel} className="session-list-foot">
+            {query.isFetchingNextPage ? (
+              <RowSkeletons count={3} />
+            ) : query.hasNextPage ? (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  void query.fetchNextPage();
+                }}
+              >
+                {t('sessions.load_more', 'Load more')} ·{' '}
+                <span className="tabular">
+                  {items.length.toLocaleString()} / {head.total.toLocaleString()}
+                </span>
+              </button>
+            ) : items.length > 0 ? (
+              <span className="muted">
+                {t('sessions.end_of_list', 'All {{n}} sessions shown', {
+                  n: items.length.toLocaleString(),
+                })}
+              </span>
+            ) : null}
           </div>
         </>
       )}
@@ -280,45 +198,130 @@ export function SessionsPage() {
   );
 }
 
+function IndexingBanner({ progress }: { progress: SessionPage['progress'] }) {
+  const { t } = useTranslation();
+  const pct = progress.total === 0 ? 0 : Math.round((progress.indexed / progress.total) * 100);
+  return (
+    <div className="session-indexing" role="status" aria-live="polite">
+      <div className="session-indexing-text">
+        {t('sessions.indexing', 'Indexing session databases in the background…')}
+        <span className="tabular muted">
+          {progress.indexed} / {progress.total}
+        </span>
+      </div>
+      <div
+        className="session-indexing-bar"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+      >
+        <span style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="session-kpi">
-      <div className="session-kpi-value">{value}</div>
+      <div className="session-kpi-value tabular">
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </div>
       <div className="session-kpi-label">{label}</div>
     </div>
   );
 }
 
-function ResumeInline({
-  sessionId, repoPath, provider = 'claude',
-}: { sessionId: string; repoPath: string | null | undefined; provider?: 'claude' | 'github_copilot' | 'codex' | null }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const bin =
-    provider === 'codex'
-      ? 'codex resume'
-      : provider === 'github_copilot'
-        ? 'gh copilot -- --resume='
-        : 'claude --resume';
-  const cmd = repoPath
-    ? `cd "${repoPath}"; ${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`
-    : `${provider === 'github_copilot' ? `${bin}${sessionId}` : `${bin} ${sessionId}`}`;
+const SessionRow = memo(function SessionRow({ s }: { s: SessionListItem }) {
+  const { t, i18n } = useTranslation();
+  const dur = durationMinutes(s.startedAt, s.lastEventAt);
+  const href = `/sessions/${encodeURIComponent(s.dbHash)}/${encodeURIComponent(s.id)}`;
   return (
-    <button
-      type="button"
-      className="linkish resume-inline"
-      title={cmd}
-      onClick={async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(cmd);
-          setCopied(true);
-          setTimeout(() => { setCopied(false); }, 1800);
-        } catch {}
-      }}
-    >
-      {copied ? t('common.copied', 'Copied ✓') : `⏎ ${t('task.resume', 'Open in CLI')}`}
-    </button>
+    <li className="session-row">
+      <div className="session-main">
+        <div className="session-title">
+          {s.source === 'agentboard' && (
+            <span className="session-tag source agentboard">
+              {s.taskCode ?? t('sessions.source_agentboard', 'AgentBoard')}
+              {s.role ? ` · ${s.role}` : ''}
+            </span>
+          )}
+          {s.intent && <span className={`session-tag intent intent-${s.intent}`}>{s.intent}</span>}
+          <Link to={href} className="session-link oneline" title={s.firstPrompt ?? undefined}>
+            {s.firstPrompt ?? (
+              <span className="muted">{t('sessions.untitled', 'No prompt recorded')}</span>
+            )}
+          </Link>
+        </div>
+        <div className="session-sub mono oneline" title={s.projectDir ?? undefined}>
+          {s.projectDir ?? '—'}
+        </div>
+        <div className="session-meta mono">
+          <span>{s.id.slice(0, 12)}</span>
+          <CopyButton
+            className="linkish resume-inline"
+            text={resumeCommand(s.id, s.repoPath ?? s.projectDir, s.provider)}
+            label={t('task.resume', 'Open in CLI')}
+          />
+        </div>
+      </div>
+      <dl className="session-facts">
+        <div>
+          <dt>{t('sessions.started', 'Started')}</dt>
+          <dd>
+            <time dateTime={s.startedAt ?? undefined}>{timeAgo(s.startedAt, i18n.language)}</time>
+          </dd>
+        </div>
+        <div>
+          <dt>{t('sessions.duration', 'Duration')}</dt>
+          <dd className="tabular">
+            {dur === null ? '—' : t('sessions.dur_m', '{{m}}m', { m: dur })}
+          </dd>
+        </div>
+        <div>
+          <dt>{t('sessions.events', 'Events')}</dt>
+          <dd className="tabular">{s.eventCount.toLocaleString()}</dd>
+        </div>
+      </dl>
+    </li>
+  );
+});
+
+function RowSkeletons({ count }: { count: number }) {
+  return (
+    <div className="session-list" aria-hidden>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="session-row skeleton-row">
+          <div className="session-main">
+            <Skeleton width="62%" height={16} />
+            <Skeleton width="38%" height={12} />
+            <Skeleton width="22%" height={10} />
+          </div>
+          <div className="session-facts">
+            <Skeleton width={56} height={28} />
+            <Skeleton width={56} height={28} />
+            <Skeleton width={56} height={28} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SessionsSkeleton() {
+  const { t } = useTranslation();
+  return (
+    <div role="status" aria-label={t('common.loading', 'Loading…')}>
+      <div className="session-stats" aria-hidden>
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="session-kpi">
+            <Skeleton width={72} height={26} />
+            <Skeleton width={96} height={11} />
+          </div>
+        ))}
+      </div>
+      <RowSkeletons count={8} />
+    </div>
   );
 }

@@ -16,6 +16,7 @@ export async function makeP0Db(): Promise<DbHandle> {
       max_parallel INTEGER NOT NULL DEFAULT 1,
       agent_provider TEXT NOT NULL DEFAULT 'claude',
       agent_config_json TEXT,
+      auth_config_json TEXT,
       concerns_json TEXT NOT NULL DEFAULT '[]',
       allow_git INTEGER NOT NULL DEFAULT 0,
       scan_ignore_json TEXT NOT NULL DEFAULT '[]',

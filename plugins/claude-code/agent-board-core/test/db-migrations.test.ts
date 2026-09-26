@@ -127,13 +127,14 @@ describe('project database migrations', () => {
     let db = await openProjectDb(path);
     try {
       expect(db.prepare("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
-        value: '7',
+        value: '9',
       } satisfies MetaRow);
 
       expect(columns(db, 'project')).toEqual(
         expect.arrayContaining([
           'agent_provider',
           'agent_config_json',
+          'auth_config_json',
           'scan_ignore_json',
           'concerns_json',
           'allow_git',
@@ -159,6 +160,7 @@ describe('project database migrations', () => {
           'council_size',
           'session_provider_override',
           'cost_breakdown_json',
+          'auth_source',
         ]),
       );
 
@@ -192,9 +194,11 @@ describe('project database migrations', () => {
     db = await openProjectDb(path);
     try {
       expect(db.prepare("SELECT value FROM meta WHERE key='schema_version'").get()).toEqual({
-        value: '7',
+        value: '9',
       } satisfies MetaRow);
       expect(columns(db, 'project')).toContain('agent_config_json');
+      expect(columns(db, 'project')).toContain('auth_config_json');
+      expect(columns(db, 'agent_run')).toContain('auth_source');
       expect(columns(db, 'task')).toContain('discovery_mode');
       expect(db.prepare("SELECT agent_provider FROM project WHERE id='p1'").get()).toEqual({
         agent_provider: 'gemini',
@@ -230,6 +234,17 @@ describe('project database migrations', () => {
       expect(db.prepare("SELECT agent_provider FROM project WHERE id='bad-project'").get()).toEqual(
         { agent_provider: 'bogus' } satisfies ProjectProviderRow,
       );
+      // The CHECK-constraint rebuild path (migrateProjectAgentProviderCheck /
+      // migrateAgentRunProviderCheck) must not silently drop later-added
+      // columns it doesn't explicitly list.
+      const projectCols = (
+        db.prepare('PRAGMA table_info(project)').all() as unknown as ColumnInfo[]
+      ).map((c) => c.name);
+      const runCols = (
+        db.prepare('PRAGMA table_info(agent_run)').all() as unknown as ColumnInfo[]
+      ).map((c) => c.name);
+      expect(projectCols).toContain('auth_config_json');
+      expect(runCols).toContain('auth_source');
     } finally {
       db.close();
     }

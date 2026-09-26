@@ -35,6 +35,20 @@ export interface AgentRunnerOptions {
   onEvent?: (eventName: string, detail: Record<string, unknown>) => void;
   /** SDK hooks config (e.g. PreToolUse for noskills phase enforcement). */
   hooks?: Record<string, unknown>;
+  /**
+   * Whitelisted child-process environment to hand the SDK (see child-env.ts
+   * on the host side). Never fall back to `{...process.env}` here — that would
+   * leak ambient secrets and let a stray ANTHROPIC_API_KEY silently override a
+   * Pro/Max OAuth login (billing to the API instead of the subscription).
+   */
+  env: Record<string, string>;
+  /**
+   * Path to the `claude` executable. Only set this when the SDK's own
+   * resolution (bundled binary, or PATH lookup) needs to be overridden — e.g. a
+   * non-standard install location. Leaving it unset lets the SDK find npm
+   * `claude.cmd` shims on Windows and its own bundled binary correctly.
+   */
+  claudeExecutablePath?: string;
 }
 
 /** Internal mutable accumulator for streaming state. */
@@ -75,6 +89,64 @@ interface ContentToolResult {
   type: "tool_result";
   content?: unknown;
   is_error?: boolean;
+}
+
+export interface ClaudeRateLimitSignal {
+  /** ISO timestamp the limit resets, when the SDK reports one. */
+  resetsAt: string | null;
+  /** Milliseconds to wait before retrying, when known. */
+  retryAfterMs: number | null;
+}
+
+/**
+ * Classify a claude-agent-sdk `rate_limit_event` / `system.api_retry` message.
+ * Returns null when the message carries no actionable rate-limit signal.
+ */
+export function classifyClaudeRateLimitEvent(msg: unknown): ClaudeRateLimitSignal | null {
+  if (msg === null || typeof msg !== "object") return null;
+  const obj = msg as Record<string, unknown>;
+  if (obj.type === "rate_limit_event") {
+    const info = obj.rate_limit_info;
+    if (info === null || typeof info !== "object") return null;
+    const infoObj = info as Record<string, unknown>;
+    if (infoObj.status !== "rejected") return null;
+    const resetsAtMs = typeof infoObj.resetsAt === "number" ? infoObj.resetsAt : null;
+    return {
+      resetsAt: resetsAtMs !== null ? new Date(resetsAtMs).toISOString() : null,
+      retryAfterMs: resetsAtMs !== null ? Math.max(0, resetsAtMs - Date.now()) : null,
+    };
+  }
+  if (obj.type === "system" && obj.subtype === "api_retry") {
+    const retryMs = typeof obj.retry_delay_ms === "number" ? obj.retry_delay_ms : null;
+    const status = typeof obj.error_status === "number" ? obj.error_status : null;
+    if (status !== 429 && retryMs === null) return null;
+    return { resetsAt: null, retryAfterMs: retryMs ?? 60_000 };
+  }
+  return null;
+}
+
+/**
+ * Classify a claude-agent-sdk `result` message with `is_error=true` as a
+ * provider usage-limit failure ("You've hit your usage limit… try again…").
+ * Returns null when the failure isn't rate-limit shaped.
+ */
+export function classifyClaudeResultError(msg: unknown): ClaudeRateLimitSignal | null {
+  if (msg === null || typeof msg !== "object") return null;
+  const obj = msg as Record<string, unknown>;
+  if (obj.type !== "result" || obj.is_error !== true) return null;
+  const text = [obj.result, ...(Array.isArray(obj.errors) ? obj.errors : [])]
+    .filter((part): part is string => typeof part === "string")
+    .join(" ");
+  const status = typeof obj.api_error_status === "number" ? obj.api_error_status : null;
+  if (!/usage limit|rate limit|try again/i.test(text) && status !== 429) return null;
+  const match = /try again(?: at| after)?\s+([^.,;]+)/i.exec(text);
+  const resetsAt = match?.[1] !== undefined ? tryParseFutureDate(match[1]) : null;
+  return { resetsAt, retryAfterMs: resetsAt === null ? 60_000 : null };
+}
+
+function tryParseFutureDate(text: string): string | null {
+  const parsed = Date.parse(text.trim());
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
 export class AgentRunner {
@@ -185,8 +257,12 @@ export class AgentRunner {
       sessionLog,
     } = this.opts;
 
-    const cleanEnv: NodeJS.ProcessEnv = { ...process.env };
+    const cleanEnv: Record<string, string> = { ...this.opts.env };
     delete cleanEnv.CLAUDECODE;
+    const claudeExecutablePath =
+      this.opts.claudeExecutablePath ??
+      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+        ?.AGENTBOARD_CLAUDE_PATH;
 
     const queryOptions: Record<string, unknown> = {
       cwd,
@@ -194,7 +270,12 @@ export class AgentRunner {
       abortController: queryAbortController,
       permissionMode: "acceptEdits",
       env: cleanEnv,
-      pathToClaudeCodeExecutable: "claude",
+      // Left unset unless explicitly configured — hardcoding "claude" here broke
+      // npm `claude.cmd` installs on Windows and skipped the SDK's own bundled
+      // binary resolution.
+      ...(claudeExecutablePath !== undefined && claudeExecutablePath !== ""
+        ? { pathToClaudeCodeExecutable: claudeExecutablePath }
+        : {}),
       ...(systemPrompt && { systemPrompt }),
       ...(allowedTools && {
         allowedTools: allowedTools.split(",").map((tool) => tool.trim()),
@@ -212,6 +293,7 @@ export class AgentRunner {
       totalCostUsd: null,
     };
     const usage = this.partial.usage;
+    let pendingRateLimit: ClaudeRateLimitSignal | null = null;
 
     let q: AsyncIterable<SDKMessage>;
     try {
@@ -271,6 +353,7 @@ export class AgentRunner {
           result.sessionId = msg.session_id;
           result.model = msg.model;
           this.partial.model = msg.model;
+          result.authSource = msg.apiKeySource ?? null;
         }
 
         if (msg.type === "assistant") {
@@ -295,16 +378,55 @@ export class AgentRunner {
           }
         }
 
+        // Legacy pre-typed SDK error envelope (not covered by rate_limit_event
+        // or system.api_retry below, but still seen from older SDK builds).
         const raw = msg as unknown as SdkLegacyError;
         if (raw.type === "error" && raw.status === 429) {
           const retryAfterMs = raw.retry_after_ms ?? 60_000;
           this.opts.rateLimiter?.recordLimit("claude-api", retryAfterMs);
+          pendingRateLimit = { resetsAt: null, retryAfterMs };
           sessionLog?.info({ retryAfterMs }, "Rate limit detected");
           onEvent?.("run.rate-limited", { runId, retryAfterMs });
         }
 
+        const rateLimitEvent = classifyClaudeRateLimitEvent(msg);
+        if (rateLimitEvent !== null) {
+          this.opts.rateLimiter?.recordLimit(
+            "claude-api",
+            rateLimitEvent.retryAfterMs ?? undefined,
+          );
+          pendingRateLimit = rateLimitEvent;
+          sessionLog?.info({ rateLimitEvent }, "Rate limit signal detected");
+          onEvent?.("run.rate-limited", {
+            runId,
+            retryAfterMs: rateLimitEvent.retryAfterMs,
+            resetsAt: rateLimitEvent.resetsAt,
+          });
+        }
+
         if (msg.type === "result") {
-          result.status = "completed";
+          // Respect is_error instead of unconditionally reporting "completed" —
+          // a usage-limit or provider error must not be credited as a clean run.
+          if (msg.is_error) {
+            const resultRateLimit = classifyClaudeResultError(msg) ?? pendingRateLimit;
+            if (resultRateLimit !== null) {
+              result.errorKind = "rate_limit";
+              result.resetsAt = resultRateLimit.resetsAt;
+              this.opts.rateLimiter?.recordLimit(
+                "claude-api",
+                resultRateLimit.retryAfterMs ?? undefined,
+              );
+            } else {
+              result.errorKind = "error";
+            }
+            result.status = "failed";
+            result.error =
+              typeof (msg as { result?: unknown }).result === "string"
+                ? (msg as { result: string }).result
+                : "claude result reported is_error=true";
+          } else {
+            result.status = "completed";
+          }
           if (msg.total_cost_usd > 0) {
             result.totalCostUsd = msg.total_cost_usd;
             this.partial.totalCostUsd = msg.total_cost_usd;

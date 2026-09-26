@@ -85,6 +85,76 @@ export function scheduleRetry(
   return { scheduled: true, delayMs, newRunId, nextAttempt };
 }
 
+export interface ScheduleRateLimitRetryOpts {
+  runId: string;
+  taskId: string;
+  role: string;
+  /** Current attempt number — reused verbatim, never incremented (rate limits don't burn retry budget). */
+  attempt: number;
+  /** ISO timestamp the provider's usage limit resets, when known. */
+  resetsAt?: string | null;
+  error?: string;
+  /** Floor delay when resetsAt is unknown or already past. Exposed for tests. */
+  minDelayMs?: number;
+}
+
+const DEFAULT_RATE_LIMIT_MIN_DELAY_MS = 5_000;
+const DEFAULT_RATE_LIMIT_FALLBACK_DELAY_MS = 60_000;
+
+/**
+ * Reschedule a rate-limited run no earlier than `resetsAt`, without consuming
+ * the run's normal retry budget: `attempt` is carried over unchanged, so a
+ * later non-rate-limit failure still gets the full DEFAULT_MAX_RETRY_ATTEMPTS.
+ */
+export function scheduleRateLimitRetry(
+  db: DatabaseSync,
+  { runId, taskId, role, attempt, resetsAt, error, minDelayMs }: ScheduleRateLimitRetryOpts,
+): ScheduleRetryResult {
+  const floor = minDelayMs ?? DEFAULT_RATE_LIMIT_MIN_DELAY_MS;
+  const now = Date.now();
+  const resetMs = resetsAt ? Date.parse(resetsAt) : NaN;
+  const delayMs = Number.isFinite(resetMs)
+    ? Math.max(resetMs - now, floor)
+    : DEFAULT_RATE_LIMIT_FALLBACK_DELAY_MS;
+
+  const stateId = ulid();
+  db.prepare(
+    `
+    INSERT INTO retry_state(id, run_id, task_id, attempt, scheduled_at, delay_ms, last_error, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `,
+  ).run(
+    stateId,
+    runId,
+    taskId,
+    attempt,
+    new Date(now + delayMs).toISOString(),
+    delayMs,
+    error ?? null,
+    isoNow(),
+  );
+
+  const newRunId = ulid();
+  const timer = setTimeout(() => {
+    try {
+      db.prepare(
+        `
+        INSERT INTO agent_run(id, task_id, role, status, attempt, queued_at)
+        VALUES (?, ?, ?, 'queued', ?, ?)
+      `,
+      ).run(newRunId, taskId, role, attempt, isoNow());
+    } catch (e) {
+      console.error(
+        '[retry-manager] rate-limit re-enqueue failed:',
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }, delayMs);
+  timer.unref();
+
+  return { scheduled: true, delayMs, newRunId, nextAttempt: attempt };
+}
+
 /**
  * List pending retry states for a task (most recent first).
  */

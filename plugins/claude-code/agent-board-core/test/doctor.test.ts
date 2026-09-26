@@ -31,4 +31,79 @@ describe('runDoctor', () => {
       ]),
     );
   });
+
+  it('reports a failed auth probe as unknown with an actionable fix', async () => {
+    const db = await makeP0Db();
+    seedP0Project(db);
+
+    const result = await runDoctor({
+      db,
+      probeCommand: () => Promise.resolve({ ok: true, detail: 'claude 1.0.0' }),
+      probeAuthStatus: () => Promise.reject(new Error('probe timed out')),
+    });
+
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'provider.claude.auth',
+          status: 'unknown',
+          action: expect.stringContaining('claude /login'),
+        }),
+      ]),
+    );
+  });
+
+  it('warns when auto mode + a present API key could override a confirmed subscription login', async () => {
+    const db = await makeP0Db();
+    seedP0Project(db);
+    const original = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+
+    try {
+      const result = await runDoctor({
+        db,
+        probeCommand: () => Promise.resolve({ ok: true, detail: 'claude 1.0.0' }),
+        probeAuthStatus: () =>
+          Promise.resolve({ status: 'ok', detail: 'logged in via claude.ai', source: 'subscription' }),
+      });
+
+      expect(result.checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'provider.claude.auth_override_risk',
+            status: 'warning',
+          }),
+        ]),
+      );
+    } finally {
+      if (original === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = original;
+    }
+  });
+
+  it('does not warn about auth override when auth_mode is pinned to subscription', async () => {
+    const db = await makeP0Db();
+    seedP0Project(db);
+    db.prepare(`UPDATE project SET auth_config_json=? WHERE id='P1'`).run(
+      JSON.stringify({ claude: 'subscription' }),
+    );
+    const original = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+
+    try {
+      const result = await runDoctor({
+        db,
+        probeCommand: () => Promise.resolve({ ok: true, detail: 'claude 1.0.0' }),
+        probeAuthStatus: () =>
+          Promise.resolve({ status: 'ok', detail: 'logged in via claude.ai', source: 'subscription' }),
+      });
+
+      expect(
+        result.checks.some((check) => check.id === 'provider.claude.auth_override_risk'),
+      ).toBe(false);
+    } finally {
+      if (original === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = original;
+    }
+  });
 });

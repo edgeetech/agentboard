@@ -1,0 +1,1 @@
+import{j as r}from"./index-DWKhVeCc.js";function e({size:t=14}){return r.jsxs("svg",{viewBox:"0 0 24 24",width:t,height:t,fill:"none",stroke:"currentColor",strokeWidth:"2",strokeLinecap:"round",strokeLinejoin:"round","aria-hidden":"true",children:[r.jsx("rect",{x:"9",y:"9",width:"11",height:"11",rx:"2"}),r.jsx("path",{d:"M5 15V6a2 2 0 0 1 2-2h9"})]})}export{e as C};

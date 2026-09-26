@@ -403,6 +403,32 @@ const MIGRATIONS: Migration[] = [
           ON CONFLICT(key) DO UPDATE SET value='7' WHERE meta.value < '7'`,
     why: 'bump schema_version to 7 for tracker poll state',
   },
+
+  // --- v8: fast run_token lookup for /mcp auth ---
+  {
+    sql: `CREATE INDEX IF NOT EXISTS idx_agent_run_token ON agent_run(token) WHERE token IS NOT NULL`,
+    why: '/mcp authenticates every call by run_token; index avoids a table scan per request',
+  },
+  {
+    sql: `INSERT INTO meta(key, value) VALUES ('schema_version', '8')
+          ON CONFLICT(key) DO UPDATE SET value='8' WHERE meta.value < '8'`,
+    why: 'bump schema_version to 8 for agent_run.token index',
+  },
+
+  // --- v9: per-provider auth mode + recorded auth source ---
+  {
+    sql: `ALTER TABLE project ADD COLUMN auth_config_json TEXT`,
+    why: 'per-provider auth mode (subscription/api_key/auto) at project level',
+  },
+  {
+    sql: `ALTER TABLE agent_run ADD COLUMN auth_source TEXT`,
+    why: 'record actual auth source the provider used for this run (e.g. Claude apiKeySource)',
+  },
+  {
+    sql: `INSERT INTO meta(key, value) VALUES ('schema_version', '9')
+          ON CONFLICT(key) DO UPDATE SET value='9' WHERE meta.value < '9'`,
+    why: 'bump schema_version to 9 for project.auth_config_json + agent_run.auth_source',
+  },
 ];
 
 function applyMigrations(db: DbHandle): void {
@@ -645,6 +671,7 @@ CREATE TABLE project_new (
   max_parallel      INTEGER NOT NULL DEFAULT 1 CHECK (max_parallel BETWEEN 1 AND 3),
   agent_provider    TEXT NOT NULL DEFAULT 'claude',
   agent_config_json TEXT,
+  auth_config_json  TEXT,
   scan_ignore_json  TEXT NOT NULL DEFAULT '[]',
   concerns_json     TEXT NOT NULL DEFAULT '[]',
   allow_git         INTEGER NOT NULL DEFAULT 0,
@@ -653,8 +680,8 @@ CREATE TABLE project_new (
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL
 );
-INSERT INTO project_new(id, code, name, description, workflow_type, repo_path, max_parallel, agent_provider, agent_config_json, scan_ignore_json, concerns_json, allow_git, version, deleted_at, created_at, updated_at)
-SELECT id, code, name, description, workflow_type, repo_path, max_parallel, agent_provider, agent_config_json, scan_ignore_json, concerns_json, allow_git, version, deleted_at, created_at, updated_at
+INSERT INTO project_new(id, code, name, description, workflow_type, repo_path, max_parallel, agent_provider, agent_config_json, auth_config_json, scan_ignore_json, concerns_json, allow_git, version, deleted_at, created_at, updated_at)
+SELECT id, code, name, description, workflow_type, repo_path, max_parallel, agent_provider, agent_config_json, auth_config_json, scan_ignore_json, concerns_json, allow_git, version, deleted_at, created_at, updated_at
 FROM project;
 DROP TABLE project;
 ALTER TABLE project_new RENAME TO project;`);
@@ -735,10 +762,11 @@ CREATE TABLE agent_run_new (
   member_index           INTEGER,
   council_size           INTEGER,
   session_provider_override TEXT,
-  cost_breakdown_json    TEXT NOT NULL DEFAULT '{}'
+  cost_breakdown_json    TEXT NOT NULL DEFAULT '{}',
+  auth_source            TEXT
 );
-INSERT INTO agent_run_new(id, task_id, role, status, token, pid, session_provider, session_id, claude_session_id, error, logs_path, summary, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cost_usd, cost_version, attempt, last_heartbeat_at, queued_at, started_at, ended_at, prompt_template, phase, phase_state_json, phase_history_json, parent_run_id, member_index, council_size, session_provider_override, cost_breakdown_json)
-SELECT id, task_id, role, status, token, pid, session_provider, session_id, claude_session_id, error, logs_path, summary, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cost_usd, cost_version, attempt, last_heartbeat_at, queued_at, started_at, ended_at, prompt_template, phase, phase_state_json, phase_history_json, parent_run_id, member_index, council_size, session_provider_override, cost_breakdown_json
+INSERT INTO agent_run_new(id, task_id, role, status, token, pid, session_provider, session_id, claude_session_id, error, logs_path, summary, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cost_usd, cost_version, attempt, last_heartbeat_at, queued_at, started_at, ended_at, prompt_template, phase, phase_state_json, phase_history_json, parent_run_id, member_index, council_size, session_provider_override, cost_breakdown_json, auth_source)
+SELECT id, task_id, role, status, token, pid, session_provider, session_id, claude_session_id, error, logs_path, summary, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cost_usd, cost_version, attempt, last_heartbeat_at, queued_at, started_at, ended_at, prompt_template, phase, phase_state_json, phase_history_json, parent_run_id, member_index, council_size, session_provider_override, cost_breakdown_json, auth_source
 FROM agent_run;
 DROP TABLE agent_run;
 ALTER TABLE agent_run_new RENAME TO agent_run;

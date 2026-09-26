@@ -39,7 +39,7 @@ describe('tracker schema migrations', () => {
       'next_poll_at',
       'updated_at',
     ]);
-    expect(version.value).toBe('7');
+    expect(version.value).toBe('9');
     db.close();
   });
 
@@ -109,7 +109,7 @@ describe('tracker schema migrations', () => {
       'updated_at',
     ]);
     expect(legacyTable?.name).toBe('tracker_config_legacy_pre_v7');
-    expect(version.value).toBe('7');
+    expect(version.value).toBe('9');
     expect(foreignKeys.foreign_keys).toBe(1);
     db.close();
   });

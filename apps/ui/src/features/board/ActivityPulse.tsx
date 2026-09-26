@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 
 import type { RunActiveState } from '../../api';
+import { Icon } from '../../components/Icon';
 
 import { PhaseBadge } from './PhaseBadge';
 
@@ -48,40 +49,17 @@ export function ActivityPulse({ state }: { state: RunActiveState | null | undefi
     Date.now() - new Date(state.last_at).getTime() < 5000;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 11 }}>
+    <div className="activity-pulse">
       <PhaseBadge phase={state.phase} />
-      {recent && (
-        <span
-          aria-hidden
-          style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: '#10b981',
-            boxShadow: '0 0 0 0 rgba(16,185,129,0.8)',
-            animation: 'agentboardPulse 1.4s ease-out infinite',
-          }}
-        />
-      )}
-      <span style={{ color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {recent && <span className="activity-pulse-dot" aria-hidden />}
+      <span className="activity-pulse-label">
         {state.last_kind ? `${KIND_LABEL[state.last_kind] ?? state.last_kind} · ${relTime(state.last_at)}` : ''}
       </span>
       {state.debt_count > 0 && (
-        <span
-          title={`${String(state.debt_count)} open debt items`}
-          style={{
-            background: '#fef2f2', color: '#b91c1c',
-            padding: '1px 6px', borderRadius: 4, fontWeight: 600, fontSize: 10,
-          }}
-        >
-          ⚠ {String(state.debt_count)}
+        <span className="activity-pulse-debt" title={`${String(state.debt_count)} open debt items`}>
+          <Icon name="alert-triangle" size={11} /> {String(state.debt_count)}
         </span>
       )}
-      <style>{`
-        @keyframes agentboardPulse {
-          0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.7); }
-          70%  { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
-          100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
-        }
-      `}</style>
     </div>
   );
 }

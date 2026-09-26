@@ -36,6 +36,16 @@ export function providerFor(provider: AgentProvider): ProviderRuntimeAdapter {
   return providerRegistry.require(provider);
 }
 
+/**
+ * Directory Claude Code itself treats as `~/.claude` — respects
+ * CLAUDE_CONFIG_DIR when set (history.jsonl / .credentials.json then live
+ * directly under it, not under a nested `.claude` folder).
+ */
+export function claudeDotDir(): string {
+  const configDir = process.env.CLAUDE_CONFIG_DIR;
+  return configDir !== undefined && configDir !== '' ? configDir : join(homedir(), '.claude');
+}
+
 export function maybeRegisterInteractiveHistory(
   provider: AgentProvider,
   sessionId: string,
@@ -53,7 +63,7 @@ export function maybeRegisterInteractiveHistory(
         project: osPath,
         sessionId,
       }) + '\n';
-    appendFileSync(join(homedir(), '.claude', 'history.jsonl'), entry);
+    appendFileSync(join(claudeDotDir(), 'history.jsonl'), entry);
   } catch (e) {
     console.warn(
       '[provider-registry] could not register with claude history:',

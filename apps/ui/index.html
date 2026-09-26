@@ -6,8 +6,6 @@
     <meta name="color-scheme" content="light dark" />
     <title>AgentBoard</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <script>
       (function () {
         try {
@@ -20,17 +18,7 @@
           }
           document.documentElement.setAttribute('data-theme', t);
           var p = localStorage.getItem('ab.palette');
-          var valid = [
-            'default',
-            'edgeetech',
-            'primer',
-            'mono',
-            'neon',
-            'warm',
-            'pastel',
-            'jewel',
-            'vibrant',
-          ];
+          var valid = ['default', 'edgeetech', 'mono'];
           if (valid.indexOf(p) === -1) p = 'edgeetech';
           document.documentElement.setAttribute('data-palette', p);
         } catch (e) {}

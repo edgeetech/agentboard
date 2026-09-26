@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Icon } from '../../components/Icon';
+
 interface Props {
   paths: string[];
   onChange: (paths: string[]) => void;
@@ -51,7 +53,7 @@ export function FileDropZone({ paths, onChange }: Props) {
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
       >
-        <span className="file-drop-icon">📎</span>
+        <span className="file-drop-icon"><Icon name="paperclip" size={22} /></span>
         <span className="file-drop-label">
           {t('files.drop_hint', 'Drop files here or click to browse')}
         </span>
@@ -75,7 +77,7 @@ export function FileDropZone({ paths, onChange }: Props) {
         <ul className="file-path-list">
           {paths.map((p, i) => (
             <li key={i} className="file-path-entry">
-              <span className="file-path-icon">📄</span>
+              <span className="file-path-icon"><Icon name="file" size={14} /></span>
               <input
                 type="text"
                 value={p}
@@ -89,7 +91,7 @@ export function FileDropZone({ paths, onChange }: Props) {
                 title={t('common.remove', 'Remove')}
                 aria-label={t('common.remove', 'Remove')}
               >
-                ×
+                <Icon name="x" size={12} />
               </button>
             </li>
           ))}

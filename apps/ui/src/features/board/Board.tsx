@@ -4,20 +4,25 @@ import type {
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
   useDraggable,
   useDroppable,
 } from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { api } from "../../api";
+import type { Project, Task } from "../../api";
 import { HealthStrip } from "../../components/HealthStrip";
 import { SearchIcon } from "../../components/SearchIcon";
+import { Skeleton } from "../../components/Skeleton";
+import { toast } from "../../components/toastStore";
 import { useTaskActiveState } from "../../hooks/useActiveStates";
 import { useDetailView } from "../../hooks/useDetailView";
 
@@ -39,30 +44,6 @@ function useViewMode(): [ViewMode, (v: ViewMode) => void] {
     setMode(v);
   }
   return [mode, set];
-}
-
-interface Project {
-  id: string;
-  code: string;
-  name: string;
-  description: string | null;
-  workflow_type: "WF1" | "WF2";
-  repo_path: string;
-  auto_dispatch_pm: number;
-  max_parallel: number;
-  agent_provider: "claude" | "github_copilot";
-  version: number;
-}
-
-interface Task {
-  id: string;
-  code: string;
-  title: string;
-  status: string;
-  assignee_role: string | null;
-  rework_count: number;
-  updated_at?: string;
-  has_active_run?: number | boolean;
 }
 
 const COLUMNS_WF1 = [
@@ -105,19 +86,11 @@ export function Board({ project }: { project: Project }) {
   const [searchInput, setSearchInput] = useState("");
   const [searchDebounced, setSearchDebounced] = useState("");
   const [viewMode, setViewMode] = useViewMode();
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const qc = useQueryClient();
-
-  useEffect(() => {
-    if (errorMsg) {
-      const timer = setTimeout(() => { setErrorMsg(null); }, 5000);
-      return () => { clearTimeout(timer); };
-    }
-  }, [errorMsg]);
 
   useEffect(() => {
     const id = setTimeout(() => { setSearchDebounced(searchInput.trim()); }, 250);
@@ -192,6 +165,7 @@ export function Board({ project }: { project: Project }) {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   const transition = useMutation({
@@ -203,9 +177,8 @@ export function Board({ project }: { project: Project }) {
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
-    onError: (error: any) => {
-      const msg = error?.response?.data?.error || (error as Error)?.message || 'Failed to transition task';
-      setErrorMsg(msg);
+    onError: (error: unknown) => {
+      toast.danger(error instanceof Error ? error.message : t('board.transition_failed', 'Failed to transition task'));
     },
   });
 
@@ -231,11 +204,6 @@ export function Board({ project }: { project: Project }) {
 
   return (
     <>
-      {errorMsg && (
-        <div className='toast-error' role='alert'>
-          {errorMsg}
-        </div>
-      )}
       <div className='page-head'>
         <div className='title'>
           <h1>
@@ -269,11 +237,14 @@ export function Board({ project }: { project: Project }) {
               )}
             </span>
           )}
-          <div className='view-toggle'>
+          <div className='view-toggle' role="radiogroup" aria-label={t('board.view', 'View')}>
             <button
               className={viewMode === "board" ? "active" : ""}
               onClick={() => { setViewMode("board"); }}
-              title='Board view'
+              title={t('board.view_board', 'Board view')}
+              aria-label={t('board.view_board', 'Board view')}
+              role="radio"
+              aria-checked={viewMode === "board"}
             >
               <svg
                 width='14'
@@ -311,7 +282,10 @@ export function Board({ project }: { project: Project }) {
             <button
               className={viewMode === "list" ? "active" : ""}
               onClick={() => { setViewMode("list"); }}
-              title='List view'
+              title={t('board.view_list', 'List view')}
+              aria-label={t('board.view_list', 'List view')}
+              role="radio"
+              aria-checked={viewMode === "list"}
             >
               <svg
                 width='14'
@@ -357,7 +331,35 @@ export function Board({ project }: { project: Project }) {
 
       <HealthStrip projectCode={project.code} />
 
-      {viewMode === "list" ? (
+      {tasks.isLoading ? (
+        <div className='columns' style={{ ["--col-count" as any]: cols.length }}>
+          {cols.map((c) => (
+            <div key={c} className={`column col-${c}`}>
+              <Skeleton width="60%" height={16} />
+              <div style={{ display: 'grid', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
+                <Skeleton height={72} radius="var(--radius-md)" />
+                <Skeleton height={72} radius="var(--radius-md)" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : tasks.isError ? (
+        <div className='empty-state'>
+          <h3>{t('board.load_failed_title', 'Could not load tasks')}</h3>
+          <p>{tasks.error instanceof Error ? tasks.error.message : t('task.load_failed_body', 'Something went wrong.')}</p>
+          <button type='button' className='ghost' onClick={() => { void tasks.refetch(); }}>
+            {t('common.retry', 'Retry')}
+          </button>
+        </div>
+      ) : (tasks.data?.tasks.length ?? 0) === 0 ? (
+        <div className='empty-state'>
+          <h3>{t('board.empty_title', 'No tasks yet')}</h3>
+          <p>{t('board.empty_body', 'Create your first task to get an agent working.')}</p>
+          <button className='primary' onClick={() => { setCreating(true); }}>
+            + {t('board.new_task')}
+          </button>
+        </div>
+      ) : viewMode === "list" ? (
         <TaskListView
           tasks={tasks.data?.tasks ?? []}
           onOpen={openTask}
@@ -446,15 +448,17 @@ function DroppableColumn({
       ref={setNodeRef}
       className={`column col-${status}` + (isOver ? " drop-hint" : "")}
     >
-      <h2 onClick={() => { onToggleSort(id); }} style={{ cursor: 'pointer' }}>
-        <span className='col-icon-wrap'>{iconForStatus(status)}</span>
-        <span className='col-label'>{label}</span>
-        <span className='count'>{count}</span>
-        {isSorted && (
-          <span className='sort-indicator' title={`Sorted ${sortDirection}`}>
-            {sortDirection === 'asc' ? ' ↑' : ' ↓'}
-          </span>
-        )}
+      <h2>
+        <button type="button" className="col-header-btn" onClick={() => { onToggleSort(id); }}>
+          <span className='col-icon-wrap'>{iconForStatus(status)}</span>
+          <span className='col-label'>{label}</span>
+          <span className='count'>{count}</span>
+          {isSorted && (
+            <span className='sort-indicator' title={`Sorted ${sortDirection}`}>
+              {sortDirection === 'asc' ? ' ↑' : ' ↓'}
+            </span>
+          )}
+        </button>
       </h2>
       <div className='cards'>{children}</div>
     </div>

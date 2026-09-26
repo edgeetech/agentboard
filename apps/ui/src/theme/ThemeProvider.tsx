@@ -1,21 +1,11 @@
 import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
-export type Scheme = 'light' | 'dark';
-export type Palette =
-  | 'default'
-  | 'edgeetech'
-  | 'primer'    // GitHub Primer (accessibility-forward, both schemes)
-  | 'mono'      // monochrome minimalism
-  | 'neon'      // neon highlights
-  | 'warm'      // warm tones
-  | 'pastel'    // muted pastels
-  | 'jewel'     // deep jewel tones
-  | 'vibrant';  // contrasting vibrancy
+import { migratePalette } from './palettes';
+import type { Palette } from './palettes';
 
-const PALETTE_IDS: readonly Palette[] = [
-  'default', 'edgeetech', 'primer', 'mono', 'neon', 'warm', 'pastel', 'jewel', 'vibrant',
-];
+export type { Palette } from './palettes';
+export type Scheme = 'light' | 'dark';
 
 interface Ctx {
   scheme: Scheme;
@@ -35,14 +25,12 @@ function initialScheme(): Scheme {
   if (attr === 'dark' || attr === 'light') return attr;
   return 'light';
 }
-const DEFAULT_PALETTE: Palette = 'edgeetech';
-
 function initialPalette(): Palette {
   try {
-    const p = localStorage.getItem(KEY_PALETTE);
-    if (p && (PALETTE_IDS as readonly string[]).includes(p)) return p as Palette;
-    return DEFAULT_PALETTE;
-  } catch { return DEFAULT_PALETTE; }
+    return migratePalette(localStorage.getItem(KEY_PALETTE));
+  } catch {
+    return 'edgeetech';
+  }
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

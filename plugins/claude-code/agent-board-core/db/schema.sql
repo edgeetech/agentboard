@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS project (
   max_parallel      INTEGER NOT NULL DEFAULT 1 CHECK (max_parallel BETWEEN 1 AND 3),
   agent_provider    TEXT NOT NULL DEFAULT 'claude',
   agent_config_json TEXT,
+  auth_config_json  TEXT,
   scan_ignore_json  TEXT NOT NULL DEFAULT '[]',
   version           INTEGER NOT NULL DEFAULT 0,
   deleted_at        TEXT,
@@ -102,7 +103,8 @@ CREATE TABLE IF NOT EXISTS agent_run (
   member_index           INTEGER,
   council_size           INTEGER,
   session_provider_override TEXT,
-  cost_breakdown_json    TEXT NOT NULL DEFAULT '{}'
+  cost_breakdown_json    TEXT NOT NULL DEFAULT '{}',
+  auth_source            TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_run_running      ON agent_run(status, last_heartbeat_at);
@@ -111,6 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_task_status_live       ON task(status) WHERE dele
 CREATE INDEX IF NOT EXISTS idx_comment_task           ON comment(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_agent_run_cost         ON agent_run(task_id, ended_at) WHERE status IN ('succeeded','failed','blocked','cancelled');
 CREATE INDEX IF NOT EXISTS idx_agent_run_parent       ON agent_run(parent_run_id) WHERE parent_run_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_agent_run_token        ON agent_run(token) WHERE token IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS task_attachment (
   id          TEXT PRIMARY KEY,

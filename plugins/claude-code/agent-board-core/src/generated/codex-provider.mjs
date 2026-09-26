@@ -214,9 +214,13 @@ function normalizeClaudeServer(s) {
   }
   return out;
 }
+function claudeConfigBaseDir() {
+  const configDir = process.env.CLAUDE_CONFIG_DIR;
+  return configDir !== void 0 && configDir !== '' ? configDir : homedir();
+}
 function readClaudeUserMcpServers() {
   try {
-    const raw = JSON.parse(readFileSync(join(homedir(), '.claude.json'), 'utf8'));
+    const raw = JSON.parse(readFileSync(join(claudeConfigBaseDir(), '.claude.json'), 'utf8'));
     const cfg = raw !== null && typeof raw === 'object' ? raw : {};
     const rawServers = cfg.mcpServers;
     const servers = rawServers !== null && typeof rawServers === 'object' ? rawServers : {};
@@ -280,7 +284,20 @@ function quoteTomlPathKey(value) {
 
 // plugins/providers/codex/src/environment.ts
 import { platform } from 'node:os';
-var UNIVERSAL = ['PATH', 'LANG', 'LC_ALL', 'TZ'];
+var UNIVERSAL = [
+  'PATH',
+  'LANG',
+  'LC_ALL',
+  'TZ',
+  'HTTPS_PROXY',
+  'HTTP_PROXY',
+  'NO_PROXY',
+  'https_proxy',
+  'http_proxy',
+  'no_proxy',
+  'NODE_EXTRA_CA_CERTS',
+  'SSL_CERT_FILE',
+];
 var POSIX = ['HOME', 'USER', 'SHELL', 'TMPDIR'];
 var WINDOWS = [
   'USERPROFILE',
@@ -296,6 +313,13 @@ var WINDOWS = [
   'ProgramFiles(x86)',
   'PATHEXT',
   'COMSPEC',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'windir',
+  'PROCESSOR_ARCHITECTURE',
+  'NUMBER_OF_PROCESSORS',
+  'OS',
+  'PSModulePath',
 ];
 var CLAUDE = [
   'ANTHROPIC_API_KEY',
@@ -309,12 +333,21 @@ var COPILOT = [
   'GITHUB_TOKEN',
   'GH_TOKEN',
   'COPILOT_TOKEN',
+  'COPILOT_GITHUB_TOKEN',
   'COPILOT_CLI',
   'COPILOT_CLI_BINARY_VERSION',
   'COPILOT_RUN_APP',
   'COPILOT_AGENT_SESSION_ID',
+  'COPILOT_HOME',
 ];
-var CODEX = ['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_ORG_ID', 'OPENAI_PROJECT', 'CODEX_HOME'];
+var CODEX = [
+  'OPENAI_API_KEY',
+  'OPENAI_BASE_URL',
+  'OPENAI_ORG_ID',
+  'OPENAI_PROJECT',
+  'CODEX_HOME',
+  'CODEX_API_KEY',
+];
 function codexChildProcessEnvironmentPolicy(extraKeys = []) {
   return {
     inherit: false,
@@ -342,9 +375,11 @@ function buildCodexChildEnv(base = process.env, extraKeys = []) {
 
 // plugins/providers/codex/src/runner.ts
 var DEFAULT_TURN_TIMEOUT_MS = parseInt(process.env.AGENTBOARD_TURN_TIMEOUT_MS ?? '900000', 10);
+var CODEX_SUBSCRIPTION_STRIP_VARS = ['OPENAI_API_KEY', 'CODEX_API_KEY', 'OPENAI_BASE_URL'];
 var CodexRunner = class {
   opts;
   sessionId = null;
+  pendingRateLimit = null;
   partial = {
     model: null,
     totalCostUsd: null,
@@ -403,7 +438,7 @@ var CodexRunner = class {
       runId,
       onEvent,
       sessionLog,
-      serverToken,
+      mcpBearerToken,
       serverPort,
       mcpServers,
       sandbox,
@@ -426,7 +461,7 @@ var CodexRunner = class {
     const childEnvExtras = {};
     const configArgs = [];
     const extraEnvKeys = new Set(codexReferencedEnvKeys(cwd));
-    childEnvExtras.AGENTBOARD_RUN_BEARER = serverToken;
+    childEnvExtras.AGENTBOARD_RUN_BEARER = mcpBearerToken;
     configArgs.push(
       '-c',
       `mcp_servers.${quoteTomlPathKey('abrun')}.url=${quoteTomlString(`http://127.0.0.1:${serverPort}/mcp`)}`,
@@ -465,11 +500,15 @@ var CodexRunner = class {
         }
       }
     }
-    const env = {
+    let env = {
       ...buildCodexChildEnv(process.env, [...extraEnvKeys]),
       ...childEnvExtras,
     };
     delete env.CLAUDECODE;
+    if (this.opts.authMode === 'subscription') {
+      const excluded = new Set(CODEX_SUBSCRIPTION_STRIP_VARS);
+      env = Object.fromEntries(Object.entries(env).filter(([key]) => !excluded.has(key)));
+    }
     const args = buildCodexExecArgs({
       lastMessagePath,
       cwd,
@@ -543,6 +582,16 @@ ${prompt}`
     child.stderr.on('data', (chunk) => {
       stderrBuf += chunk;
       sessionLog?.error({ runId, stderr: chunk.slice(0, 500) }, 'Codex stderr');
+      const signal = classifyCodexRateLimit(chunk);
+      if (signal !== null && this.pendingRateLimit === null) {
+        this.pendingRateLimit = signal;
+        this.opts.rateLimiter?.recordLimit('codex-api', signal.retryAfterMs ?? void 0);
+        onEvent?.('run.rate-limited', {
+          runId,
+          retryAfterMs: signal.retryAfterMs,
+          resetsAt: signal.resetsAt,
+        });
+      }
     });
     child.stdin.write(fullPrompt);
     child.stdin.end();
@@ -568,8 +617,16 @@ ${prompt}`
       );
     await Promise.allSettled(gateChecks);
     if (denial !== null) throw denial;
-    if (exitCode === 0) result.status = 'completed';
-    else throw new Error(stderrBuf.trim() || `codex exited with code ${String(exitCode)}`);
+    if (exitCode === 0) {
+      result.status = 'completed';
+    } else if (this.pendingRateLimit !== null) {
+      result.status = 'failed';
+      result.errorKind = 'rate_limit';
+      result.resetsAt = this.pendingRateLimit.resetsAt;
+      result.error = stderrBuf.trim() || 'codex usage limit reached';
+    } else {
+      throw new Error(stderrBuf.trim() || `codex exited with code ${String(exitCode)}`);
+    }
     if (existsSync2(lastMessagePath)) {
       try {
         const text = readFileSync2(lastMessagePath, 'utf8').trim();
@@ -598,6 +655,18 @@ ${prompt}`
     if (enforceToolAttempt !== void 0) {
       const attempt = extractCodexToolAttempt(obj);
       if (attempt !== null) enforceToolAttempt(attempt);
+    }
+    if (this.pendingRateLimit === null) {
+      const signal = classifyCodexRateLimit(obj);
+      if (signal !== null) {
+        this.pendingRateLimit = signal;
+        this.opts.rateLimiter?.recordLimit('codex-api', signal.retryAfterMs ?? void 0);
+        onEvent?.('run.rate-limited', {
+          runId,
+          retryAfterMs: signal.retryAfterMs,
+          resetsAt: signal.resetsAt,
+        });
+      }
     }
     const sessionIdCandidate =
       typeof obj.session_id === 'string' && obj.session_id.length > 0
@@ -659,12 +728,24 @@ function extractCodexToolAttempt(obj) {
   }
   return null;
 }
+function classifyCodexRateLimit(input) {
+  const text =
+    typeof input === 'string' ? input : (pickString(input, ['message', 'error', 'msg']) ?? '');
+  if (!/usage limit|rate limit|rate.?limited|429/i.test(text)) return null;
+  const match = /try again(?: at| after)?\s+([^.,;]+)/i.exec(text);
+  const parsed = match?.[1] !== void 0 ? Date.parse(match[1].trim()) : NaN;
+  const resetsAt = Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+  return { resetsAt, retryAfterMs: resetsAt === null ? 6e4 : null };
+}
 function buildCodexExecArgs(args) {
   return [
     'exec',
     '--json',
     '--output-last-message',
     args.lastMessagePath,
+    // agentboard always passes an explicit -C <cwd>; skip codex's own git-repo
+    // discovery/confirmation prompt so headless runs never stall on it.
+    '--skip-git-repo-check',
     ...codexSandboxArgs(args.sandbox),
     '-C',
     args.cwd,
@@ -695,9 +776,23 @@ function resolveCodexLaunch(env, args) {
       };
     }
   }
-  const exeShim = join2(appData, 'npm', 'codex.exe');
+  const exeShim = join2(npmDir, 'codex.exe');
   if (existsSync2(exeShim)) return { command: exeShim, args };
+  const found = findExecutableOnPath(env, 'codex');
+  if (found !== null) return { command: found, args };
   return { command: 'codex', args };
+}
+function findExecutableOnPath(env, name) {
+  const pathVar = env.PATH ?? env.Path ?? '';
+  const dirs = pathVar.split(';').filter((dir) => dir.length > 0);
+  const pathext = (env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter((ext) => ext.length > 0);
+  for (const dir of dirs) {
+    for (const ext of pathext) {
+      const candidate = join2(dir, `${name}${ext}`);
+      if (existsSync2(candidate)) return candidate;
+    }
+  }
+  return null;
 }
 function looksFinalEvent(obj) {
   const type = String(obj.type ?? obj.event ?? '').toLowerCase();
@@ -827,6 +922,7 @@ export {
   CodexRunner,
   buildCodexChildEnv,
   buildCodexExecArgs,
+  classifyCodexRateLimit,
   codexBridgedClaudeMcps,
   codexChildProcessEnvironmentPolicy,
   codexProviderManifest,
@@ -839,4 +935,5 @@ export {
   quoteTomlString,
   readClaudeUserMcpServers,
   readCodexConfig,
+  resolveCodexLaunch,
 };

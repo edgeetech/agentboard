@@ -183,8 +183,10 @@ var CopilotRunner = class {
       totalCostUsd: null,
     };
     const copilotMcpServers = normalizeMcpServers(mcpServers);
-    const client = new CopilotClient();
+    const clientOptions = buildCopilotClientOptions(this.opts.env, this.opts.authMode);
+    const client = new CopilotClient(clientOptions);
     let session;
+    let rateLimitHit = null;
     const onAbort = () => {
       session?.abort().catch(() => {});
     };
@@ -252,6 +254,17 @@ var CopilotRunner = class {
               { msg: event.data.message, errorType: event.data.errorType },
               'Copilot session.error',
             );
+            const signal = classifyCopilotRateLimit(event);
+            if (signal !== null && rateLimitHit === null) {
+              rateLimitHit = signal;
+              this.opts.rateLimiter?.recordLimit('copilot-api', signal.retryAfterMs ?? void 0);
+              onEvent?.('run.rate-limited', {
+                runId,
+                retryAfterMs: signal.retryAfterMs,
+                resetsAt: signal.resetsAt,
+              });
+              onAbort();
+            }
           }
         },
       };
@@ -270,10 +283,22 @@ var CopilotRunner = class {
       session = await client.createSession(sessionConfig);
       this.sessionId = session.sessionId;
       result.sessionId = session.sessionId;
-      await session.sendAndWait({ prompt }, turnTimeoutMs);
+      try {
+        await session.sendAndWait({ prompt }, turnTimeoutMs);
+      } catch (err) {
+        if (rateLimitHit === null) throw err;
+      }
       await Promise.allSettled(gateChecks);
       if (denial !== null) throw denial;
-      result.status = 'completed';
+      if (rateLimitHit !== null) {
+        const signal = rateLimitHit;
+        result.status = 'failed';
+        result.errorKind = 'rate_limit';
+        result.resetsAt = signal.resetsAt;
+        result.error = 'copilot usage limit reached';
+      } else {
+        result.status = 'completed';
+      }
     } finally {
       abortController.signal.removeEventListener('abort', onAbort);
       turnSignal.removeEventListener('abort', onAbort);
@@ -298,6 +323,35 @@ var CopilotRunner = class {
     return result;
   }
 };
+function buildCopilotClientOptions(env, authMode) {
+  const options = {
+    ...(env !== void 0 ? { env } : {}),
+  };
+  if (authMode === 'subscription') {
+    options.useLoggedInUser = true;
+    return options;
+  }
+  if (authMode === 'api_key') {
+    const token = env?.COPILOT_GITHUB_TOKEN ?? env?.GH_TOKEN ?? env?.GITHUB_TOKEN;
+    if (token === void 0 || token === '') {
+      throw new Error(
+        'copilot auth_mode=api_key requires COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN to be set',
+      );
+    }
+    options.gitHubToken = token;
+    options.useLoggedInUser = false;
+  }
+  return options;
+}
+function classifyCopilotRateLimit(event) {
+  const { message, errorType } = event.data;
+  const text = `${message ?? ''} ${errorType ?? ''}`;
+  if (!/usage limit|rate limit|rate.?limited|429/i.test(text)) return null;
+  const match = /try again(?: at| after)?\s+([^.,;]+)/i.exec(text);
+  const parsed = match?.[1] !== void 0 ? Date.parse(match[1].trim()) : NaN;
+  const resetsAt = Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+  return { resetsAt, retryAfterMs: resetsAt === null ? 6e4 : null };
+}
 function extractCopilotToolAttempt(event) {
   const type = typeof event.type === 'string' ? event.type : '';
   if (!/tool/i.test(type)) return null;

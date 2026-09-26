@@ -191,17 +191,6 @@ export function SkillsPage() {
     queryKey: ['skills', projectCode, deferredSearch],
     queryFn: () => api.listSkills({ search: deferredSearch || undefined }),
   });
-  const scanQ = useQuery({
-    queryKey: ['skills-scan-latest', projectCode],
-    queryFn: () => api.latestSkillScan(),
-    refetchInterval: 2000,
-  });
-  const rescan = useMutation({
-    mutationFn: () => api.scanSkills('manual'),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['skills-scan-latest', projectCode] });
-    },
-  });
 
   const onSseEvent = useCallback(
     (e: SkillScanEvent) => {
@@ -214,7 +203,22 @@ export function SkillsPage() {
     },
     [qc, projectCode],
   );
-  useSkillScanEvents(projectCode, onSseEvent);
+  const { connected: sseConnected } = useSkillScanEvents(projectCode, onSseEvent);
+
+  const scanQ = useQuery({
+    queryKey: ['skills-scan-latest', projectCode],
+    queryFn: () => api.latestSkillScan(),
+    // SSE above streams scan lifecycle events and invalidates this query
+    // directly — poll only as a fallback while SSE isn't connected, instead
+    // of always polling every 2s.
+    refetchInterval: sseConnected ? false : 2000,
+  });
+  const rescan = useMutation({
+    mutationFn: () => api.scanSkills('manual'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['skills-scan-latest', projectCode] });
+    },
+  });
 
   const isScanning = scanQ.data?.status === 'running' || scanQ.data?.status === 'queued';
   const skills = skillsQ.data?.skills ?? [];

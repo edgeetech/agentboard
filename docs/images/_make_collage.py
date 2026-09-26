@@ -1,8 +1,8 @@
 """Build two collage images for the README.
 
-collage-tour.png  : 3x3 grid of all 9 product screenshots (board, task,
-                    runs, comments, roles, skills, themes, sessions list,
-                    session detail). Acts as the single visual tour.
+collage-tour.png  : 3x3 grid of 9 product screenshots (board, task runs,
+                    comments, sign-in & billing, personas, skills, themes,
+                    sessions list, session detail). Acts as the single visual tour.
 collage-hero.png  : 2x1 side-by-side (active board + task detail) — the
                     one-shot "what is this" image.
 
@@ -54,9 +54,9 @@ def grid(images: list[Image.Image], cols: int, cell_w: int, cell_h: int) -> Imag
 def main() -> None:
     tour_files = [
         "02-board-active.png",
-        "03-new-task.png",
         "04-task-detail-runs.png",
         "05-task-comments.png",
+        "11-project-sign-in.png",
         "06-roles.png",
         "07-skills.png",
         "08-themes.png",
