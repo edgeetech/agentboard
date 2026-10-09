@@ -247,5 +247,5 @@ console.log(changed > 0 ? `done — ${changed} file(s) modified.` : "done — no
 console.log("");
 console.log("Next:");
 console.log("  • Restart Copilot CLI so it re-reads ~/.copilot/mcp-config.json.");
-console.log("  • Boot the agentboard server once: node --experimental-strip-types plugins/claude-code/bin/ensure-server.ts");
+console.log("  • Boot the agentboard server once: node --experimental-strip-types core/bin/agentboard.ts start");
 console.log("  • In Copilot CLI, /mcp should now list `agentboard` tools.");

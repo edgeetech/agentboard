@@ -78,7 +78,8 @@ import { startTrackerPoller } from './src/tracker-poller.ts';
 
 const SERVER_BOOT_ID = randomUUID();
 const UI_DIST = new URL('./ui/dist/', import.meta.url);
-const PLUGIN_VERSION = process.env.AGENTBOARD_PLUGIN_VERSION ?? '0.1.0';
+// The runtime reports its own version; host plugins no longer stamp theirs.
+const PLUGIN_VERSION = runtimeVersion();
 
 const startedAt = Date.now();
 
@@ -311,6 +312,16 @@ function parseArgs(): ParsedArgs {
     if (argv[i] === '--server-id') out.serverId = argv[++i];
   }
   return out;
+}
+
+function runtimeVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version?: unknown };
+    if (typeof pkg.version === 'string') return pkg.version;
+  } catch {
+    /* fall through */
+  }
+  return '0.0.0';
 }
 
 function getOrCreateServerToken(): string {

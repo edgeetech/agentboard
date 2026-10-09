@@ -1,289 +1,123 @@
 #!/usr/bin/env node
-// Boot or reuse the agent-board core server. Called by:
-//   - SessionStart hook (silent)
-//   - /agent-board open skill (prints URL)
+// Host-side launcher. Finds the AgentBoard runtime (installing it once if
+// missing) and forwards to its `agentboard` CLI. The runtime is not part of
+// this plugin: plugin updates never restart or replace the server.
 //
-// Algo:
-// 1. Acquire server.lock (proper-lockfile-style best-effort).
-// 2. If config.port exists AND /alive returns matching server_id AND plugin_version matches → reuse.
-// 3. Else spawn detached `node server.ts`; wait for READY line; write config; return port.
+// This file is shared verbatim by every host plugin (claude-code, codex);
+// plugins/hosts/test keeps the copies identical.
+//
+// Usage: ensure-server.ts [start|stop|restart|status|open|update|path] [--silent]
+//   With no command it runs `start`. --silent (SessionStart hooks) returns at
+//   once and does any slow first-time install/start in a detached process.
+//
+// Runtime lookup order:
+//   1. AGENTBOARD_RUNTIME — a runtime dir (contains bin/agentboard.ts) or a repo checkout (contains core/)
+//   2. the repo checkout this plugin lives in (development; AGENTBOARD_SKIP_CHECKOUT=1 ignores it)
+//   3. <data dir>/runtime/core — the managed install, cloned on first use
 
 import { spawn, spawnSync } from 'node:child_process';
-import type { SpawnOptions, SpawnSyncOptions } from 'node:child_process';
-import { openSync, writeFileSync, readFileSync, existsSync, mkdirSync, closeSync, unlinkSync } from 'node:fs';
-import { homedir, platform } from 'node:os';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setTimeout as delay } from 'node:timers/promises';
 
-const IS_WINDOWS: boolean = platform() === 'win32';
-const DATA_DIR: string = process.env['AGENTBOARD_DATA_DIR'] ?? join(homedir(), '.agentboard');
-const CFG_PATH: string = join(DATA_DIR, 'config.json');
-const LOCK_PATH: string = join(DATA_DIR, 'server.lock');
+const REPO_URL = process.env['AGENTBOARD_RUNTIME_REPO'] ?? 'https://github.com/edgeetech/agentboard.git';
+const DATA_DIR = process.env['AGENTBOARD_DATA_DIR'] ?? join(homedir(), '.agentboard');
+const CFG_PATH = join(DATA_DIR, 'config.json');
+const MANAGED_REPO = join(DATA_DIR, 'runtime');
+const PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const CLI_REL = join('bin', 'agentboard.ts');
 
-const SELF_PLUGIN_ROOT: string = resolve(fileURLToPath(import.meta.url), '..', '..');
-// Sibling plugins (codex, future copilot) share this server. They invoke this
-// bin with AGENTBOARD_PLUGIN_ROOT set to their own plugin root so /alive
-// reports their version, and optionally AGENTBOARD_CORE_ROOT if the
-// agent-board-core directory lives outside the invoking plugin root.
-const PLUGIN_ROOT: string = process.env['AGENTBOARD_PLUGIN_ROOT'] ?? SELF_PLUGIN_ROOT;
-const CORE_ROOT: string = process.env['AGENTBOARD_CORE_ROOT']
-  ?? resolve(SELF_PLUGIN_ROOT, 'agent-board-core');
-const SERVER_JS: string = join(CORE_ROOT, 'server.ts');
-const PLUGIN_JSON: Record<string, unknown> | null =
-  readJsonSafe(join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json'))
-  ?? readJsonSafe(join(PLUGIN_ROOT, '.codex-plugin', 'plugin.json'));
-const PLUGIN_VERSION: string = (typeof PLUGIN_JSON?.['version'] === 'string' ? PLUGIN_JSON['version'] : null) ?? '0.1.0';
+const argv = process.argv.slice(2);
+const silent = argv.includes('--silent');
+const command = argv.find((a) => !a.startsWith('-')) ?? 'start';
+const BOOTSTRAP_CHILD = process.env['AGENTBOARD_BOOTSTRAP_CHILD'] === '1';
 
-const silent: boolean = process.argv.includes('--silent');
-// Set by spawnBootstrapDetached() on the child it launches, so that child
-// always takes the full lock+install+spawn path regardless of --silent.
-const BOOTSTRAP_CHILD: boolean = process.env['AGENTBOARD_BOOTSTRAP_CHILD'] === '1';
+process.exitCode = await main();
 
-await main();
-
-interface AliveResponse {
-  ok: boolean;
-  server_id: string;
-  plugin_version: string;
-}
-
-interface ServerConfig {
-  port?: number;
-  pid?: number;
-  server_id?: string;
-  plugin_version?: string;
-  [key: string]: unknown;
-}
-
-interface ReadyOk { ok: true; port: number }
-interface ReadyErr { ok: false; err: string }
-type ReadyResult = ReadyOk | ReadyErr;
-
-async function main(): Promise<void> {
-  mkdirSync(DATA_DIR, { recursive: true });
-
-  if (!BOOTSTRAP_CHILD) {
-    // Lock-free fast path for the common case (server already running).
-    // Must never block the SessionStart hook — every session start pays
-    // this cost, so it stays a single ≤1.5s probe with no lock churn.
-    const cfg = (readJsonSafe(CFG_PATH) as ServerConfig | null) ?? {};
-    if (cfg.port) {
-      const alive = await probeAlive(cfg.port, 1500);
-      if (alive && alive.server_id === cfg.server_id && alive.plugin_version === PLUGIN_VERSION) {
-        if (!silent) console.log(`agentboard: reusing server http://127.0.0.1:${cfg.port}`);
-        clearBootError();
-        return;
-      }
-    }
-    if (silent) {
-      // First boot (or a dead/stale server) needs ensureCoreDeps() (~20s
-      // npm install on first run) + spawn + READY wait (~8s). Doing that
-      // synchronously here would block Claude Code's SessionStart hook and
-      // can trip its hook timeout on a slow first install — that was the
-      // "first session errors out" bug. Hand off to a detached background
-      // process instead and return immediately; the MCP proxy re-reads
-      // config.json per call and retries with backoff until it's ready.
-      spawnBootstrapDetached();
-      return;
-    }
-    // Explicit /agentboard:open with no reusable server: fall through to
-    // the synchronous path below — the user is actively waiting for a URL.
+async function main(): Promise<number> {
+  if (command === 'start' && (await serverAlive())) {
+    if (!silent) console.log(`agentboard: reusing server http://127.0.0.1:${String(readConfig().port)}`);
+    return 0;
   }
-
-  const lock = await tryLock();
-  try {
-    const cfg: ServerConfig = (readJsonSafe(CFG_PATH) as ServerConfig | null) ?? {};
-    if (cfg.port) {
-      const alive = await probeAlive(cfg.port, 1500);
-      if (alive && alive.server_id === cfg.server_id && alive.plugin_version === PLUGIN_VERSION) {
-        if (!silent) console.log(`agentboard: reusing server http://127.0.0.1:${cfg.port}`);
-        clearBootError();
-        return;
-      }
-      if (alive && alive.plugin_version !== PLUGIN_VERSION) {
-        if (!silent) console.log(`agentboard: plugin version changed (${alive.plugin_version} → ${PLUGIN_VERSION}); respawning`);
-        // Best-effort stop
-        try { if (cfg.pid) process.kill(cfg.pid, 'SIGTERM'); } catch { /* best-effort */ }
-        await delay(500);
-      }
-    }
-    await spawnServer();
-  } finally {
-    if (lock) releaseLock(lock);
-  }
-}
-
-// Re-invokes this same script as a detached child with AGENTBOARD_BOOTSTRAP_CHILD=1,
-// so the child takes the full lock+install+spawn path in the background while
-// this (hook) process returns immediately.
-function spawnBootstrapDetached(): void {
-  try {
-    const child = spawn(process.execPath, [
-      '--experimental-strip-types', '--no-warnings', fileURLToPath(import.meta.url), '--silent',
-    ], {
+  // A SessionStart hook must never wait on a clone, an npm install or a cold
+  // start: hand the work to a detached copy of this script and return. The
+  // MCP proxy re-reads config.json per call and retries until it is up.
+  if (silent && !BOOTSTRAP_CHILD) {
+    spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', fileURLToPath(import.meta.url), ...argv], {
       detached: true,
       stdio: 'ignore',
       env: { ...process.env, AGENTBOARD_BOOTSTRAP_CHILD: '1' },
       windowsHide: true,
-    });
-    child.unref();
-  } catch (e) {
-    // Best-effort — the next SessionStart hook or MCP call retries.
-    writeBootError(`failed to launch background bootstrap: ${(e as Error)?.message ?? String(e)}`);
+    }).unref();
+    return 0;
   }
+
+  const runtime = locateRuntime() ?? installRuntime();
+  if (runtime === null) return 6;
+  const passthrough = argv.filter((a) => a !== '--silent' && a !== command);
+  const args = ['--experimental-strip-types', '--no-warnings', join(runtime, CLI_REL), command, ...passthrough];
+  if (silent && command === 'start') args.push('--quiet');
+  const res = spawnSync(process.execPath, args, { stdio: silent ? 'ignore' : 'inherit' });
+  return res.status ?? 1;
 }
 
-async function spawnServer(): Promise<void> {
-  if (!existsSync(SERVER_JS)) {
-    const msg = `core server not found at ${SERVER_JS}`;
-    writeBootError(msg);
-    console.error(`agentboard: ${msg}`);
-    process.exit(2);
-  }
-  ensureCoreDeps();
-  // --experimental-sqlite: Node 22 gate for node:sqlite (built-in; no better-sqlite3 install needed).
-  //                        Ignored by Node ≥24 (stable there).
-  const spawnOpts: SpawnOptions = {
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, AGENTBOARD_PLUGIN_VERSION: PLUGIN_VERSION },
-    windowsHide: true,
-    cwd: CORE_ROOT,
-  };
-  const child = spawn(process.execPath, ['--experimental-sqlite', '--no-warnings', SERVER_JS], spawnOpts);
+function locateRuntime(): string | null {
+  const fromEnv = process.env['AGENTBOARD_RUNTIME'];
+  const candidates: string[] = [];
+  if (fromEnv) candidates.push(fromEnv, join(fromEnv, 'core'));
+  // Development: plugins/<host>/ inside a checkout that has core/ beside it.
+  const repo = resolve(PLUGIN_ROOT, '..', '..');
+  const useCheckout = process.env['AGENTBOARD_SKIP_CHECKOUT'] !== '1';
+  if (useCheckout && existsSync(join(repo, '.claude-plugin', 'marketplace.json'))) candidates.push(join(repo, 'core'));
+  candidates.push(join(MANAGED_REPO, 'core'));
+  return candidates.find((dir) => existsSync(join(dir, CLI_REL))) ?? null;
+}
 
-  child.unref();
-
-  // Wait for READY line on stdout. Cold start (first --experimental-strip-types
-  // parse of the whole src/ tree, node:sqlite init) can legitimately take
-  // longer than a few seconds, especially on Windows under disk/AV load —
-  // 8s produced false "timeout" failures against a server that came up fine
-  // a moment later. 20s gives real cold starts headroom; a genuinely dead
-  // child still resolves immediately via the 'exit' handler below.
-  const READY_TIMEOUT_MS = 20000;
-  const ready = await new Promise<ReadyResult>((resolveReady) => {
-    let buf = '';
-    const t = setTimeout(() => resolveReady({ ok: false, err: 'timeout' }), READY_TIMEOUT_MS);
-    (child.stdout as NodeJS.ReadableStream).on('data', (d: Buffer) => {
-      buf += d.toString();
-      const m = /READY http:\/\/127\.0\.0\.1:(\d+)/.exec(buf);
-      if (m) { clearTimeout(t); resolveReady({ ok: true, port: parseInt(m[1], 10) }); }
-    });
-    (child.stderr as NodeJS.ReadableStream).on('data', () => { /* drain stderr */ });
-    child.on('exit', (c: number | null) => { clearTimeout(t); resolveReady({ ok: false, err: `exit ${c}` }); });
+function installRuntime(): string | null {
+  if (!silent) console.log(`agentboard: installing runtime into ${MANAGED_REPO} (first run)...`);
+  mkdirSync(DATA_DIR, { recursive: true });
+  const res = spawnSync('git', ['clone', '--depth', '1', REPO_URL, MANAGED_REPO], {
+    stdio: silent ? 'ignore' : 'inherit',
   });
-
-  if (!ready.ok) {
-    // A 'timeout' (as opposed to a real 'exit <code>') only means we missed
-    // the stdout line — the child writes its own config.json (port/server_id)
-    // in the same tick it prints READY, so check that directly before
-    // declaring failure.
-    if (ready.err === 'timeout') {
-      const cfg = (readJsonSafe(CFG_PATH) as ServerConfig | null) ?? {};
-      const alive = cfg.port ? await probeAlive(cfg.port, 2000) : null;
-      if (alive && alive.server_id === cfg.server_id) {
-        clearBootError();
-        if (!silent) console.log(`agentboard: started http://127.0.0.1:${cfg.port} (READY line missed, confirmed via /alive)`);
-        return;
-      }
-    }
-    writeBootError(`server failed to start: ${ready.err}`);
-    console.error('agentboard: server failed to start:', ready.err);
-    process.exit(3);
-  }
-  clearBootError();
-  if (!silent) console.log(`agentboard: started http://127.0.0.1:${ready.port}`);
+  const runtime = join(MANAGED_REPO, 'core');
+  if (res.status === 0 && existsSync(join(runtime, CLI_REL))) return runtime;
+  const msg =
+    res.error !== undefined
+      ? `git is required to install the AgentBoard runtime (${res.error.message})`
+      : `could not clone ${REPO_URL} into ${MANAGED_REPO} (exit ${String(res.status)})`;
+  writeBootError(`${msg}. Or set AGENTBOARD_RUNTIME to an existing checkout.`);
+  console.error(`agentboard: ${msg}. Or set AGENTBOARD_RUNTIME to an existing checkout.`);
+  return null;
 }
 
-async function probeAlive(port: number, timeoutMs: number): Promise<AliveResponse | null> {
+async function serverAlive(): Promise<boolean> {
+  const cfg = readConfig();
+  if (typeof cfg.port !== 'number') return false;
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    const res = await fetch(`http://127.0.0.1:${port}/alive`, { signal: ctrl.signal });
-    clearTimeout(t);
-    if (!res.ok) return null;
-    return await (res.json() as Promise<AliveResponse>);
-  } catch { return null; }
-}
-
-// Best-effort file lock. Writes PID; on second run if file exists and PID is dead, remove and retry.
-async function tryLock(): Promise<string | null> {
-  for (let attempt = 0; attempt < 10; attempt++) {
-    try {
-      const fd = openSync(LOCK_PATH, 'wx');
-      writeFileSync(LOCK_PATH, String(process.pid));
-      closeSync(fd);
-      return LOCK_PATH;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === 'EEXIST') {
-        const otherPid = parseInt(readFileSafe(LOCK_PATH), 10);
-        if (otherPid && !processAlive(otherPid)) { try { unlinkSync(LOCK_PATH); } catch { /* best-effort */ } continue; }
-        await delay(200);
-        continue;
-      }
-      throw e;
-    }
-  }
-  return null; // proceed without lock — another instance will reuse our spawn
-}
-
-function releaseLock(p: string): void { try { unlinkSync(p); } catch { /* best-effort */ } }
-
-// Plugin marketplace cache copies the source tree without running `npm install`,
-// so `agent-board-core/node_modules` may be missing on first run after install or
-// upgrade. Install once, in-place, before the server is spawned.
-function ensureCoreDeps(): void {
-  const nodeModules = join(CORE_ROOT, 'node_modules');
-  const pkgJson = join(CORE_ROOT, 'package.json');
-  if (existsSync(nodeModules) || !existsSync(pkgJson)) return;
-
-  const useBun = which('bun');
-  const cmd = useBun ? 'bun' : (IS_WINDOWS ? 'npm.cmd' : 'npm');
-  const args = useBun ? ['install', '--silent'] : ['install', '--no-audit', '--no-fund', '--silent'];
-
-  if (!silent) console.log(`agentboard: installing core deps (first run, ~20s) via ${useBun ? 'bun' : 'npm'}...`);
-  const syncOpts: SpawnSyncOptions = { cwd: CORE_ROOT, stdio: silent ? 'ignore' : 'inherit', shell: IS_WINDOWS };
-  const res = spawnSync(cmd, args, syncOpts);
-  if (res.status !== 0) {
-    const msg = `failed to install core deps (exit ${res.status}). Run: cd "${CORE_ROOT}" && ${useBun ? 'bun' : 'npm'} install`;
-    writeBootError(msg);
-    console.error(`agentboard: ${msg}`);
-    process.exit(4);
+    const res = await fetch(`http://127.0.0.1:${String(cfg.port)}/alive`, { signal: AbortSignal.timeout(1500) });
+    const body = (await res.json()) as { server_id?: unknown };
+    return res.ok && body.server_id === cfg.server_id;
+  } catch {
+    return false;
   }
 }
 
-// Best-effort merge-write so /agentboard:doctor and the MCP proxy can surface
-// *why* the server never came up, instead of a bare "not running" that looks
-// identical to "still booting".
+function readConfig(): { port?: unknown; server_id?: unknown; [key: string]: unknown } {
+  try {
+    return JSON.parse(readFileSync(CFG_PATH, 'utf8')) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 function writeBootError(msg: string): void {
   try {
-    const cur = (readJsonSafe(CFG_PATH) as ServerConfig | null) ?? {};
-    writeFileSync(CFG_PATH, JSON.stringify({ ...cur, boot_error: msg, boot_error_at: new Date().toISOString() }, null, 2));
-  } catch { /* best-effort */ }
-}
-
-function clearBootError(): void {
-  try {
-    const cur = (readJsonSafe(CFG_PATH) as ServerConfig | null) ?? {};
-    if (cur.boot_error === undefined) return;
-    delete cur.boot_error;
-    delete cur.boot_error_at;
-    writeFileSync(CFG_PATH, JSON.stringify(cur, null, 2));
-  } catch { /* best-effort */ }
-}
-
-function which(bin: string): boolean {
-  const exts: string[] = IS_WINDOWS ? ['.cmd', '.exe', '.bat', ''] : [''];
-  const paths: string[] = (process.env['PATH'] ?? '').split(IS_WINDOWS ? ';' : ':');
-  for (const p of paths) {
-    for (const ext of exts) {
-      try { if (existsSync(join(p, bin + ext))) return true; } catch { /* skip */ }
-    }
+    writeFileSync(
+      CFG_PATH,
+      JSON.stringify({ ...readConfig(), boot_error: msg, boot_error_at: new Date().toISOString() }, null, 2),
+    );
+  } catch {
+    /* best-effort */
   }
-  return false;
 }
-
-function processAlive(pid: number): boolean { try { process.kill(pid, 0); return true; } catch { return false; } }
-function readJsonSafe(p: string): Record<string, unknown> | null { try { return JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>; } catch { return null; } }
-function readFileSafe(p: string): string { try { return readFileSync(p, 'utf8'); } catch { return ''; } }

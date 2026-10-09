@@ -9,7 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`agentboard` is a **Claude Code plugin** that runs a local kanban board driven by headless `claude -p` subprocesses. A Node.js server (`agent-board-core/`) holds per-project SQLite DBs, spawns headless runs with role-specific prompts (PM / Worker / Reviewer), and serves a React UI. The plugin itself (`plugins/claude-code/`) is a thin wrapper that boots the server and exposes read/approve tools over stdio MCP for the user's interactive Claude session.
+`agentboard` is a **standalone local runtime** (`core/`) that runs a kanban board driven by headless agent runs. The Node.js server holds per-project SQLite DBs, spawns headless runs with role-specific prompts (PM / Worker / Reviewer), and serves a React UI. It is started and managed by its own CLI, `core/bin/agentboard.ts` (`start | stop | restart | status | open | update | path`), backed by `core/src/launcher.ts`.
+
+Host plugins are thin adapters and do **not** contain the runtime. `plugins/claude-code/` (and `plugins/codex/`, which ships an identical `bin/ensure-server.ts`) finds the runtime — `AGENTBOARD_RUNTIME`, else the surrounding repo checkout, else `~/.agentboard/runtime` (cloned on first use) — and forwards to the CLI. The plugin adds stdio MCP read/approve tools, session hooks and `/agentboard:*` skills for the interactive Claude session. The server is detached: it outlives host sessions, and plugin updates never restart it.
 
 **AgentBoard is now multi-agent.** Claude Code is the primary executor, but [Copilot CLI is also supported](AGENTS.md#copilot-cli-setup) as of v1.1. This document covers Claude Code plugin implementation details. For executor-agnostic workflows and setup, see [AGENTS.md](AGENTS.md).
 
@@ -18,9 +20,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 All core-dev commands run from `core/`:
 
 ```bash
-# Start server standalone (usually done via /agentboard:open, not directly).
+# Run the server in the foreground (normally `agentboard start` detaches it).
 # TypeScript runs directly via Node 22 --experimental-strip-types — no JS emit.
-node --experimental-sqlite --experimental-strip-types --no-warnings server.ts
+node bin/agentboard.ts start --foreground
 
 # Build pipeline (typecheck + UI bundle; UI dist/ IS committed)
 npm run build           # = typecheck && build:ui
@@ -42,8 +44,12 @@ npm run test:watch      # vitest watch
 From the plugin directory:
 
 ```bash
-# Boot/reuse server (idempotent; reads config.json, respawns on version mismatch)
-node plugins/claude-code/bin/ensure-server.ts
+# Runtime CLI (from the repo root). start is idempotent: it reuses a running
+# server of the same runtime version and replaces one of a different version.
+node core/bin/agentboard.ts start|stop|restart|status|open|update|path
+
+# What host hooks/skills call: locate (or install) the runtime, then forward
+node plugins/claude-code/bin/ensure-server.ts [command] [--silent]
 
 # From inside Claude Code:
 /agentboard:open     # boot server + open UI
@@ -203,12 +209,12 @@ Manual dispatch also flips `task.assignee_role` to the dispatched role and adjus
 
 ## Modification rules
 
-- **UI `dist/` IS committed.** Rebuild via `cd agent-board-core/ui && npm run build` after UI changes. `.gitattributes` marks it `linguist-generated` so GitHub collapses it in PR diffs. Users who install the plugin run `npm install` once on first boot to fetch server runtime deps; the UI bundle itself ships pre-built.
+- **UI `dist/` IS committed.** Rebuild via `cd core/ui && npm run build` after UI changes. `.gitattributes` marks it `linguist-generated` so GitHub collapses it in PR diffs. Users who install the plugin run `npm install` once on first boot to fetch server runtime deps; the UI bundle itself ships pre-built.
 - **TypeScript runs directly — no JS emit.** Server `.ts` files execute under Node 22 `--experimental-strip-types`. `tsc --noEmit` is the typecheck step. UI is bundled by Vite to `ui/dist/`.
 - **All new scripts are TypeScript (`.ts` / `.tsx`).** This repo migrated off `.mjs` for server, plugin, hook, and installer code; new files must follow suit. The remaining `.mjs` files in `plugins/claude-code/hooks/session/` are legacy bundles and pre-port hook entry-points — leave them alone unless rewriting them, but do not introduce new `.mjs` files. Plugin hook commands and skill instructions launch `.ts` scripts via `node --experimental-strip-types --no-warnings <path>.ts`.
-- **Data dir is outside the repo.** `~/.agentboard/` on Unix, `%USERPROFILE%\.agentboard` on Windows. Never write project data into `agent-board-core/` or `plugins/`.
+- **Data dir is outside the repo.** `~/.agentboard/` on Unix, `%USERPROFILE%\.agentboard` on Windows. Never write project data into `core/` or `plugins/`.
 - **Pricing table in `src/pricing.ts`** has `PRICING_VERSION`. Bump it when Anthropic prices change, so `/agentboard reprice` can recompute historical runs.
-- **Role prompts in `agent-board-core/prompts/{pm,worker,reviewer}.md` are the product.** Treat them like code — version them, iterate against real runs. Drift-guards (postflight + required-comment checks + phase-gate) catch structural mistakes, but tone/brevity is prompt-only. Each prompt receives an "Available skills" Liquid block populated from the project's skill catalog.
+- **Role prompts in `core/prompts/{pm,worker,reviewer}.md` are the product.** Treat them like code — version them, iterate against real runs. Drift-guards (postflight + required-comment checks + phase-gate) catch structural mistakes, but tone/brevity is prompt-only. Each prompt receives an "Available skills" Liquid block populated from the project's skill catalog.
 
 ## Inner phase machine (per-run FSM)
 

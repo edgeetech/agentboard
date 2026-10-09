@@ -93,23 +93,29 @@ for (const [path, reason] of [
 
 mustContain(
   claudeEnsure,
-  "AGENTBOARD_PLUGIN_ROOT",
-  "sibling hosts report their own version",
+  "AGENTBOARD_RUNTIME",
+  "hosts can point at an existing runtime",
 );
 mustContain(
   claudeEnsure,
-  "AGENTBOARD_CORE_ROOT",
-  "sibling hosts can point at shared core",
+  "installRuntime",
+  "hosts install the runtime on first use",
 );
 mustContain(
   claudeEnsure,
+  "agentboard.ts",
+  "hosts forward to the runtime CLI instead of spawning server.ts",
+);
+mustExist(join(coreRoot, "bin", "agentboard.ts"), "runtime CLI");
+mustContain(
+  join(coreRoot, "src", "launcher.ts"),
   "probeAlive",
-  "launcher can reuse an existing server",
+  "runtime CLI can reuse an existing server",
 );
 mustContain(
-  claudeEnsure,
+  join(coreRoot, "src", "launcher.ts"),
   "spawnServer",
-  "launcher can start the shared server",
+  "runtime CLI can start the detached server",
 );
 mustContain(claudeEnsure, "/alive", "launcher checks runtime identity");
 mustContain(
@@ -144,21 +150,11 @@ mustContain(
   "legacy Copilot shim resolves inside the shipped plugin",
 );
 
-mustContain(
-  codexEnsure,
-  "claude-code",
-  "Codex delegates to the shared Claude Code runtime",
-);
-mustContain(
-  codexEnsure,
-  "AGENTBOARD_PLUGIN_ROOT",
-  "Codex reports its plugin root",
-);
-mustContain(
-  codexEnsure,
-  "AGENTBOARD_CORE_ROOT",
-  "Codex points at shared core root",
-);
+if (read(codexEnsure) !== read(claudeEnsure)) {
+  failures.push(
+    "plugins/codex/bin/ensure-server.ts must be identical to plugins/claude-code/bin/ensure-server.ts",
+  );
+}
 mustContain(
   codexEnsure,
   "--experimental-strip-types",
@@ -172,8 +168,8 @@ mustContain(
 );
 mustContain(
   copilotInstall,
-  "plugins/claude-code/bin/ensure-server.ts",
-  "Copilot documents shared server bootstrap",
+  "core/bin/agentboard.ts start",
+  "Copilot documents how to start the runtime",
 );
 
 const claudeHookCommands = hookCommands(

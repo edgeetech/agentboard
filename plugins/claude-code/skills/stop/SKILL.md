@@ -1,11 +1,9 @@
 ---
 name: stop
-description: Stop the agentboard core server. Children in-flight are left to finish (they heartbeat independently); reaper cleans up if they orphan.
+description: Stop the AgentBoard server. Children in-flight are left to finish (they heartbeat independently); the reaper cleans up if they orphan.
 ---
 
-1. Read `~/.agentboard/config.json` and get `pid`.
-2. If the pid is alive, send `SIGTERM`. Wait 2s. If still alive, `SIGKILL`.
-3. Remove `port` and `pid` from `config.json` (keep `token`, `active_project_code`, `server_id`, `plugin_version`).
-4. Report: server stopped, or "no server running" if pid was dead.
+1. Run `node --experimental-strip-types --no-warnings "${CLAUDE_PLUGIN_ROOT}/bin/ensure-server.ts" stop`.
+2. Report what it printed: `stopped`, or `server is not running`.
 
-Do not delete DB files, logs, or trash.
+The server is shared by every host (Claude Code, Codex, Copilot) and the browser UI — stopping it stops it for all of them. Do not delete DB files, logs, or trash.

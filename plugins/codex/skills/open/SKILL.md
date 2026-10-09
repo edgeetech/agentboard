@@ -1,14 +1,10 @@
 ---
 name: open
-description: Launch the agentboard UI from Codex. Boots (or reuses) the local server and opens the kanban board in the default browser.
+description: Launch the agentboard UI. Starts (or reuses) the local AgentBoard runtime, prints the URL, and opens the board in the default browser.
 ---
 
-1. Run `node --experimental-strip-types --no-warnings "${CODEX_PLUGIN_ROOT}/bin/ensure-server.ts"` to boot or reuse the agentboard core server. The script prints the local URL on success.
-2. Read `~/.agentboard/config.json` (or `%USERPROFILE%\.agentboard\config.json` on Windows) to discover the port the server is bound to.
-3. Open `http://127.0.0.1:<port>/` in the default browser:
-   - Windows: `cmd /c start "" http://127.0.0.1:<port>/`
-   - macOS:   `open http://127.0.0.1:<port>/`
-   - Linux:   `xdg-open http://127.0.0.1:<port>/`
-4. Surface the URL to the user; the UI handles project selection / setup on first launch.
+1. Run `node --experimental-strip-types --no-warnings "${CODEX_PLUGIN_ROOT}/bin/ensure-server.ts" open`. It installs the runtime on first use (into `~/.agentboard/runtime`), starts or reuses the server, prints the URL and opens it in the default browser.
+2. Tell the user the URL so they can bookmark it. If no active project exists, the UI shows the Setup Wizard.
+3. If it fails, run `node --experimental-strip-types --no-warnings "${CODEX_PLUGIN_ROOT}/bin/ensure-server.ts" status` and report the `last start failed` reason it prints.
 
-Never print the Bearer token. The UI reads it from an inlined `<script>` on the served HTML.
+Do not print the Bearer token — the UI reads it from an inlined `<script>` on `index.html`.

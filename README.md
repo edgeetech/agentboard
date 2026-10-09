@@ -75,9 +75,9 @@
 - **The pricing table is a hardcoded snapshot, last sourced `2026-09-20`** (`PRICING_TABLE_DATE` in `src/pricing.ts`)**.** Costs shown are
   estimates against list prices and will drift as providers change pricing. An unknown model
   id is reported as uncosted, not as `$0`.
-- **First run performs `npm install`.** The marketplace ships source only; the first
-  `/agentboard:open` after install or upgrade runs `npm install` (or `bun install`) inside the
-  cached `agent-board-core/` directory, which needs network access and takes ~20 s.
+- **First run clones and installs the runtime.** Host plugins do not contain the runtime. The
+  first `/agentboard:open` clones it into `~/.agentboard/runtime` with `git` and runs
+  `npm install` (or `bun install`) there. This needs network access and takes ~30 s once.
 - **The UI end-to-end suite is not in CI.** It is a documented manual step — see
   [Manual checks](#-manual-checks).
 
@@ -85,7 +85,15 @@
 
 ## 🚀 Which setup is for you?
 
-AgentBoard works as a **Claude Code plugin** or **standalone server** supporting Claude Code, Copilot CLI, and future agents.
+AgentBoard is a **standalone local runtime** (server, executor, UI) with an `agentboard` CLI. Host plugins for Claude Code, Codex and Copilot are thin adapters: they find the runtime, start it if needed, and add MCP tools, hooks and slash commands. The server runs on its own, so it keeps going when a host session ends, and plugin updates never restart it.
+
+```
+core/                 the runtime: server.ts, executor, DB schema, prompts, packaged UI
+core/bin/agentboard.ts   CLI: start | stop | restart | status | open | update | path
+plugins/claude-code/  Claude Code adapter (stdio MCP, hooks, /agentboard:* skills)
+plugins/codex/        Codex adapter
+plugins/copilot/      Copilot CLI installer
+```
 
 ### 🔷 Claude Code User? → Claude Code Plugin
 
@@ -98,21 +106,25 @@ Install the plugin inside any Claude Code session:
 /agentboard:open      # boots local server + opens UI in your browser
 ```
 
-**Requires:** Node ≥ 22 *or* Bun ≥ 1.x · `npm` (or `bun`) on `PATH` · `claude` CLI ≥ 2.0.0 · a Claude subscription login (`claude /login`) or `ANTHROPIC_API_KEY` · Windows / macOS / Linux.
+**Requires:** Node ≥ 22.18 · `git` and `npm` (or `bun`) on `PATH` · `claude` CLI ≥ 2.0.0 · a Claude subscription login (`claude /login`) or `ANTHROPIC_API_KEY` · Windows / macOS / Linux.
 
-> **First run installs core deps automatically.** The plugin marketplace ships only source — on the first `/agentboard:open` (or session-start hook) after install/upgrade, AgentBoard runs `npm install` (prefers `bun install` if present) inside the cached `agent-board-core/` directory. Expect a one-time ~20 s pause. If install fails (no `npm`/`bun` on `PATH`, no network), the server exits with code 4 and prints the manual command to run.
+> **First run installs the runtime.** On the first `/agentboard:open` (or session-start hook) the plugin clones the runtime into `~/.agentboard/runtime` and installs its dependencies. Expect a one-time ~30 s pause. To use a checkout you already have, set `AGENTBOARD_RUNTIME=/path/to/agentboard` instead. If the install fails, `/agentboard:doctor` shows the reason.
+>
+> **Updating:** `/agentboard:update` pulls the latest runtime and restarts it. Plugin updates (`/plugin install …`) are only needed when MCP tools, hooks or skills change.
 
 ### 🔶 Copilot CLI User? → See [AGENTS.md § Copilot CLI Setup](AGENTS.md#copilot-cli-setup)
 
-Or run standalone server:
+### 🖥️ No host at all? → Standalone runtime
 
 ```bash
-git clone https://github.com/edgeetech/agentboard.git
-cd core
+git clone https://github.com/edgeetech/agentboard.git ~/.agentboard/runtime
+cd ~/.agentboard/runtime/core
 npm install
-node --experimental-sqlite --experimental-strip-types --no-warnings server.ts
-# Open http://localhost:3000
+npm link                  # optional: puts `agentboard` on PATH
+agentboard open           # or: node bin/agentboard.ts open
 ```
+
+`agentboard start` runs the server in the background and reuses it if it is already up; `agentboard status`, `stop`, `restart` and `update` do what they say. Host plugins installed later find this same runtime.
 
 ### 🤔 Not sure? → See [AGENTS.md § 2. Supported Agents](AGENTS.md#2-supported-agents--status-table)
 
@@ -274,6 +286,7 @@ Outside the repo, untouched by plugin upgrades:
   trash/<code>-<timestamp>.db   deleted projects (manual restore possible)
   config.json                   port, pid, token, server_id, active project
   server.lock                   single-instance lock
+  runtime/                      managed runtime checkout (installed by host plugins on first use)
 ```
 
 **Per-project DB tables (schema v9):**
@@ -292,7 +305,7 @@ Outside the repo, untouched by plugin upgrades:
 | `tracker_issue` | Synced issues from external trackers |
 | `skill` | Skills discovered in `<repo>/**/.claude/skills/*` (folder + flat) |
 | `skill_scan` | Scan run history (status, started/finished, errors) |
-| `meta` | DB schema version (currently `5`) |
+| `meta` | DB schema version (currently `9`) |
 
 ---
 

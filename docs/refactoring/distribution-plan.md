@@ -4,12 +4,11 @@ Phase 1 distribution notes for moving from the current plugin-vendored runtime t
 
 ## Current Distribution
 
-- The runnable server, executor, DB schema, prompts, concerns and UI are vendored under `core`.
-- `plugins/claude-code/bin/ensure-server.ts` starts or reuses the shared local server.
-- `plugins/codex/bin/ensure-server.ts` delegates to the Claude Code plugin's `ensure-server.ts`.
-- First run installs core dependencies in place with npm or Bun if `node_modules` is missing.
-- The server serves `agent-board-core/ui/dist`.
-- Standalone launch uses `core/bin/agentboard.ts`.
+- The runnable server, executor, DB schema, prompts, concerns and packaged UI live in `core/` at the repo root.
+- `core/bin/agentboard.ts` is the only way to start, stop, inspect or update the server.
+- Host plugins (`plugins/claude-code`, `plugins/codex`) contain no runtime. Their shared `bin/ensure-server.ts` locates the runtime — `AGENTBOARD_RUNTIME`, the surrounding checkout, or the managed `~/.agentboard/runtime` clone created on first use — and forwards to the CLI.
+- `agentboard update` runs `git pull --ff-only`, reinstalls dependencies and restarts a running server. Plugin updates no longer restart the server.
+- The server serves `core/ui/dist`.
 
 ## Target Distribution
 
@@ -30,7 +29,7 @@ Host plugins should locate the shared runtime through an explicit runtime root, 
 
 ## Transitional Rules
 
-- Do not move `agent-board-core` until host startup has a tested replacement path.
+- Done: the runtime moved from `plugins/claude-code/agent-board-core` to `core/` once host startup had a tested replacement (`plugins/hosts/test/host-launcher.test.ts`, `scripts/check-host-startup.mjs`).
 - Keep at least one supported host startup path working after every phase.
 - Prefer compatibility bridge scripts over duplicated runtime code.
 - Remove bridge scripts once host packages use the new runtime root directly.
@@ -46,7 +45,7 @@ Host plugins should locate the shared runtime through an explicit runtime root, 
 
 ## Packaging Checks
 
-Before moving files out of `agent-board-core`, add checks for:
+Checks that guard the runtime/host split:
 
 - Claude Code host can start or reuse the server.
 - Codex host can start or reuse the server.

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Bump patch version in plugin.json + marketplace.json (kept in lockstep).
+// Bump patch version in plugin.json + marketplace.json + core/package.json
+// (kept in lockstep: the runtime reports its own version on /alive).
 // Idempotent across multiple commits per day — always increments patch by 1.
 //
 // Flags:
@@ -22,6 +23,7 @@ const ROOT = resolve(__dirname, '..');
 
 const PLUGIN_JSON      = resolve(ROOT, 'plugins/claude-code/.claude-plugin/plugin.json');
 const MARKETPLACE_JSON = resolve(ROOT, '.claude-plugin/marketplace.json');
+const CORE_PKG_JSON    = resolve(ROOT, 'core/package.json');
 
 // Staged-file paths that should NOT trigger a bump (docs-only, meta).
 const SKIP_BUMP_PREFIXES = [
@@ -49,6 +51,7 @@ function main() {
 
   const plugin = readJson(PLUGIN_JSON);
   const marketplace = readJson(MARKETPLACE_JSON);
+  const corePkg = readJson(CORE_PKG_JSON);
 
   const current = plugin.version;
   const next = bump(current, level);
@@ -57,6 +60,7 @@ function main() {
   plugin.version = next;
   const entry = (marketplace.plugins || []).find(p => p.name === plugin.name);
   if (entry) entry.version = next;
+  corePkg.version = next;
 
   if (dry) {
     console.log(`[bump-version] would bump ${current} → ${next}`);
@@ -64,11 +68,12 @@ function main() {
   }
   writeJson(PLUGIN_JSON, plugin);
   writeJson(MARKETPLACE_JSON, marketplace);
+  writeJson(CORE_PKG_JSON, corePkg);
   console.log(`[bump-version] ${current} → ${next}`);
 
   // Re-stage so the bump lands in this commit
   try {
-    execFileSync('git', ['add', PLUGIN_JSON, MARKETPLACE_JSON], { stdio: 'ignore' });
+    execFileSync('git', ['add', PLUGIN_JSON, MARKETPLACE_JSON, CORE_PKG_JSON], { stdio: 'ignore' });
   } catch { /* not in a repo or git unavailable; safe to ignore */ }
 }
 

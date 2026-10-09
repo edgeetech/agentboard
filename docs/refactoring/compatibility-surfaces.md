@@ -158,14 +158,15 @@ Current startup paths:
 
 Current behaviour:
 
-- Claude Code starts or reuses the shared local server.
-- Codex delegates to the Claude Code plugin's `ensure-server.ts` and shared `agent-board-core`.
-- First run can install core dependencies in place with npm or Bun.
-- Server spawns detached with Node and `--experimental-sqlite`.
+- The runtime lives in `core/` and owns its lifecycle through `core/bin/agentboard.ts` (`core/src/launcher.ts`).
+- Claude Code and Codex ship the same `bin/ensure-server.ts`. It finds the runtime (`AGENTBOARD_RUNTIME`, the surrounding checkout, or `~/.agentboard/runtime`, cloned on first use) and forwards a command to the CLI.
+- `agentboard start` installs runtime dependencies in place with npm or Bun when `node_modules` is missing, then spawns the server detached with `--experimental-sqlite`.
+- `/alive` reports the runtime version from `core/package.json`; a version change replaces the running server.
 
-Migration risk:
+Compatibility notes:
 
-- moving the core package will break host launchers unless a distribution plan updates these paths.
+- `AGENTBOARD_PLUGIN_ROOT`, `AGENTBOARD_CORE_ROOT` and `AGENTBOARD_PLUGIN_VERSION` are no longer read.
+- The `plugin_version` field name on `/alive` and in `config.json` is kept; it now carries the runtime version.
 
 ## Provider Configuration
 

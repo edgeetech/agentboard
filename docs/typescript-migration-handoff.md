@@ -282,7 +282,7 @@ Required validation:
 - `AGENTS.md`
 
 ### Runtime/package facts already confirmed
-- Backend core source tree is still `.mjs` under `agent-board-core/src`
+- Backend core source tree is still `.mjs` under `core/src`
 - UI is already TS and strict
 - Core backend currently executes source directly, not compiled output
 - Plugin manifest currently points to `${CLAUDE_PLUGIN_ROOT}/mcp/agentboard.mjs`

@@ -1,15 +1,15 @@
 {
-  "name": "agent-board-core",
-  "version": "0.1.0",
+  "name": "agentboard",
+  "version": "0.1.199",
   "private": true,
   "type": "module",
-  "description": "agent-board local server + executor + UI (vendored inside plugin)",
+  "description": "AgentBoard local runtime: server, executor and UI. Run with the agentboard CLI; host plugins (Claude Code, Codex, Copilot) connect to it.",
   "main": "server.ts",
   "bin": {
     "agentboard": "./bin/agentboard.ts"
   },
   "scripts": {
-    "start": "node --experimental-sqlite server.ts",
+    "start": "node bin/agentboard.ts start --foreground",
     "build": "npm run typecheck && npm run build:ui",
     "build:ui": "npm --prefix ../apps/ui run build && npm --prefix ../apps/ui run package",
     "typecheck": "tsc --noEmit -p src/tsconfig.json",
@@ -24,7 +24,7 @@
     "prepare": "simple-git-hooks || true"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.70",

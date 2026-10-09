@@ -60,7 +60,7 @@ sqlite3 ~/.agentboard/projects/<project_code>.db "SELECT code, status, agent_pro
 
 1. **Plugin wrapper** (`plugins/claude-code/`) — entry point for slash commands, hooks
 2. **Core server** (`core/`) — HTTP server, executor, state machine
-3. **UI** (`agent-board-core/ui/`) — React 18 + Vite → compiled to `dist/` (committed)
+3. **UI** (`core/ui/`) — React 18 + Vite → compiled to `dist/` (committed)
 
 ### Executor Engine
 
@@ -218,14 +218,14 @@ POST /api/tasks/:id/run-agent
 ### Committed Artifacts
 
 - **`ui/dist/`** — compiled UI. Users get pre-built artifact; no `npm install` needed.
-- Rebuild after UI changes: `cd agent-board-core/ui && npm run build`
+- Rebuild after UI changes: `cd core/ui && npm run build`
 
 ### Data Directory (Outside Repo)
 
 - Unix: `~/.agentboard/`
 - Windows: `%USERPROFILE%\.agentboard`
 - Contains: per-project SQLite DBs, run logs, MCP configs, token, server lock
-- Never write to `agent-board-core/` or `plugins/` directories
+- Never write to `core/` or `plugins/` directories
 
 ### Pricing & Cost Tracking
 
@@ -237,7 +237,7 @@ File: `src/pricing.ts` (Claude, Codex, and Copilot models)
 
 ### Role Prompts (Product Code)
 
-Location: `agent-board-core/prompts/<role>.md`
+Location: `core/prompts/<role>.md`
 
 - Treat as product code — version, iterate, test against real runs
 - Postflight + required-comment checks catch structural drift

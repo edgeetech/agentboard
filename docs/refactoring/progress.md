@@ -588,3 +588,24 @@ Behaviour preserved:
 
 - Engine package extraction remains available as the target package seam.
 - Legacy runtime callers still use their existing module paths.
+
+## Standalone Runtime
+
+Status: Runtime split from the Claude Code plugin.
+
+Moved / Added:
+
+- Moved `plugins/claude-code/agent-board-core` to `core/`; the package is now `agentboard` and versions in lockstep with the plugins.
+- Added `core/src/launcher.ts` and the `agentboard` CLI (`start`, `stop`, `restart`, `status`, `open`, `update`, `path`).
+- Replaced both host `ensure-server.ts` launchers with one shared, verbatim-identical locator that installs the runtime on first use.
+- `/alive` reports the runtime's own version.
+
+Behaviour preserved:
+
+- Data dir, config.json fields, ports and the stdio MCP proxy are unchanged.
+- SessionStart hooks still return immediately and finish slow first starts in a detached process.
+
+Deferred:
+
+- The Codex MCP shim still reuses `plugins/claude-code/mcp/agentboard.mjs`.
+- Publishing the runtime to npm; it installs from git today.
