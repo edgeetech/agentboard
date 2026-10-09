@@ -2,7 +2,12 @@ import { spawn } from 'node:child_process';
 import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { hasApiKeyEnvVar, parseAgentConfig, parseAuthConfig, resolveAuthMode } from './agent-config.ts';
+import {
+  hasApiKeyEnvVar,
+  parseAgentConfig,
+  parseAuthConfig,
+  resolveAuthMode,
+} from './agent-config.ts';
 import { resolveCodexLaunch } from './codex-runner.ts';
 import type { DbHandle } from './db.ts';
 import { dataDir } from './paths.ts';
@@ -336,7 +341,11 @@ function spawnCapture(
   });
 }
 
-export async function probeCommand(cmd: string, args: string[], timeoutMs: number): Promise<ProbeResult> {
+export async function probeCommand(
+  cmd: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<ProbeResult> {
   const result = await spawnCapture(cmd, args, timeoutMs);
   return {
     ok: result.ok,
@@ -358,7 +367,10 @@ export async function probeCommand(cmd: string, args: string[], timeoutMs: numbe
  *   reports 'unknown' with an actionable hint. (SDK's getAuthStatus() requires
  *   spawning a CLI server, too heavy for a doctor probe.)
  */
-export async function probeAuthStatus(provider: string, timeoutMs: number): Promise<AuthStatusResult> {
+export async function probeAuthStatus(
+  provider: string,
+  timeoutMs: number,
+): Promise<AuthStatusResult> {
   if (provider === 'claude') return probeClaudeAuthStatus(timeoutMs);
   if (provider === 'codex') return probeCodexAuthStatus(timeoutMs);
   if (provider === 'github_copilot') {

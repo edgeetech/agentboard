@@ -64,7 +64,11 @@ describe('runDoctor', () => {
         db,
         probeCommand: () => Promise.resolve({ ok: true, detail: 'claude 1.0.0' }),
         probeAuthStatus: () =>
-          Promise.resolve({ status: 'ok', detail: 'logged in via claude.ai', source: 'subscription' }),
+          Promise.resolve({
+            status: 'ok',
+            detail: 'logged in via claude.ai',
+            source: 'subscription',
+          }),
       });
 
       expect(result.checks).toEqual(
@@ -95,12 +99,16 @@ describe('runDoctor', () => {
         db,
         probeCommand: () => Promise.resolve({ ok: true, detail: 'claude 1.0.0' }),
         probeAuthStatus: () =>
-          Promise.resolve({ status: 'ok', detail: 'logged in via claude.ai', source: 'subscription' }),
+          Promise.resolve({
+            status: 'ok',
+            detail: 'logged in via claude.ai',
+            source: 'subscription',
+          }),
       });
 
-      expect(
-        result.checks.some((check) => check.id === 'provider.claude.auth_override_risk'),
-      ).toBe(false);
+      expect(result.checks.some((check) => check.id === 'provider.claude.auth_override_risk')).toBe(
+        false,
+      );
     } finally {
       if (original === undefined) delete process.env.ANTHROPIC_API_KEY;
       else process.env.ANTHROPIC_API_KEY = original;

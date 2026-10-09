@@ -5,7 +5,15 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import type { SpawnOptions } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -57,7 +65,9 @@ export function readConfig(): ServerConfig {
 
 export async function probeAlive(port: number, timeoutMs: number): Promise<AliveResponse | null> {
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/alive`, { signal: AbortSignal.timeout(timeoutMs) });
+    const res = await fetch(`http://127.0.0.1:${port}/alive`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     if (!res.ok) return null;
     return (await res.json()) as AliveResponse;
   } catch {
@@ -71,7 +81,12 @@ export async function findRunning(timeoutMs = 1500): Promise<RunningServer | nul
   if (!cfg.port) return null;
   const alive = await probeAlive(cfg.port, timeoutMs);
   if (!alive || alive.server_id !== cfg.server_id) return null;
-  return { url: `http://127.0.0.1:${cfg.port}`, port: cfg.port, pid: cfg.pid, version: alive.plugin_version };
+  return {
+    url: `http://127.0.0.1:${cfg.port}`,
+    port: cfg.port,
+    pid: cfg.pid,
+    version: alive.plugin_version,
+  };
 }
 
 /**
@@ -152,27 +167,29 @@ async function spawnServer(port: number | undefined): Promise<RunningServer> {
   // well over 8s on Windows under disk/AV load; a dead child still resolves
   // at once through the 'exit' handler.
   const READY_TIMEOUT_MS = 20_000;
-  const ready = await new Promise<{ ok: true; port: number } | { ok: false; err: string }>((_resolve) => {
-    let buf = '';
-    const t = setTimeout(() => {
-      _resolve({ ok: false, err: 'timeout' });
-    }, READY_TIMEOUT_MS);
-    child.stdout?.on('data', (d: Buffer) => {
-      buf += d.toString();
-      const m = /READY http:\/\/127\.0\.0\.1:(\d+)/.exec(buf);
-      if (m?.[1] !== undefined) {
+  const ready = await new Promise<{ ok: true; port: number } | { ok: false; err: string }>(
+    (_resolve) => {
+      let buf = '';
+      const t = setTimeout(() => {
+        _resolve({ ok: false, err: 'timeout' });
+      }, READY_TIMEOUT_MS);
+      child.stdout?.on('data', (d: Buffer) => {
+        buf += d.toString();
+        const m = /READY http:\/\/127\.0\.0\.1:(\d+)/.exec(buf);
+        if (m?.[1] !== undefined) {
+          clearTimeout(t);
+          _resolve({ ok: true, port: Number.parseInt(m[1], 10) });
+        }
+      });
+      child.stderr?.on('data', () => {
+        /* drain */
+      });
+      child.on('exit', (code: number | null) => {
         clearTimeout(t);
-        _resolve({ ok: true, port: Number.parseInt(m[1], 10) });
-      }
-    });
-    child.stderr?.on('data', () => {
-      /* drain */
-    });
-    child.on('exit', (code: number | null) => {
-      clearTimeout(t);
-      _resolve({ ok: false, err: `exit ${String(code)}` });
-    });
-  });
+        _resolve({ ok: false, err: `exit ${String(code)}` });
+      });
+    },
+  );
   // Stop reading so the detached child is not tied to this process.
   child.stdout?.destroy();
   child.stderr?.destroy();
@@ -190,7 +207,12 @@ async function spawnServer(port: number | undefined): Promise<RunningServer> {
     fail(`server failed to start: ${ready.err}`, 3);
   }
   clearBootError();
-  return { url: `http://127.0.0.1:${ready.port}`, port: ready.port, pid: child.pid, version: runtimeVersion() };
+  return {
+    url: `http://127.0.0.1:${ready.port}`,
+    port: ready.port,
+    pid: child.pid,
+    version: runtimeVersion(),
+  };
 }
 
 /** Install runtime dependencies in place when node_modules is missing. */
@@ -208,7 +230,10 @@ export function ensureCoreDeps(log: Log, force = false): void {
   log(`agentboard: installing runtime dependencies via ${tool} (~20s)...`);
   const res = spawnSync(cmd, args, { cwd: CORE_ROOT, stdio: 'ignore', shell: IS_WINDOWS });
   if (res.status !== 0) {
-    fail(`failed to install runtime dependencies (exit ${String(res.status)}). Run: cd "${CORE_ROOT}" && ${tool} install`, 4);
+    fail(
+      `failed to install runtime dependencies (exit ${String(res.status)}). Run: cd "${CORE_ROOT}" && ${tool} install`,
+      4,
+    );
   }
 }
 
@@ -218,7 +243,11 @@ export function writeBootError(msg: string): void {
     mkdirSync(dataDir(), { recursive: true });
     writeFileSync(
       cfgPath(),
-      JSON.stringify({ ...readConfig(), boot_error: msg, boot_error_at: new Date().toISOString() }, null, 2),
+      JSON.stringify(
+        { ...readConfig(), boot_error: msg, boot_error_at: new Date().toISOString() },
+        null,
+        2,
+      ),
     );
   } catch {
     /* best-effort */

@@ -113,7 +113,9 @@ function lookupPrice(key: string): Rate | undefined {
 const SUBSCRIPTION_AUTH_SOURCES = new Set(['oauth']);
 
 export function isEstimatedCost(authSource: string | null | undefined): boolean {
-  return authSource !== null && authSource !== undefined && SUBSCRIPTION_AUTH_SOURCES.has(authSource);
+  return (
+    authSource !== null && authSource !== undefined && SUBSCRIPTION_AUTH_SOURCES.has(authSource)
+  );
 }
 
 function normalizeModel(m: string): string {

@@ -316,7 +316,9 @@ function parseArgs(): ParsedArgs {
 
 function runtimeVersion(): string {
   try {
-    const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version?: unknown };
+    const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
+      version?: unknown;
+    };
     if (typeof pkg.version === 'string') return pkg.version;
   } catch {
     /* fall through */
