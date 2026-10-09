@@ -22,7 +22,7 @@ npm test              # vitest run (231 tests across 27 files)
 # Build (UI bundle only — no JS emit for server)
 npm run build         # = typecheck && build:ui
 
-# Pre-commit: simple-git-hooks runs lint-staged on staged .ts/.tsx files.
+# Pre-commit: .githooks/pre-commit (core.hooksPath) bumps the version via scripts/bump-version.mjs.
 
 # Via plugin entry point
 node plugins/claude-code/bin/ensure-server.ts  # Boot server (idempotent, version-aware)

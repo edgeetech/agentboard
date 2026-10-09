@@ -38,7 +38,7 @@ npm run format          # prettier --write .
 npm test                # vitest run (231 tests across 27 files)
 npm run test:watch      # vitest watch
 
-# Pre-commit: simple-git-hooks runs lint-staged on staged .ts/.tsx files.
+# Pre-commit: .githooks/pre-commit (core.hooksPath) bumps the version via scripts/bump-version.mjs.
 ```
 
 From the plugin directory:

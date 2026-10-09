@@ -777,7 +777,7 @@ GET /api/tasks/DEMO-67
 - ✅ Schema v5 — `task_debt`, `agent_activity`, `skill`, `skill_scan` tables; `phase` columns on `agent_run`; `concerns_json` / `scan_ignore_json` / `allow_git` on `project`; `discovery_mode` on `task`
 - ✅ Codex CLI support (full parity with Claude/Copilot)
 - ✅ Live run activity SSE (`/api/runs/:id/events`) + skill-scan SSE (`/api/skills/scan/events`)
-- ✅ ESLint flat config + Prettier + simple-git-hooks pre-commit; CI = `npm run check`
+- ✅ ESLint flat config + Prettier + `.githooks/pre-commit` version bump; CI = `npm run check`
 - 🔄 Future: Docker, HTTP webhook, local LLM adapters; per-run rate limiting; skill-scan UI tree view (table view ships today)
 
 ### v1.1
