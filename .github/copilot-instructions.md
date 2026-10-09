@@ -9,7 +9,7 @@ AgentBoard is a multi-agent workflow orchestrator running as a Claude Code plugi
 The server is pure TypeScript — no JS emit. Node 22 runs `.ts` directly via `--experimental-strip-types`.
 
 ```bash
-# From plugins/claude-code/agent-board-core/
+# From core/
 node --experimental-sqlite --experimental-strip-types --no-warnings server.ts
 
 # Quality gate (CI)
@@ -31,7 +31,7 @@ node plugins/claude-code/bin/ensure-server.ts  # Boot server (idempotent, versio
 ### UI (React + TypeScript)
 
 ```bash
-# From plugins/claude-code/agent-board-core/ui/
+# From core/ui/
 npm install
 npm run build                      # TypeScript check + Vite build → dist/
 npm run dev                        # Watch mode
@@ -45,7 +45,7 @@ npx tsc --noEmit                   # Type-check only (no emit)
 # Fast-reaper (override 15min timeout for quicker iteration)
 AGENTBOARD_REAPER_TIMEOUT_MS=10000 AGENTBOARD_REAPER_SWEEP_MS=2000 \
   node --experimental-sqlite --experimental-strip-types --no-warnings \
-    plugins/claude-code/agent-board-core/server.ts
+    core/server.ts
 
 # Tail live run logs
 cat ~/.agentboard/logs/<run_id>.jsonl | jq .
@@ -59,7 +59,7 @@ sqlite3 ~/.agentboard/projects/<project_code>.db "SELECT code, status, agent_pro
 ### Three-Layer Stack
 
 1. **Plugin wrapper** (`plugins/claude-code/`) — entry point for slash commands, hooks
-2. **Core server** (`plugins/claude-code/agent-board-core/`) — HTTP server, executor, state machine
+2. **Core server** (`core/`) — HTTP server, executor, state machine
 3. **UI** (`agent-board-core/ui/`) — React 18 + Vite → compiled to `dist/` (committed)
 
 ### Executor Engine
@@ -247,7 +247,7 @@ Location: `agent-board-core/prompts/<role>.md`
 
 ### Add a New Role Prompt
 
-1. Create `plugins/claude-code/agent-board-core/prompts/<new_role>.md`
+1. Create `core/prompts/<new_role>.md`
 2. Update `src/tool-allowlist.ts` — add tools for role
 3. Update `src/dispatch-map.ts` — define routing (which roles can transition to/from)
 4. Update `src/postflight.ts` — add required comments (if any) for role
@@ -363,6 +363,6 @@ copilot --version     # Must be in PATH when project.agent_provider='github_copi
 | `src/postflight.ts` | Role-specific finish requirements + phase gate |
 | `src/phase-machine.ts` / `src/phase-repo.ts` | Inner per-run FSM |
 | `src/skill-repo.ts` / `src/skill-scanner.ts` | Project skills catalog |
-| `plugins/claude-code/agent-board-core/prompts/*.md` | Role system/user prompts |
+| `core/prompts/*.md` | Role system/user prompts |
 | `db/schema.sql` | Database schema (idempotent, run on every open) — schema v5 |
-| `plugins/claude-code/agent-board-core/ui/src/**` | React UI components |
+| `core/ui/src/**` | React UI components |

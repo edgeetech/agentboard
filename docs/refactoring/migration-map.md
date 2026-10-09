@@ -6,9 +6,9 @@ Initial Phase 0 map from current modules to intended destinations. This is a wor
 
 | Current                                          | Target                                          | Notes                                                                 |
 | ------------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------- |
-| `plugins/claude-code/agent-board-core/ui`        | `apps/ui`                                       | Move UI package after typed contracts/API client are stable.          |
-| `plugins/claude-code/agent-board-core/server.ts` | `server/src/bootstrap` and `server/src/http`    | Split bootstrap, static UI serving, auth, routing and worker startup. |
-| `plugins/claude-code/agent-board-core/src`       | `packages/*`, `server/*`, `plugins/providers/*` | Use strangler migration, not a single bulk move.                      |
+| `core/ui`        | `apps/ui`                                       | Move UI package after typed contracts/API client are stable.          |
+| `core/server.ts` | `server/src/bootstrap` and `server/src/http`    | Split bootstrap, static UI serving, auth, routing and worker startup. |
+| `core/src`       | `packages/*`, `server/*`, `plugins/providers/*` | Use strangler migration, not a single bulk move.                      |
 | `plugins/claude-code`                            | `plugins/hosts/claude-code`                     | Host integration, not provider runtime.                               |
 | `plugins/codex`                                  | `plugins/hosts/codex`                           | Current launcher/host wrapper delegates to Claude plugin core.        |
 | `plugins/copilot`                                | `plugins/hosts/copilot`                         | Current installer/hook integration.                                   |

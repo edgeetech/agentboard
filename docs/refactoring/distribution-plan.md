@@ -4,12 +4,12 @@ Phase 1 distribution notes for moving from the current plugin-vendored runtime t
 
 ## Current Distribution
 
-- The runnable server, executor, DB schema, prompts, concerns and UI are vendored under `plugins/claude-code/agent-board-core`.
+- The runnable server, executor, DB schema, prompts, concerns and UI are vendored under `core`.
 - `plugins/claude-code/bin/ensure-server.ts` starts or reuses the shared local server.
 - `plugins/codex/bin/ensure-server.ts` delegates to the Claude Code plugin's `ensure-server.ts`.
 - First run installs core dependencies in place with npm or Bun if `node_modules` is missing.
 - The server serves `agent-board-core/ui/dist`.
-- Standalone launch uses `plugins/claude-code/agent-board-core/bin/agentboard.ts`.
+- Standalone launch uses `core/bin/agentboard.ts`.
 
 ## Target Distribution
 

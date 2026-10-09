@@ -8,12 +8,12 @@ import {
   normalizeAiAsset,
   type AiAssetSource,
   type ConcernAsset,
-} from '../../../../packages/engine/src/ai-assets/catalog.ts';
+} from '../../packages/engine/src/ai-assets/catalog.ts';
 import { loadConcerns, type Concern } from '../src/concerns.ts';
 
-const repoRoot = fileURLToPath(new URL('../../../..', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const aiConcernsRoot = join(repoRoot, 'ai', 'concerns');
-const legacyConcernsRoot = join(repoRoot, 'plugins', 'claude-code', 'agent-board-core', 'concerns');
+const legacyConcernsRoot = join(repoRoot, 'core', 'concerns');
 
 describe('built-in concern parity', () => {
   it('keeps legacy JSON concerns aligned with /ai Markdown sources', () => {

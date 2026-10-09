@@ -22,7 +22,7 @@ export default defineConfig({
   webServer: {
     command:
       `node --experimental-sqlite --experimental-strip-types --no-warnings ` +
-      `plugins/claude-code/agent-board-core/server.ts --port ${port}`,
+      `core/server.ts --port ${port}`,
     env: {
       ...process.env,
       AGENTBOARD_DATA_DIR: dataDir,

@@ -38,9 +38,9 @@ Canonical source-of-truth map for docs drift work:
 - Public product overview, install paths, security/privacy claims, and roadmap: [README.md](../README.md).
 - Multi-provider roles, workflows, MCP/API concepts, and executor-agnostic behavior: [AGENTS.md](../AGENTS.md).
 - Claude plugin internals and implementation warnings: [CLAUDE.md](../CLAUDE.md).
-- Role behavior: `plugins/claude-code/agent-board-core/prompts/{pm,worker,reviewer}.md`.
-- Exact API behavior: `plugins/claude-code/agent-board-core/src/api-*.ts`.
-- Schema: `plugins/claude-code/agent-board-core/db/schema.sql` plus `plugins/claude-code/agent-board-core/src/db.ts` migrations.
+- Role behavior: `core/prompts/{pm,worker,reviewer}.md`.
+- Exact API behavior: `core/src/api-*.ts`.
+- Schema: `core/db/schema.sql` plus `core/src/db.ts` migrations.
 - Skills implementation: `src/api-skills.ts`, `src/skill-repo.ts`, and `src/skill-scanner.ts`.
 - Executor behavior: `src/executor.ts`, `src/provider-registry.ts`, provider runners, and `src/council-runner.ts`.
 
@@ -72,7 +72,7 @@ Decision rights for this planning file:
 
 P0 release gates from the Copilot PM/Architect review:
 
-- Every P0 PR must pass from `plugins/claude-code/agent-board-core`: `npm run check`, `npm test`, and `npm run build`.
+- Every P0 PR must pass from `core`: `npm run check`, `npm test`, and `npm run build`.
 - Every schema PR must include idempotent forward migrations, fresh-DB tests, old-DB upgrade tests, and an explicit rollback note. SQLite rollback can be "restore pre-migration DB backup and downgrade app" when a true down migration is unsafe.
 - Every endpoint PR must include route-collision tests when it overlaps an existing URL prefix.
 - Every export or connector PR must include secret-redaction tests and missing-credential/error-path tests.
@@ -188,7 +188,7 @@ This section is grounded in the current code. It is meant to be a build plan, no
 - `src/tracker-poller.ts` owns sync logic privately today. Manual sync and scheduled polling need one shared transactional sync boundary before implementation continues.
 - Approval-policy enforcement is not provider-neutral today: Claude SDK hooks can enforce more than Codex/Copilot runners. Any policy-bound run on a provider without equivalent enforcement must fail closed or be marked explicitly unenforced.
 - Profile-bound dispatch must cover manual dispatch, auto-dispatch from task transitions, and routine-created tasks. A manual-only `profile_id` path is not enough.
-- `plugins/claude-code/agent-board-core/package.json` already exposes the P0 CI gates: `npm run check`, `npm test`, and `npm run build`. Use those names in PR checklists and CI configuration.
+- `core/package.json` already exposes the P0 CI gates: `npm run check`, `npm test`, and `npm run build`. Use those names in PR checklists and CI configuration.
 
 ### Decisions From Copilot Questions
 
@@ -599,7 +599,7 @@ Acceptance criteria:
 - `PATCH /api/projects/active` remains the documented canonical endpoint.
 - Existing project switching still invalidates/reloads project-scoped UI state.
 - Regression test covers both endpoint shapes and project selection.
-- PR passes `npm run check`, `npm test`, and `npm run build` from `plugins/claude-code/agent-board-core`.
+- PR passes `npm run check`, `npm test`, and `npm run build` from `core`.
 
 1. Tracker runtime repair
 

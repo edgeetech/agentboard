@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-All core-dev commands run from `plugins/claude-code/agent-board-core/`:
+All core-dev commands run from `core/`:
 
 ```bash
 # Start server standalone (usually done via /agentboard:open, not directly).
@@ -57,7 +57,7 @@ node plugins/claude-code/bin/ensure-server.ts
 # Fast-reaper mode (override 15min timeout)
 AGENTBOARD_REAPER_TIMEOUT_MS=10000 AGENTBOARD_REAPER_SWEEP_MS=2000 \
   node --experimental-sqlite --experimental-strip-types --no-warnings \
-    plugins/claude-code/agent-board-core/server.ts
+    core/server.ts
 
 # Tail a run's stream-json log
 cat ~/.agentboard/logs/<run_id>.jsonl | jq .
@@ -70,7 +70,7 @@ sqlite3 ~/.agentboard/projects/<code>.db "SELECT code, status, assignee_role, re
 
 ### Two MCP surfaces with deliberately different names
 
-1. **HTTP MCP key `abrun`** (`plugins/claude-code/agent-board-core/src/api-mcp.ts`) — consumed by **spawned headless `claude -p` runs** via a per-run tmp `--mcp-config` file. Exposes:
+1. **HTTP MCP key `abrun`** (`core/src/api-mcp.ts`) — consumed by **spawned headless `claude -p` runs** via a per-run tmp `--mcp-config` file. Exposes:
    - **Run lifecycle:** `get_task, update_task, add_comment, finish_run, add_heartbeat`.
    - **Inner phase machine:** `next` (current phase + allowed transitions), `advance` (move to next phase or take an exit verb), `record_debt`, `resolve_debt`, `record_tool` (PreToolUse hook bookkeeping), `use_skill` (resolve a skill by name, fuzzy-suggest on miss).
 

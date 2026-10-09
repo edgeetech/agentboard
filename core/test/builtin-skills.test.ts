@@ -7,10 +7,10 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeAiAsset,
   type AiAssetSource,
-} from '../../../../packages/engine/src/ai-assets/catalog.ts';
+} from '../../packages/engine/src/ai-assets/catalog.ts';
 import { BUILTIN_SKILLS, findBuiltinSkill } from '../src/builtin-skills.ts';
 
-const repoRoot = fileURLToPath(new URL('../../../..', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const skillsRoot = join(repoRoot, 'ai', 'skills');
 
 describe('built-in skill parity', () => {

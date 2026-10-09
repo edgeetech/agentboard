@@ -3,4 +3,4 @@ export type {
   CopilotRunnerOptions,
   CopilotSdkModule,
   CopilotSessionConfig,
-} from '../../../providers/copilot/src/runner.ts';
+} from '../../plugins/providers/copilot/src/runner.ts';

@@ -14,7 +14,7 @@ Moved / Added:
 Behaviour preserved:
 
 - No runtime source paths were moved.
-- Existing core package remains under `plugins/claude-code/agent-board-core`.
+- Existing core package remains under `core`.
 - Existing host plugin startup paths were not changed.
 
 Tests added/updated:
@@ -131,7 +131,7 @@ Behaviour preserved:
 
 Tests added/updated:
 
-- Added `plugins/claude-code/agent-board-core/test/agent-config.test.ts`.
+- Added `core/test/agent-config.test.ts`.
 - Added `packages/engine/test/task-state.test.ts`.
 - Added `packages/engine/test/run-phase.test.ts`.
 - Added `packages/engine/test/retry-policy.test.ts`.
@@ -188,7 +188,7 @@ Moved / Added:
 
 Behaviour preserved:
 
-- Legacy SQLite implementation remains under `plugins/claude-code/agent-board-core/src`.
+- Legacy SQLite implementation remains under `core/src`.
 - No repository calls or database files were moved in this chunk.
 
 Architecture improvements:
@@ -246,8 +246,8 @@ Status: Initial DB migration verification complete.
 
 Moved / Added:
 
-- Added `plugins/claude-code/agent-board-core/test/db-migrations.test.ts`.
-- Updated provider CHECK table rebuild migrations in `plugins/claude-code/agent-board-core/src/db.ts`.
+- Added `core/test/db-migrations.test.ts`.
+- Updated provider CHECK table rebuild migrations in `core/src/db.ts`.
 
 Behaviour preserved:
 
@@ -389,8 +389,8 @@ Status: Initial in-memory observability snapshot complete.
 
 Moved / Added:
 
-- Added `plugins/claude-code/agent-board-core/src/observability.ts`.
-- Added `plugins/claude-code/agent-board-core/test/observability.test.ts`.
+- Added `core/src/observability.ts`.
+- Added `core/test/observability.test.ts`.
 - Added SSE counters in `api-activity.ts`.
 - Added run outcome, duration and retry counters in `executor.ts`.
 - Added authenticated `/healthz` observability snapshot in `server.ts`.

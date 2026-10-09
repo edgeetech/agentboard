@@ -466,7 +466,7 @@ Both Claude Code and Copilot CLI agents can access:
 - Claude auth: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CONFIG_DIR`
 - Codex auth: `OPENAI_API_KEY`, `CODEX_API_KEY`, `CODEX_HOME`
 - Copilot auth: `GH_TOKEN`, `GITHUB_TOKEN`, `COPILOT_GITHUB_TOKEN`, `COPILOT_TOKEN`, `COPILOT_HOME`
-- Exact list lives in `plugins/claude-code/agent-board-core/src/child-env.ts` (and its Codex-side duplicate `plugins/providers/codex/src/environment.ts`) — AWS/SSH/GCP/cloud-SDK vars are dropped.
+- Exact list lives in `core/src/child-env.ts` (and its Codex-side duplicate `plugins/providers/codex/src/environment.ts`) — AWS/SSH/GCP/cloud-SDK vars are dropped.
 - **Per-provider `auth_mode`** (project setting, `'subscription' | 'api_key' | 'auto'`) additionally strips that provider's API-key vars from the run's env in `'subscription'` mode, so a stray key can't silently override an interactive login and bill the API.
 - For details, see **Modification Rules** in [CLAUDE.md](CLAUDE.md#security-model-specifics)
 
@@ -629,7 +629,7 @@ tail -f ~/.agentboard/logs/<run_id>.jsonl | jq .
 **Auth:** `Authorization: Bearer <token>` on every request (also accepted as cookie `ab_token`).
 **Active project scope:** routes that omit `:code` resolve against `config.json.active_project_code`. Use `/api/projects/:code/...` to target a specific project explicitly.
 
-Source of truth: handlers under `plugins/claude-code/agent-board-core/src/api-*.ts`. Route table for tasks lives at [`api-tasks.ts:303`](plugins/claude-code/agent-board-core/src/api-tasks.ts#L303).
+Source of truth: handlers under `core/src/api-*.ts`. Route table for tasks lives at [`api-tasks.ts:303`](core/src/api-tasks.ts#L303).
 
 #### Tasks (active project)
 
@@ -750,12 +750,12 @@ GET /api/tasks/DEMO-67
 |---------|------------|
 | Claude Code plugin details | [CLAUDE.md](CLAUDE.md) |
 | Platform features & security | [README.md](README.md) |
-| Database schema & internals | [src/db.ts](plugins/claude-code/agent-board-core/src/db.ts), [db/schema.sql](plugins/claude-code/agent-board-core/db/schema.sql) (schema v5) |
-| Executor implementation | [src/executor.ts](plugins/claude-code/agent-board-core/src/executor.ts), [src/agent-runner.ts](plugins/claude-code/agent-board-core/src/agent-runner.ts), [src/codex-runner.ts](plugins/claude-code/agent-board-core/src/codex-runner.ts), [src/copilot-runner.ts](plugins/claude-code/agent-board-core/src/copilot-runner.ts) |
-| MCP tool definitions | [src/api-mcp.ts](plugins/claude-code/agent-board-core/src/api-mcp.ts) |
-| Inner phase machine | [src/phase-machine.ts](plugins/claude-code/agent-board-core/src/phase-machine.ts), [src/phase-repo.ts](plugins/claude-code/agent-board-core/src/phase-repo.ts), [src/discovery-modes.ts](plugins/claude-code/agent-board-core/src/discovery-modes.ts) |
-| Skills | [src/skill-repo.ts](plugins/claude-code/agent-board-core/src/skill-repo.ts), [src/skill-scanner.ts](plugins/claude-code/agent-board-core/src/skill-scanner.ts), [src/skill-scan-worker.ts](plugins/claude-code/agent-board-core/src/skill-scan-worker.ts), [src/builtin-skills.ts](plugins/claude-code/agent-board-core/src/builtin-skills.ts), [src/api-skills.ts](plugins/claude-code/agent-board-core/src/api-skills.ts) |
-| Role prompts | [plugins/claude-code/agent-board-core/prompts/](plugins/claude-code/agent-board-core/prompts/) |
+| Database schema & internals | [src/db.ts](core/src/db.ts), [db/schema.sql](core/db/schema.sql) (schema v5) |
+| Executor implementation | [src/executor.ts](core/src/executor.ts), [src/agent-runner.ts](core/src/agent-runner.ts), [src/codex-runner.ts](core/src/codex-runner.ts), [src/copilot-runner.ts](core/src/copilot-runner.ts) |
+| MCP tool definitions | [src/api-mcp.ts](core/src/api-mcp.ts) |
+| Inner phase machine | [src/phase-machine.ts](core/src/phase-machine.ts), [src/phase-repo.ts](core/src/phase-repo.ts), [src/discovery-modes.ts](core/src/discovery-modes.ts) |
+| Skills | [src/skill-repo.ts](core/src/skill-repo.ts), [src/skill-scanner.ts](core/src/skill-scanner.ts), [src/skill-scan-worker.ts](core/src/skill-scan-worker.ts), [src/builtin-skills.ts](core/src/builtin-skills.ts), [src/api-skills.ts](core/src/api-skills.ts) |
+| Role prompts | [core/prompts/](core/prompts/) |
 
 ---
 

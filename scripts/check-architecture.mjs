@@ -140,7 +140,7 @@ scanImports("packages/plugin-sdk", [
 
 scanImports("plugins/providers", [
   {
-    test: (s) => s.includes("agent-board-core"),
+    test: (s) => s.includes("core/src") || s.includes("core/server"),
     reason: "provider packages must not import legacy runtime internals",
   },
   {
@@ -170,7 +170,7 @@ scanImports("server", [
   },
 ]);
 
-scanImports("plugins/claude-code/agent-board-core/src", [
+scanImports("core/src", [
   {
     test: (s) => s.includes("packages/"),
     reason:
@@ -181,9 +181,7 @@ scanImports("plugins/claude-code/agent-board-core/src", [
 const appUiRoot = join(root, "apps", "ui");
 const legacyUiRoot = join(
   root,
-  "plugins",
-  "claude-code",
-  "agent-board-core",
+  "core",
   "ui",
 );
 for (const path of [
@@ -211,7 +209,7 @@ for (const path of [
 }
 if (!existsSync(join(legacyUiRoot, "dist", "index.html"))) {
   failures.push(
-    "plugins/claude-code/agent-board-core/ui/dist/index.html: shipped UI artifact missing",
+    "core/ui/dist/index.html: shipped UI artifact missing",
   );
 }
 

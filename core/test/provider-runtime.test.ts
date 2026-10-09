@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { PROVIDER_RUNTIME_CONTROLS as SDK_PROVIDER_RUNTIME_CONTROLS } from '../../../../packages/plugin-sdk/src/provider.ts';
+import { PROVIDER_RUNTIME_CONTROLS as SDK_PROVIDER_RUNTIME_CONTROLS } from '../../packages/plugin-sdk/src/provider.ts';
 import {
   buildProviderRuntimePolicy,
   buildResumeCommand,

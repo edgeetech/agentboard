@@ -8,4 +8,4 @@ export {
   readClaudeUserMcpServers,
   readCodexConfig,
 } from './generated/codex-provider.mjs';
-export type { CodexConfig, CodexMcpServerEntry } from '../../../providers/codex/src/index.ts';
+export type { CodexConfig, CodexMcpServerEntry } from '../../plugins/providers/codex/src/index.ts';

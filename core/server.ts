@@ -331,7 +331,7 @@ function serveIndex(res: ServerResponse, tok: string, port: number): void {
       code{background:#f3f3f3;padding:.15rem .4rem;border-radius:3px}</style>
       <h1>agentboard</h1>
       <p>Server is running but the UI bundle is not built yet.</p>
-      <p>Run <code>cd plugins/claude-code/agent-board-core/ui &amp;&amp; npm install &amp;&amp; npm run build</code> then reload.</p>
+      <p>Run <code>cd core/ui &amp;&amp; npm install &amp;&amp; npm run build</code> then reload.</p>
       <p>Healthz: <code>curl -H "Authorization: Bearer &lt;token from ~/.agentboard/config.json&gt;" http://127.0.0.1:${port}/healthz</code></p>`;
   }
   // Per-request nonce authorizes exactly the token-injection script. CSP below

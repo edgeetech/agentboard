@@ -14,19 +14,19 @@ Chosen defaults:
 
 ## Current State
 The repo is split across:
-- a TypeScript UI already in `plugins/claude-code/agent-board-core/ui`
+- a TypeScript UI already in `core/ui`
 - a backend/runtime still implemented as ESM `.mjs`
 - plugin/runtime entrypoints outside the core package that also use `.mjs`
 
 ### Important current facts
-- Core backend entrypoint is `plugins/claude-code/agent-board-core/server.mjs`
-- Core CLI entrypoint is `plugins/claude-code/agent-board-core/bin/agentboard.mjs`
+- Core backend entrypoint is `core/server.mjs`
+- Core CLI entrypoint is `core/bin/agentboard.mjs`
 - Plugin bootstrap entrypoint is `plugins/claude-code/bin/ensure-server.mjs`
 - Plugin MCP entrypoint is `plugins/claude-code/mcp/agentboard.mjs`
 - Plugin manifest points directly to `.mjs` paths in `plugins/claude-code/.claude-plugin/plugin.json`
 - Backend tests currently use Vitest with `include: ['test/**/*.test.mjs']`
 - Backend `typecheck` script is currently broken and points to missing `src/tsconfig.json`
-- UI already uses strict TS in `plugins/claude-code/agent-board-core/ui/tsconfig.json`
+- UI already uses strict TS in `core/ui/tsconfig.json`
 - Core package currently boots source files directly; there is no backend build pipeline yet
 - First-run bootstrap already installs dependencies in `ensure-server.mjs`; this is the correct place to add local build-on-demand
 
@@ -40,22 +40,22 @@ The repo is split across:
 ## Exact Scope
 ### Migrate to TypeScript
 #### Core package runtime
-- `plugins/claude-code/agent-board-core/src/**/*.mjs`
-- `plugins/claude-code/agent-board-core/server.mjs`
-- `plugins/claude-code/agent-board-core/bin/agentboard.mjs`
+- `core/src/**/*.mjs`
+- `core/server.mjs`
+- `core/bin/agentboard.mjs`
 
 #### Core package tests
-- `plugins/claude-code/agent-board-core/test/**/*.test.mjs`
+- `core/test/**/*.test.mjs`
 
 #### Core package maintained helper/dev scripts
-- `plugins/claude-code/agent-board-core/check-runs.mjs`
-- `plugins/claude-code/agent-board-core/sdk-test.mjs`
-- `plugins/claude-code/agent-board-core/test-sdk.mjs`
-- `plugins/claude-code/agent-board-core/test-copilot-agent.mjs`
-- `plugins/claude-code/agent-board-core/test-copilot-sdk.mjs`
-- `plugins/claude-code/agent-board-core/test-copilot-sdk2.mjs`
-- `plugins/claude-code/agent-board-core/test-e2e-copilot.mjs`
-- `plugins/claude-code/agent-board-core/vitest.config.mjs`
+- `core/check-runs.mjs`
+- `core/sdk-test.mjs`
+- `core/test-sdk.mjs`
+- `core/test-copilot-agent.mjs`
+- `core/test-copilot-sdk.mjs`
+- `core/test-copilot-sdk2.mjs`
+- `core/test-e2e-copilot.mjs`
+- `core/vitest.config.mjs`
 
 #### Plugin/runtime files outside core
 - `plugins/claude-code/bin/ensure-server.mjs`
@@ -100,7 +100,7 @@ No business logic should remain in shims.
 
 ## Build and Tooling Plan
 ### Backend TS config
-Add a backend TypeScript config in `plugins/claude-code/agent-board-core`, separate from UI TS config.
+Add a backend TypeScript config in `core`, separate from UI TS config.
 
 Use:
 - `target: ES2022`
@@ -270,12 +270,12 @@ Required validation:
 
 ## Resume Context
 ### Files and entrypoints already inspected
-- `plugins/claude-code/agent-board-core/package.json`
-- `plugins/claude-code/agent-board-core/ui/package.json`
-- `plugins/claude-code/agent-board-core/ui/tsconfig.json`
-- `plugins/claude-code/agent-board-core/vitest.config.mjs`
-- `plugins/claude-code/agent-board-core/server.mjs`
-- `plugins/claude-code/agent-board-core/bin/agentboard.mjs`
+- `core/package.json`
+- `core/ui/package.json`
+- `core/ui/tsconfig.json`
+- `core/vitest.config.mjs`
+- `core/server.mjs`
+- `core/bin/agentboard.mjs`
 - `plugins/claude-code/bin/ensure-server.mjs`
 - `plugins/claude-code/mcp/agentboard.mjs`
 - `plugins/claude-code/.claude-plugin/plugin.json`
@@ -292,14 +292,14 @@ Required validation:
 
 ### Repo-wide `.mjs` areas already identified
 - root helper scripts
-- `plugins/claude-code/agent-board-core/**`
+- `core/**`
 - `plugins/claude-code/bin/**`
 - `plugins/claude-code/hooks/session/**`
 - `plugins/claude-code/mcp/**`
 - `scripts/**`
 
 ### What to do first when implementation starts
-1. Add a real backend TS config in `plugins/claude-code/agent-board-core`
+1. Add a real backend TS config in `core`
 2. Replace the broken backend `typecheck` script
 3. Decide exact emit layout for compiled ESM output and shim targets
 4. Prove the build pipeline on one or two leaf utility modules before mass conversion

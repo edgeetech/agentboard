@@ -2,14 +2,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { build } from "../plugins/claude-code/agent-board-core/node_modules/esbuild/lib/main.js";
-import { format } from "../plugins/claude-code/agent-board-core/node_modules/prettier/index.mjs";
+import { build } from "../core/node_modules/esbuild/lib/main.js";
+import { format } from "../core/node_modules/prettier/index.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const check = process.argv.includes("--check");
 const prettierConfig = JSON.parse(
   await readFile(
-    join(root, "plugins", "claude-code", "agent-board-core", ".prettierrc"),
+    join(root, "core", ".prettierrc"),
     "utf8",
   ),
 );
@@ -18,9 +18,7 @@ const bundles = [
     entryPoint: join(root, "server", "src", "index.ts"),
     outfile: join(
       root,
-      "plugins",
-      "claude-code",
-      "agent-board-core",
+      "core",
       "src",
       "generated",
       "server-bootstrap.mjs",
@@ -39,9 +37,7 @@ const bundles = [
     ),
     outfile: join(
       root,
-      "plugins",
-      "claude-code",
-      "agent-board-core",
+      "core",
       "src",
       "generated",
       "sqlite-persistence.mjs",
@@ -52,9 +48,7 @@ const bundles = [
     entryPoint: join(root, "packages", "plugin-sdk", "src", "registry.ts"),
     outfile: join(
       root,
-      "plugins",
-      "claude-code",
-      "agent-board-core",
+      "core",
       "src",
       "generated",
       "plugin-sdk-registry.mjs",
@@ -65,9 +59,7 @@ const bundles = [
     entryPoint: join(root, "plugins", "providers", "codex", "src", "index.ts"),
     outfile: join(
       root,
-      "plugins",
-      "claude-code",
-      "agent-board-core",
+      "core",
       "src",
       "generated",
       "codex-provider.mjs",
@@ -78,9 +70,7 @@ const bundles = [
     entryPoint: join(root, "plugins", "providers", "claude", "src", "index.ts"),
     outfile: join(
       root,
-      "plugins",
-      "claude-code",
-      "agent-board-core",
+      "core",
       "src",
       "generated",
       "claude-runner.mjs",
@@ -98,9 +88,7 @@ const bundles = [
     ),
     outfile: join(
       root,
-      "plugins",
-      "claude-code",
-      "agent-board-core",
+      "core",
       "src",
       "generated",
       "copilot-runner.mjs",

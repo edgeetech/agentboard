@@ -30,8 +30,8 @@ Important persisted surfaces:
 Current schema and migrations live in:
 
 ```text
-plugins/claude-code/agent-board-core/db/schema.sql
-plugins/claude-code/agent-board-core/src/db.ts
+core/db/schema.sql
+core/src/db.ts
 ```
 
 Known provider-specific schema issues:
@@ -154,7 +154,7 @@ Current startup paths:
 - `plugins/claude-code/bin/ensure-server.ts`
 - `plugins/codex/bin/ensure-server.ts`
 - `plugins/claude-code/skills/open/SKILL.md`
-- `plugins/claude-code/agent-board-core/bin/agentboard.ts`
+- `core/bin/agentboard.ts`
 
 Current behaviour:
 

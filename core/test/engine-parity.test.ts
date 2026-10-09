@@ -4,8 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import * as enginePhase from '../../../../packages/engine/src/workflows/run-phase.ts';
-import * as engineTask from '../../../../packages/engine/src/workflows/task-state.ts';
+import * as enginePhase from '../../packages/engine/src/workflows/run-phase.ts';
+import * as engineTask from '../../packages/engine/src/workflows/task-state.ts';
 import * as corePhase from '../src/phase-machine.ts';
 import * as coreTask from '../src/state-machine.ts';
 

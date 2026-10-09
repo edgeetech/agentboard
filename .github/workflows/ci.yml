@@ -32,20 +32,20 @@ jobs:
           cache-dependency-path: |
             package.json
             apps/ui/package.json
-            plugins/claude-code/agent-board-core/package.json
+            core/package.json
             plugins/providers/copilot/package.json
 
       - name: Install root dependencies
         run: npm install --legacy-peer-deps
 
       - name: Install core dependencies
-        run: npm --prefix plugins/claude-code/agent-board-core install --legacy-peer-deps
+        run: npm --prefix core install --legacy-peer-deps
 
       - name: Install UI dependencies
         run: npm --prefix apps/ui install --legacy-peer-deps
 
       - name: Core lint and formatting
-        run: npm run lint && npm --prefix plugins/claude-code/agent-board-core run format:check
+        run: npm run lint && npm --prefix core run format:check
 
       - name: Typecheck
         run: npm run typecheck
@@ -62,7 +62,7 @@ jobs:
       - name: Verify generated provider bundle freshness
         # build-provider-bundles.mjs writes into the core's src/generated/ —
         # that is the tree a stale bundle shows up in, so that is what we diff.
-        run: npm run build:provider-bundles && git diff --exit-code plugins/claude-code/agent-board-core/src/generated/
+        run: npm run build:provider-bundles && git diff --exit-code core/src/generated/
 
       - name: UI package freshness
         # Gating (no continue-on-error), but Linux-only on purpose.

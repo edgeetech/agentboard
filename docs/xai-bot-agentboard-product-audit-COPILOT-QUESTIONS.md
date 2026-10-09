@@ -9,7 +9,7 @@ QUESTIONS
 
 QUESTION: Canonical docs — which file should be treated as the single source of truth for product behaviour? (README.md, AGENTS.md, CLAUDE.md, or this audit doc?)
 
-ANSWER: Do not make this audit doc the canonical product source. Use README.md for public product overview, install paths, security/privacy claims, and roadmap; AGENTS.md for multi-agent concepts, supported providers, workflows, MCP/API reference, and executor-agnostic behavior; CLAUDE.md for Claude plugin internals and implementation caveats. For prompts, the canonical source is plugins/claude-code/agent-board-core/prompts/*.md. For exact API behavior, code in src/api-*.ts wins, with AGENTS.md updated to point at it.
+ANSWER: Do not make this audit doc the canonical product source. Use README.md for public product overview, install paths, security/privacy claims, and roadmap; AGENTS.md for multi-agent concepts, supported providers, workflows, MCP/API reference, and executor-agnostic behavior; CLAUDE.md for Claude plugin internals and implementation caveats. For prompts, the canonical source is core/prompts/*.md. For exact API behavior, code in src/api-*.ts wins, with AGENTS.md updated to point at it.
 
 QUESTION: Bot profiles — should "bot profile" be purely a UI/metadata construct (profile maps to AgentConfig + skills + allowlist), or must schema additions be implemented (project.bot_profile table)?
 
@@ -33,7 +33,7 @@ ANSWER: Start with an explicit preview/draft flow, not automatic silent writes. 
 
 QUESTION: Docs drift — which doc is canonical per topic (prompts, skills, MCP, executor)? If multiple, list preferred canonical file paths for cross-linking.
 
-ANSWER: Canonical map: public overview/install/security = README.md; multi-provider roles/workflows/API/MCP concepts = AGENTS.md; Claude plugin and implementation warnings = CLAUDE.md; role behavior = plugins/claude-code/agent-board-core/prompts/{pm,worker,reviewer}.md; API implementation = plugins/claude-code/agent-board-core/src/api-*.ts; schema = plugins/claude-code/agent-board-core/db/schema.sql plus src/db.ts migrations; skills implementation = src/api-skills.ts, src/skill-repo.ts, src/skill-scanner.ts; executor behavior = src/executor.ts, src/provider-registry.ts, src/*-runner.ts, src/council-runner.ts.
+ANSWER: Canonical map: public overview/install/security = README.md; multi-provider roles/workflows/API/MCP concepts = AGENTS.md; Claude plugin and implementation warnings = CLAUDE.md; role behavior = core/prompts/{pm,worker,reviewer}.md; API implementation = core/src/api-*.ts; schema = core/db/schema.sql plus src/db.ts migrations; skills implementation = src/api-skills.ts, src/skill-repo.ts, src/skill-scanner.ts; executor behavior = src/executor.ts, src/provider-registry.ts, src/*-runner.ts, src/council-runner.ts.
 
 QUESTION: Acceptance criteria for Audit Export — required fields (task, runs, cost, phase history, debt); preferred formats: JSON + Markdown? Any CSV requirement?
 

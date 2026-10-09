@@ -2,9 +2,9 @@ import type * as NodeFs from 'node:fs';
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import { claudeProviderManifest } from '../../../../plugins/providers/claude/src/index.ts';
-import { codexProviderManifest } from '../../../../plugins/providers/codex/src/index.ts';
-import { copilotProviderManifest } from '../../../../plugins/providers/copilot/src/index.ts';
+import { claudeProviderManifest } from '../../plugins/providers/claude/src/index.ts';
+import { codexProviderManifest } from '../../plugins/providers/codex/src/index.ts';
+import { copilotProviderManifest } from '../../plugins/providers/copilot/src/index.ts';
 import type { AgentProvider } from '../src/types.ts';
 import { AGENT_PROVIDERS } from '../src/types.ts';
 

@@ -108,7 +108,7 @@ Or run standalone server:
 
 ```bash
 git clone https://github.com/edgeetech/agentboard.git
-cd plugins/claude-code/agent-board-core
+cd core
 npm install
 node --experimental-sqlite --experimental-strip-types --no-warnings server.ts
 # Open http://localhost:3000
@@ -406,7 +406,7 @@ Paste in a terminal at the project repo and you're inside the agent's session. I
 ## 🛡️ Destructive-tool opt-in
 
 Worker and reviewer agents get a fixed `--allowedTools` list (see
-`plugins/claude-code/agent-board-core/src/tool-allowlist.ts`). The default is **deny-first**:
+`core/src/tool-allowlist.ts`). The default is **deny-first**:
 the following are *not* granted, because the agent's cwd is your real repository and a bad
 call is unrecoverable.
 

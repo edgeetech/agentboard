@@ -13,7 +13,7 @@ npm run test
 npm run test:architecture
 ```
 
-The current legacy core still lives under `plugins/claude-code/agent-board-core`. Root scripts delegate to that package while new packages are introduced.
+The current legacy core still lives under `core`. Root scripts delegate to that package while new packages are introduced.
 
 ## Commit Policy
 

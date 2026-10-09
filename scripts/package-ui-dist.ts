@@ -17,9 +17,7 @@ const uiRoot = join(root, "apps", "ui");
 const source = join(uiRoot, "dist");
 const target = join(
   root,
-  "plugins",
-  "claude-code",
-  "agent-board-core",
+  "core",
   "ui",
   "dist",
 );

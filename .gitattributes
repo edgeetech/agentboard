@@ -1,6 +1,6 @@
 # Treat prebuilt UI bundle as generated — GitHub collapses these in PR diffs.
-agent-board-core/ui/dist/** linguist-generated=true
-agent-board-core/ui/dist/** -diff
+core/ui/dist/** linguist-generated=true
+core/ui/dist/** -diff
 
 # Normalize line endings
 * text=auto eol=lf

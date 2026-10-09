@@ -14,15 +14,15 @@ Phase 0 inventory for the architecture refactor.
 AgentBoard is currently structured as a plugin-centric repository.
 
 - There is no root `package.json`.
-- The main runnable package is `plugins/claude-code/agent-board-core`.
-- The React UI is nested inside `plugins/claude-code/agent-board-core/ui`.
+- The main runnable package is `core`.
+- The React UI is nested inside `core/ui`.
 - Claude Code, Codex and Copilot host/plugin wrappers live under `plugins/`.
 - Codex currently delegates server startup to the Claude Code plugin's shared core.
 
 Primary package:
 
 ```text
-plugins/claude-code/agent-board-core/
+core/
   server.ts
   src/
   db/schema.sql
@@ -47,7 +47,7 @@ Environment:
 - Node: `v22.20.0`
 - npm: `11.3.0`
 
-Commands run from `plugins/claude-code/agent-board-core`:
+Commands run from `core`:
 
 | Command                | Result | Notes                               |
 | ---------------------- | ------ | ----------------------------------- |
@@ -77,7 +77,7 @@ Format check reports existing Prettier drift in server, source, tests and `ui/sr
 
 ### Bootstrap and Server
 
-- `plugins/claude-code/agent-board-core/server.ts` starts the HTTP server, serves UI assets, applies localhost/auth/CSP checks, routes REST/MCP, starts executor, tracker poller and skill scan workers.
+- `core/server.ts` starts the HTTP server, serves UI assets, applies localhost/auth/CSP checks, routes REST/MCP, starts executor, tracker poller and skill scan workers.
 
 ### API and MCP
 
@@ -130,7 +130,7 @@ Format check reports existing Prettier drift in server, source, tests and `ui/sr
 
 ### UI
 
-- UI package: `plugins/claude-code/agent-board-core/ui`.
+- UI package: `core/ui`.
 - Main client API file: `ui/src/api.ts`.
 - Main app shell/routes: `ui/src/App.tsx`, `ui/src/main.tsx`, `ui/src/components/AppShell.tsx`.
 - Feature/page areas include board, projects, roles, personas, skills, sessions and themes.
@@ -172,7 +172,7 @@ No Playwright suite was found.
 - Provider IDs are hard-coded in TypeScript unions, validation schemas, API handlers, UI controls and SQLite `CHECK` constraints.
 - Engine-like domain logic is mixed into HTTP handlers, MCP handlers and persistence modules.
 - Provider runtime logic is currently inside the core package rather than provider plugins.
-- Host plugin startup relies on the current `plugins/claude-code/agent-board-core` location.
+- Host plugin startup relies on the current `core` location.
 - Built-in AI assets are split across Markdown, JSON and TypeScript strings.
 - Security-sensitive env allow-listing is global instead of provider/host scoped.
 - Server bootstrap mixes static UI serving, HTTP routing and long-lived background workers.

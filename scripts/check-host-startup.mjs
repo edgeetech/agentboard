@@ -41,7 +41,7 @@ function hookCommands(path) {
   return commands;
 }
 
-const coreRoot = join(root, "plugins", "claude-code", "agent-board-core");
+const coreRoot = join(root, "core");
 const claudeEnsure = join(
   root,
   "plugins",
