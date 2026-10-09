@@ -119,7 +119,9 @@ function tableSql(db: DbHandle, table: string): string {
   return row?.sql ?? '';
 }
 
-describe('project database migrations', () => {
+// Each case builds and migrates real SQLite files; Windows CI runners need
+// well over vitest's 5s default.
+describe('project database migrations', { timeout: 30_000 }, () => {
   it('migrates an older project DB to current schema and is idempotent', async () => {
     const path = tempDbPath();
     seedPreV6Db(path);

@@ -1,6 +1,6 @@
 {
   "name": "agentboard",
-  "version": "0.1.204",
+  "version": "0.1.205",
   "private": true,
   "type": "module",
   "description": "AgentBoard local runtime: server, executor and UI. Run with the agentboard CLI; host plugins (Claude Code, Codex, Copilot) connect to it.",
