@@ -199,7 +199,12 @@ export function ensureCoreDeps(log: Log, force = false): void {
   const useBun = which('bun');
   const tool = useBun ? 'bun' : 'npm';
   const cmd = useBun ? 'bun' : IS_WINDOWS ? 'npm.cmd' : 'npm';
-  const args = useBun ? ['install', '--silent'] : ['install', '--no-audit', '--no-fund', '--silent'];
+  // The managed runtime only runs the server; a development checkout keeps
+  // its dev tooling.
+  const managed = CORE_ROOT.startsWith(join(dataDir(), 'runtime'));
+  const args = useBun
+    ? ['install', '--silent', ...(managed ? ['--production'] : [])]
+    : ['install', '--no-audit', '--no-fund', '--silent', ...(managed ? ['--omit=dev'] : [])];
   log(`agentboard: installing runtime dependencies via ${tool} (~20s)...`);
   const res = spawnSync(cmd, args, { cwd: CORE_ROOT, stdio: 'ignore', shell: IS_WINDOWS });
   if (res.status !== 0) {

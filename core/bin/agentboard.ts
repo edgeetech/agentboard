@@ -9,8 +9,6 @@ import { existsSync } from 'node:fs';
 import { platform } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { Command } from 'commander';
-
 import {
   CORE_ROOT,
   ensureCoreDeps,
@@ -22,14 +20,27 @@ import {
   stopServer,
 } from '../src/launcher.ts';
 
-const program = new Command();
-program.name('agentboard').description('AgentBoard local runtime').version(runtimeVersion());
-
 const say =
   (quiet: boolean) =>
   (line: string): void => {
     if (!quiet) console.log(line);
   };
+
+// A fresh runtime checkout has no node_modules yet; install before loading
+// any dependency. launcher.ts itself only uses Node built-ins.
+try {
+  ensureCoreDeps(say(process.argv.includes('--quiet') || process.argv.includes('-q')));
+} catch (e) {
+  if (e instanceof LauncherError) {
+    console.error(`agentboard: ${e.message}`);
+    process.exit(e.exitCode);
+  }
+  throw e;
+}
+const { Command } = await import('commander');
+
+const program = new Command();
+program.name('agentboard').description('AgentBoard local runtime').version(runtimeVersion());
 
 program
   .command('start')
