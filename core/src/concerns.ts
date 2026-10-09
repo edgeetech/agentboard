@@ -23,7 +23,7 @@ export interface Concern {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILTIN_DIR = join(HERE, '..', 'concerns');
-const AI_CONCERNS_DIR = join(HERE, '..', '..', '..', '..', 'ai', 'concerns');
+export const AI_CONCERNS_DIR = join(HERE, '..', '..', 'ai', 'concerns');
 
 function readConcernDir(dir: string): Concern[] {
   if (!existsSync(dir)) return [];

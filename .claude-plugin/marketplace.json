@@ -9,7 +9,7 @@
       "name": "agentboard",
       "description": "Claude Code adapter for the AgentBoard local multi-agent kanban (PM/Worker/Reviewer/Human).",
       "source": "./plugins/claude-code",
-      "version": "0.1.200"
+      "version": "0.1.201"
     }
   ]
 }

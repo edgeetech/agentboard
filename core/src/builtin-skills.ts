@@ -13,7 +13,7 @@ export interface BuiltinSkill extends SkillResponse {
 
 const SCANNED_AT = '1970-01-01T00:00:00Z';
 const HERE = dirname(fileURLToPath(import.meta.url));
-const AI_SKILLS_DIR = join(HERE, '..', '..', '..', '..', 'ai', 'skills');
+export const AI_SKILLS_DIR = join(HERE, '..', '..', 'ai', 'skills');
 
 const STATIC_BUILTIN_SKILLS: BuiltinSkill[] = [
   {
