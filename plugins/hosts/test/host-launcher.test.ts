@@ -45,6 +45,25 @@ describe("host launcher", () => {
     expect(readFileSync(codexLauncher, "utf8")).toBe(readFileSync(claudeLauncher, "utf8"));
   });
 
+  it.each([
+    "posttooluse.mjs",
+    "sessionstart.mjs",
+    "userpromptsubmit.mjs",
+    "session-helpers.mjs",
+    "session-db.bundle.mjs",
+    "session-extract.bundle.mjs",
+    "project-attribution.ts",
+    "suppress-stderr.mjs",
+  ])("ships the same session hook %s in both plugins", (file) => {
+    const hook = (host: string) => readFileSync(join(repoRoot, "plugins", host, "hooks", "session", file), "utf8");
+    expect(hook("codex")).toBe(hook("claude-code"));
+  });
+
+  it("ships the same stdio MCP proxy in both plugins, so Codex works alone", () => {
+    const mcp = (host: string) => readFileSync(join(repoRoot, "plugins", host, "mcp", "agentboard.mjs"), "utf8");
+    expect(mcp("codex")).toBe(mcp("claude-code"));
+  });
+
   it("forwards the command to the runtime named by AGENTBOARD_RUNTIME", () => {
     const res = runLauncher(claudeLauncher, ["status", "--json"], {
       AGENTBOARD_RUNTIME: runtime,

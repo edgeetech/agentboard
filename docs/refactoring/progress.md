@@ -598,6 +598,7 @@ Moved / Added:
 - Moved `plugins/claude-code/agent-board-core` to `core/`; the package is now `agentboard` and versions in lockstep with the plugins.
 - Added `core/src/launcher.ts` and the `agentboard` CLI (`start`, `stop`, `restart`, `status`, `open`, `update`, `path`).
 - Replaced both host `ensure-server.ts` launchers with one shared, verbatim-identical locator that installs the runtime on first use.
+- The Codex plugin ships verbatim copies of the stdio MCP proxy and session hooks, so it no longer needs the Claude Code plugin; `plugins/hosts/test/host-launcher.test.ts` keeps the copies identical.
 - `/alive` reports the runtime's own version.
 
 Behaviour preserved:
@@ -607,5 +608,4 @@ Behaviour preserved:
 
 Deferred:
 
-- The Codex MCP shim still reuses `plugins/claude-code/mcp/agentboard.mjs`.
 - Publishing the runtime to npm; it installs from git today.

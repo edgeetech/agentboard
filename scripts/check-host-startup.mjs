@@ -51,7 +51,7 @@ const claudeEnsure = join(
 );
 const codexEnsure = join(root, "plugins", "codex", "bin", "ensure-server.ts");
 const claudeMcp = join(root, "plugins", "claude-code", "mcp", "agentboard.mjs");
-const codexMcp = join(root, "plugins", "codex", "mcp", "agentboard.ts");
+const codexMcp = join(root, "plugins", "codex", "mcp", "agentboard.mjs");
 const copilotInstall = join(root, "plugins", "copilot", "install.ts");
 
 for (const [path, reason] of [
@@ -85,7 +85,7 @@ for (const [path, reason] of [
   ],
   [join(coreRoot, "ui", "dist", "index.html"), "served UI artifact"],
   [claudeMcp, "shared MCP entry"],
-  [codexMcp, "Codex MCP shim"],
+  [codexMcp, "Codex MCP proxy"],
   [copilotInstall, "Copilot installer"],
 ]) {
   mustExist(path, reason);
@@ -161,11 +161,11 @@ mustContain(
   "Codex can execute TypeScript launcher",
 );
 
-mustContain(
-  codexMcp,
-  "../../claude-code/mcp/agentboard.mjs",
-  "Codex reuses shared MCP entry",
-);
+if (read(codexMcp) !== read(claudeMcp)) {
+  failures.push(
+    "plugins/codex/mcp/agentboard.mjs must be identical to plugins/claude-code/mcp/agentboard.mjs",
+  );
+}
 mustContain(
   copilotInstall,
   "core/bin/agentboard.ts start",

@@ -1,6 +1,6 @@
 {
   "name": "agentboard",
-  "version": "0.1.202",
+  "version": "0.1.203",
   "description": "Claude Code adapter for AgentBoard, a local multi-agent kanban (PM / Worker / Reviewer / Human). Starts the shared AgentBoard runtime and adds board MCP tools, session hooks and /agentboard commands.",
   "author": {
     "name": "edgeetech",
